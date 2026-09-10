@@ -1,0 +1,217 @@
+// FRPB — Database Schema
+// Supabase PostgreSQL via Prisma ORM
+// See plans/frpb-architecture-blueprint.md §4 for design rationale.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────
+
+enum PlanType {
+  MONTH_1
+  YEAR_1
+  LIFETIME
+}
+
+enum LicenseStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  PENDING
+}
+
+enum PaymentProvider {
+  STRIPE
+  RAZORPAY
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum DeviceStatus {
+  CONNECTED
+  DISCONNECTED
+  UNAUTHORIZED
+  UNBOUND // freed slot via self-service HWID reset (enhancement §3)
+}
+
+// ─── Users ────────────────────────────────────────────────
+
+model User {
+  id         String    @id @default(cuid())
+  email      String    @unique
+  name       String?
+  supabaseId String?   @unique // Supabase Auth user UUID for binding
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  licenses   License[]
+  payments   Payment[]
+  frpRequests FrpUnlockRequest[]
+}
+
+// ─── Plans ────────────────────────────────────────────────
+
+model Plan {
+  id           String    @id @default(cuid())
+  slug         PlanType  @unique
+  name         String // "1-Month Plan", "1-Year Plan", "Lifetime Plan"
+  priceCents   Int
+  currency     String    @default("USD")
+  durationDays Int? // null = lifetime
+  deviceLimit  Int // 1 / 3 / 5
+  features     String[] // feature list displayed on pricing cards
+  createdAt    DateTime  @default(now())
+
+  licenses License[]
+}
+
+// ─── Licenses ─────────────────────────────────────────────
+
+model License {
+  id             String        @id @default(cuid())
+  key            String        @unique // "FRPB-XXXX-XXXX-XXXX"
+  keySha256      String        @unique // hashed for lookup + raw stored encrypted
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId         String
+  plan           Plan          @relation(fields: [planId], references: [id])
+  status         LicenseStatus @default(ACTIVE)
+  deviceLimit    Int // snapshot of plan.deviceLimit at purchase time
+  maxActivations Int           @default(1) // 1 activation per machine at a time
+  activatedAt    DateTime?
+  expiresAt      DateTime?
+  lastVerifiedAt DateTime?
+  revokedReason  String?
+  metadata       Json? // orderId, promoCode etc.
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  devices   LicenseDevice[]
+  payment   Payment?
+  emailLogs EmailLog[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+// ─── Hardware-bound devices ───────────────────────────────
+
+model LicenseDevice {
+  id          String       @id @default(cuid())
+  licenseId   String
+  license     License      @relation(fields: [licenseId], references: [id], onDelete: Cascade)
+  hardwareId  String // machine fingerprint
+  deviceName  String // hostname / OS label reported by client
+  status      DeviceStatus @default(CONNECTED)
+  lastSeenAt  DateTime     @default(now())
+  unboundAt   DateTime? // last time user unbound this machine (self-service reset)
+  unbindCount Int          @default(0) // total unbind operations for this device
+  createdAt   DateTime     @default(now())
+
+  @@unique([licenseId, hardwareId])
+  @@index([hardwareId])
+}
+
+// ─── Payments ─────────────────────────────────────────────
+
+model Payment {
+  id               String          @id @default(cuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  licenseId        String?         @unique
+  license          License?        @relation(fields: [licenseId], references: [id])
+  provider         PaymentProvider
+  providerTxnId    String          @unique // Stripe payment_intent id / Razorpay payment id
+  providerEventId  String? // webhook event id for idempotency
+  amountCents      Int
+  currency         String          @default("USD")
+  status           PaymentStatus   @default(PENDING)
+  planSlug         PlanType
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([userId])
+  @@index([provider, providerTxnId])
+}
+
+// ─── Webhook Idempotency ─────────────────────────────────
+
+model WebhookEvent {
+  id          String          @id @default(cuid())
+  provider    PaymentProvider // STRIPE or RAZORPAY
+  eventId     String          @unique // provider event id (e.g., evt_..., event_...)
+  eventType   String // payment_intent.succeeded / payment.captured
+  payload     Json // raw provider payload for audit + replay
+  status      String          @default("RECEIVED") // RECEIVED | PROCESSING | PROCESSED | FAILED | IGNORED
+  processedAt DateTime?
+  licenseId   String?
+  error       String? // error message if processing failed
+  createdAt   DateTime        @default(now())
+
+  @@index([provider, status])
+  @@index([licenseId])
+}
+
+// ─── Email Delivery Log (Resend / SendGrid) ──────────────
+
+model EmailLog {
+  id            String    @id @default(cuid())
+  to            String // recipient email
+  template      String // "license-delivered" | "quick-start"
+  licenseId     String?
+  license       License?  @relation(fields: [licenseId], references: [id])
+  providerMsgId String? // Resend message id / SendGrid message id
+  status        String    @default("QUEUED") // QUEUED | SENT | FAILED
+  error         String?
+  sentAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([to])
+  @@index([licenseId])
+}
+
+// ─── FRP Unlock Requests ───────────────────────────────────
+
+enum FrpRequestStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+model FrpUnlockRequest {
+  id             String           @id @default(cuid())
+  brand          String
+  model          String
+  androidVersion String?          // e.g. "13", "14", "15"
+  imei           String?          // for online unlock path (not stored long-term in prod)
+  imeiHash       String?          // salted SHA-256 of IMEI for privacy-safe dedupe/lookup
+  method         String           // setup-wizard | download-mode | edl-mode | mtk-brom | oem-service
+  ipAddress      String
+  status         FrpRequestStatus @default(PENDING)
+  statusMessage  String?          // human-readable status / result message
+  result         Json?            // bypass result details (device info, bypassed account type, etc.)
+  userId         String?          // if authenticated
+  user           User?            @relation(fields: [userId], references: [id])
+  requestedAt    DateTime         @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+  refundAmountCents Int?          // if refunded
+
+  @@index([status])
+  @@index([userId])
+  @@index([imei])
+  @@index([imeiHash])
+}

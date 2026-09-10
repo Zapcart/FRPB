@@ -1,0 +1,110 @@
+{
+  "name": "@frpb/desktop",
+  "version": "1.0.1",
+  "private": true,
+  "description": "FRPB Desktop App — Electron + React (license activation, USB device monitor, driver center)",
+  "main": "dist-electron/main.js",
+  "author": "FRPB",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "npm run dev:electron",
+    "dev:full": "concurrently -k -n web,desktop -c blue,magenta \"npm --prefix ../web run dev\" \"npm run dev:electron\"",
+    "dev:electron": "concurrently -k -n vite,electron -c cyan,green \"vite\" \"npm run dev:electron:main\"",
+    "dev:electron:main": "npm run build:electron && wait-on -t 60000 http-get://localhost:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 node scripts/dev-electron.js",
+    "setup:platform-tools": "node scripts/setup-platform-tools.js",
+    "build:renderer": "vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "build": "npm run build:electron && npm run build:renderer",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "dist": "npm run setup:platform-tools && npm run build && electron-builder",
+    "dist:win": "npm run setup:platform-tools && npm run build && electron-builder --win",
+    "dist:mac": "npm run setup:platform-tools && npm run build && electron-builder --mac",
+    "pack": "npm run setup:platform-tools && npm run build && electron-builder --dir"
+  },
+  "dependencies": {
+    "@frpb/shared": "workspace:*",
+    "builder-util-runtime": "9.7.0",
+    "electron-updater": "^6.3.4",
+    "lucide-react": "^0.446.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "usb": "^2.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.5",
+    "@types/react": "^18.3.8",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.0.1",
+    "cross-env": "^7.0.3",
+    "electron": "^31.4.0",
+    "electron-builder": "^24.13.3",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.12",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.6",
+    "wait-on": "8.0.0"
+  },
+  "build": {
+    "appId": "app.frpb.desktop",
+    "productName": "FRPB Recovery",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "bin/platform-tools/**",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/usb/**",
+      "bin/platform-tools/**"
+    ],
+    "extraResources": [
+      {
+        "from": "bin/platform-tools",
+        "to": "platform-tools"
+      }
+    ],
+    "win": {
+      "artifactName": "FRPB-Recovery-Setup-${version}.${ext}",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.utilities"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Zapcart",
+        "repo": "FRPB",
+        "releaseType": "release"
+      }
+    ]
+  }
+}

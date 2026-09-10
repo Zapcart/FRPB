@@ -1,0 +1,31 @@
+{
+  "name": "frpb",
+  "version": "1.0.1",
+  "private": true,
+  "description": "FRPB — Device Management & Recovery SaaS Platform (monorepo)",
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:web": "turbo run dev --filter=@frpb/web",
+    "dev:desktop": "turbo run dev --filter=@frpb/desktop",
+    "dev:electron": "pnpm --filter @frpb/desktop dev:electron",
+    "dev:all": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "build:web": "turbo run build --filter=@frpb/web",
+    "build:desktop": "turbo run build --filter=@frpb/desktop",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "prisma:generate": "pnpm --filter @frpb/web prisma:generate",
+    "prisma:migrate": "pnpm --filter @frpb/web prisma:migrate",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,prisma,css}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "turbo": "^2.1.1",
+    "typescript": "^5.5.4"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.9.0"
+}
