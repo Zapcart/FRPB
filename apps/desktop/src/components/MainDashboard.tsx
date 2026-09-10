@@ -4,7 +4,7 @@ import { useUpdater } from "../hooks/useUpdater";
 import { useDevice } from "../hooks/useDevice";
 import DeviceMonitor from "./DeviceMonitor";
 import DriverCenter from "./DriverCenter";
-import FRPUnlockWizard from "./FrpUnlockWizard";
+import FRPToolsScreen from "./FRPToolsScreen";
 import UpdateModal from "./UpdateModal";
 import {
   ShieldCheck,
@@ -172,7 +172,9 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
       <main className="mx-auto w-full max-w-5xl flex-1 px-6 pb-10">
         {tab === "monitor" && <DeviceMonitor status={deviceStatus} />}
         {tab === "drivers" && <DriverCenter />}
-        {tab === "frp" && <FRPUnlockWizard onBack={() => setTab("monitor")} />}
+        {tab === "frp" && (
+          <FRPToolsScreen status={deviceStatus} onRefresh={refreshDevice} />
+        )}
       </main>
 
       {/* Overlays */}

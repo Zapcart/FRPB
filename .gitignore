@@ -18,6 +18,9 @@ release/
 # Prisma
 apps/web/prisma/*.db
 
+# Web download artifacts
+apps/web/public/downloads/
+
 # Logs
 logs/
 *.log

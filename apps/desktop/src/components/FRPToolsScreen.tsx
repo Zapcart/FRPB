@@ -167,7 +167,7 @@ export default function FRPToolsScreen({ status, onRefresh }: FRPToolsScreenProp
     setOpProgress(null);
     setOpLog([]);
     const guide = connectionGuideFor(selectedBrand, selectedMethod);
-    const options = { brand: selectedBrand, mode: guide.key };
+    const options = { brand: selectedBrand, mode: guide.key, model: modelInput.trim() || undefined };
     try {
       const res: OperationResult =
         op === "flash-reset"

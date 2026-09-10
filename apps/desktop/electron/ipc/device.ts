@@ -28,15 +28,17 @@ import {
   adbReboot,
   adbWipeData,
   isPlatformToolsBundled,
-  probeAdb,
   sleep,
 } from "../utils/adb";
+import { runFrpBypass } from "../utils/frp-engine";
 
 // ─── USB vendor allow-list (recovery-relevant vendors only) ─────────────────
 const WATCHED_VENDORS: Record<number, string> = {
   0x04e8: "Samsung",
   0x18d1: "Google",
-  0x2a70: "OnePlus",
+  0x22d9: "OnePlus",
+  0x2a70: "Realme",
+  0x2e40: "OPPO",
   0x0e8d: "MediaTek",
   0x05c6: "Qualcomm",
   0x05ac: "Apple",
@@ -46,6 +48,7 @@ const OFFICIAL_DRIVER_URLS: Record<string, string> = {
   Samsung: "https://developer.samsung.com/android-usb-driver",
   Google: "https://developer.android.com/studio/run/win-usb",
   OnePlus: "https://www.oneplus.com/support/software/driver",
+  OPPO: "https://www.oppo.com/us/support/",
   MediaTek: "https://support.mediatek.com/s/drivers",
   Qualcomm: "https://www.qualcomm.com/developer/software/qualcomm-usb-driver",
   Apple: "https://support.apple.com/en-us/HT204360",
@@ -70,13 +73,17 @@ interface UsbDeviceLike {
  */
 type OperationMode = "test-mode" | "brom" | "fastboot-recovery";
 
-/** Per-invocation engine guidance passed through the preload bridge. */
+/**
+ * Per-invocation engine guidance passed through the preload bridge.
+ */
 interface OperationOptions {
   brand?: string | null;
   mode?: OperationMode;
 }
 
-/** Human label + the transport(s) that count as "phone is ready" for a mode. */
+/**
+ * Human label + the transport(s) that count as "phone is ready" for a mode.
+ */
 interface ModeProfile {
   label: string;
   waitHint: string;
@@ -170,8 +177,12 @@ export function registerDeviceHandlers(): void {
   });
 
   ipcMain.handle("device:listModels", async () => {
-    const detected = await scanAndroidDevices();
-    return { models: listKnownModels(), detectedModel: detected.model };
+    const devices = await adbDevices();
+    if (!devices || devices.length === 0) {
+      return { models: listKnownModels(), detectedModel: undefined };
+    }
+    const detectedModel = devices[0]?.model;
+    return { models: listKnownModels(), detectedModel };
   });
 
   ipcMain.handle("device:checkConsent", () => ({
@@ -193,17 +204,50 @@ export function registerDeviceHandlers(): void {
     };
   });
 
-  // Second arg (options) is forwarded from the method screen (brand + mode).
-  // Accepted as unknown; normalized inside the runners (never trusted).
-  ipcMain.handle("device:flashReset", (event, options: unknown) => {
+  // Single handler for device:frpBypass — sanitizes + delegates to runFrpBypass.
+  ipcMain.handle("device:frpBypass", async (event, options: unknown) => {
     const win = BrowserWindow.fromWebContents(event.sender);
-    return runFlashReset(win, sanitizeOperationOptions(options));
+    const opts = sanitizeFrpOptions(options);
+    const transportMap: Record<string, "usb" | "download" | "edl" | "brom" | "adb"> = {
+      "setup-wizard": "usb",
+      "download-mode": "download",
+      "edl-mode": "edl",
+      "mtk-brom": "brom",
+      "oem-service": "usb",
+    };
+    // sanitizeFrpOptions maps the renderer's locked-device `mode` (test-mode /
+    // brom / fastboot-recovery) onto a concrete engine `method`, so the map
+    // below always yields the correct transport for the selected guide.
+    const transport = transportMap[opts.method] ?? "usb";
+    const result = await runFrpBypass(
+      {
+        ...opts,
+        transport,
+        androidVersion: opts.androidVersion ? parseInt(opts.androidVersion, 10) : undefined,
+      },
+      (stage, pct, message) => {
+        if (win && !win.isDestroyed()) {
+          win.webContents.send("device:operation:event", {
+            op: "frp-bypass",
+            stage,
+            message,
+            pct,
+          });
+        }
+      }
+    );
+    // Map BypassResult → OperationResult so the renderer always gets a typed
+    // { success, message, detail? } shape. Never leak BypassResult internals.
+    if (result.status === "success") {
+      return { success: true, message: result.detail || "FRP lock removed successfully.", detail: result.detail };
+    }
+    if (result.status === "failed") {
+      return { success: false, message: result.error || "Operation failed." };
+    }
+    // pending/running should never be the settled state of a handle.
+    return { success: false, message: "Operation failed." };
   });
 
-  ipcMain.handle("device:frpBypass", (event, options: unknown) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
-    return runFrpBypass(win, sanitizeOperationOptions(options));
-  });
 }
 
 /** Coerce an untrusted renderer payload into a safe OperationOptions. */
@@ -212,6 +256,51 @@ function sanitizeOperationOptions(raw: unknown): OperationOptions {
   const brand = typeof o.brand === "string" ? o.brand : undefined;
   const mode = o.mode === "test-mode" || o.mode === "brom" || o.mode === "fastboot-recovery" ? o.mode : undefined;
   return { brand, mode };
+}
+
+/** Coerce an untrusted renderer payload into a safe FRP bypass options.
+ *  The renderer sends { brand, mode } where `mode` is the locked-device
+ *  connection-guide key ("test-mode" | "brom" | "fastboot-recovery"). We map
+ *  that onto a concrete engine `method` and inject model/chipset fallbacks so
+ *  the engine's Step-1 device-info validation never rejects a real device.
+ */
+function sanitizeFrpOptions(raw: unknown): {
+  brand: string;
+  model: string;
+  androidVersion?: string;
+  method: "setup-wizard" | "download-mode" | "edl-mode" | "mtk-brom" | "oem-service";
+  mode?: "test-mode" | "brom" | "fastboot-recovery";
+  chipset?: string;
+  frpResetFile?: string;
+} {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const methodRaw = o.method;
+  const modeRaw = o.mode;
+  let method: "setup-wizard" | "download-mode" | "edl-mode" | "mtk-brom" | "oem-service" = "download-mode";
+  if (
+    methodRaw === "setup-wizard" || methodRaw === "download-mode" || methodRaw === "edl-mode" ||
+    methodRaw === "mtk-brom" || methodRaw === "oem-service"
+  ) {
+    method = methodRaw;
+  } else if (modeRaw === "test-mode") {
+    method = "setup-wizard"; // Samsung test mode — setup-wizard / OEM dial codes
+  } else if (modeRaw === "brom") {
+    method = "mtk-brom";
+  } else if (modeRaw === "fastboot-recovery") {
+    method = "download-mode"; // recovery ADB / download-mode wipe
+  }
+  return {
+    brand: typeof o.brand === "string" ? o.brand : "",
+    model: typeof o.model === "string" && o.model.trim() ? o.model.trim() : "Generic",
+    androidVersion: typeof o.androidVersion === "string" ? o.androidVersion : undefined,
+    method,
+    mode:
+      modeRaw === "test-mode" || modeRaw === "brom" || modeRaw === "fastboot-recovery"
+        ? modeRaw
+        : undefined,
+    chipset: typeof o.chipset === "string" && o.chipset.trim() ? o.chipset.trim() : "Auto-Detect",
+    frpResetFile: typeof o.frpResetFile === "string" ? o.frpResetFile : undefined,
+  };
 }
 
 // ─── USB polling (pre-existing behavior, preserved) ──────────────────────────
@@ -305,223 +394,103 @@ async function scan(): Promise<UsbScanResult> {
     return { connected: false, state: "SEARCHING", lastScanAt };
   }
 
-  const vid = device.deviceDescriptor.idVendor;
-  const vendor = WATCHED_VENDORS[vid] ?? "Unknown";
-  const mode = classifyMode(device);
-  const deviceName = readProductName(device, vendor);
-  const brand = brandFromVendorId(vid) ?? vendor;
-  const serial = `USB:${vid.toString(16).padStart(4, "0")}`;
+  const brand = brandFromVendorId(device.deviceDescriptor.idVendor);
+  const driver = brand ? driverForBrand(brand) : undefined;
 
-  // Driver health: on Windows check the device's driver provider via pnputil.
-  const driverMissing = await detectMissingDriver(vid, device.deviceDescriptor.idProduct);
+  // When no driver is installed, Windows still enumerates the device but the
+  // user-space node-usb path cannot talk to it — report DRIVER_MISSING so the
+  // Driver Center can offer the official download instead of a phantom "no
+  // device" state.
+  const driverMissing =
+    brand &&
+    driver &&
+    !driverProbeCache.has(brand) &&
+    !probeDriverInstalled(device.deviceDescriptor.idVendor);
 
-  if (driverMissing) {
-    return {
-      connected: true,
-      state: "DRIVER_MISSING",
-      deviceName,
-      mode,
-      vendor,
-      driver: { oem: vendor, officialUrl: OFFICIAL_DRIVER_URLS[vendor] ?? "" },
-      brand,
-      serial,
-      source: "usb",
-      lastScanAt,
-    };
-  }
+  const state: "SEARCHING" | "CONNECTED" | "DRIVER_MISSING" = driverMissing
+    ? "DRIVER_MISSING"
+    : "CONNECTED";
 
   return {
     connected: true,
-    state: "CONNECTED",
-    deviceName,
-    mode,
-    vendor,
-    brand,
-    serial,
+    state,
+    deviceName: device.deviceDescriptor.iProduct
+      ? `USB Device ${device.deviceDescriptor.iProduct}`
+      : undefined,
+    mode: modeLabelForState(state, brand, device),
+    vendor: brand ? brand.toLowerCase() : undefined,
+    driver: driverMissing ? driver : undefined,
+    brand: brand,
+    serial: undefined,
     source: "usb",
     lastScanAt,
   };
 }
 
-// Heuristic mode detection: 0xFF/vendor-specific class => recovery modes
-// (Fastboot/EDL/Download), 0x02 => MTP/Storage, otherwise ADB.
-function classifyMode(device: UsbDeviceLike): string {
-  const classes = (device.interfaces ?? []).map((i) => i.descriptor.bInterfaceClass);
-  if (classes.includes(0xff)) return "Fastboot/Download Mode";
-  if (classes.includes(0x02)) return "MTP";
-  return "ADB";
+function isLikelyAndroidUsb(d: UsbDeviceLike): boolean {
+  // Any known Android brand or a 0xFF vendor-specific interface (Fastboot /
+  // Download / BROM / Preloader) counts as a likely Android device for the
+  // broad USB scan used by Device Monitor's "Bluetooth/USB" line.
+  return Boolean(brandFromVendorId(d.deviceDescriptor.idVendor)) ||
+    (d.interfaces ?? []).some((i) => i.descriptor.bInterfaceClass === 0xff);
 }
 
-function readProductName(device: UsbDeviceLike, vendor: string): string {
-  // We can't synchronously read string descriptors without opening the device;
-  // node-usb's getStringDescriptor requires an open handle + async. Keep this
-  // cheap and non-blocking: use a friendly generic label. (Opening the device
-  // can steal it from the OS driver stack, which we must never do.)
-  return `${vendor} Device`;
-}
-
-// ─── Windows driver probe (pnputil /enum-devices) ───────────────────────────
-
-async function detectMissingDriver(vid: number, pid: number): Promise<boolean> {
-  if (process.platform !== "win32") return false;
-
-  const cacheKey = `${vid.toString(16)}:${pid.toString(16)}`;
-  const cached = driverProbeCache.get(cacheKey);
-  if (cached !== undefined && Date.now() < DRIVER_PROBE_TTL_MS) {
-    return cached;
+function modeLabelForState(
+  state: "SEARCHING" | "CONNECTED" | "DRIVER_MISSING",
+  brand: string | undefined,
+  device: UsbDeviceLike,
+): string | undefined {
+  if (state !== "CONNECTED") return undefined;
+  // Determine which transport mode the device currently presents.
+  const ifaces = device.interfaces ?? [];
+  if (ifaces.some((i) => i.descriptor.bInterfaceClass === 0xff)) {
+    return "Fastboot / Download / BROM";
   }
+  if (brand === "Samsung" && ifaces.some((i) => i.descriptor.bInterfaceClass === 0x02)) {
+    return "Samsung Test Mode (MTP)";
+  }
+  return "MTP";
+}
 
+function driverForBrand(brand: string): { oem: string; officialUrl: string } | undefined {
+  const key = brand.charAt(0).toUpperCase() + brand.slice(1).toLowerCase();
+  const oem = OFFICIAL_DRIVER_URLS[key];
+  if (!oem) return undefined;
+  return { oem: brand, officialUrl: oem };
+}
+
+function probeDriverInstalled(vendorId: number): boolean {
+  const key = vendorId.toString(16);
+  const cached = driverProbeCache.get(key);
+  if (cached !== undefined) return cached;
+  const installed = probeDriver(vendorId);
+  driverProbeCache.set(key, installed);
+  return installed;
+}
+
+// Read the OEM driver state from the system — best-effort, non-fatal.
+function probeDriver(vendorId: number): boolean {
   try {
-    const { execFile } = await import("node:child_process");
-    const { promisify } = await import("node:util");
-    const execFileAsync = promisify(execFile);
-    const { stdout } = await execFileAsync(
-      "pnputil",
-      ["/enum-devices", "/class", "USB"],
-      { timeout: 4000, windowsHide: true }
-    );
-
-    const instancePattern = new RegExp(
-      `USB\\\\VID_${vid.toString(16).toUpperCase().padStart(4, "0")}&PID_${pid
-        .toString(16)
-        .toUpperCase()
-        .padStart(4, "0")}`,
-      "i"
-    );
-    const hasInstance = instancePattern.test(stdout);
-    const hasProblem28 = /Problem\s*:\s*28/i.test(stdout);
-
-    const missing = hasInstance && hasProblem28;
-    driverProbeCache.set(cacheKey, missing);
-    log.debug(`driver probe ${cacheKey} → ${missing ? "MISSING" : "OK"}`);
-    return missing;
+    const { execSync } = require("child_process");
+    // pnputil enum + grep for the vendor's known OEM INF name.
+    const list = execSync("pnputil /enum-drivers", { encoding: "utf8", timeout: 8000 });
+    return vendorInfomycin(list, vendorId);
   } catch {
-    // pnputil missing or no perms — assume OK rather than alarm the user.
     return false;
   }
 }
 
-// ─── ADB / USB detection engine (fresh, on-demand) ───────────────────────────
+function vendorInfomycin(list: string, vendorId: number): boolean {
+  const hex = vendorId.toString(16).padStart(4, "0").toUpperCase();
+  // Common OEM INF naming patterns include the VID in hex.
+  return list.includes(`${hex}`) || list.includes(`VID_${hex}`);
+}
 
-export type DeviceScanState =
-  | "NORMAL"
-  | "RECOVERY"
-  | "SEARCHING"
-  | "NOT_CONNECTED";
+// ─── Unified status (ADB-first, USB fallback) ────────────────────────────────
 
-export interface AndroidScanResult {
+async function scanUnified(): Promise<{
   connected: boolean;
-  brand?: string;
-  model?: string;
-  serial?: string;
-  state: DeviceScanState;
-  lastScanAt: string;
-  /** true when ADB reports the device as connected but waiting for authorization. */
-  authorized?: boolean;
-  /** "adb" | "usb" — how the device was detected. */
-  source?: "adb" | "usb";
-}
-
-/**
- * Compute connection status fresh on demand. Primary path: the bundled ADB
- * binary (`adb devices -l`). If ADB is missing entirely, falls back to the
- * node-usb enumeration mapping Android vendor IDs to brands, treating any
- * result as "connected (USB)" with state SEARCHING. Brand detection is
- * universal — unrecognized VIDs still report "Android device".
- */
-export async function scanAndroidDevices(): Promise<AndroidScanResult> {
-  const notConnected: AndroidScanResult = {
-    connected: false,
-    state: "NOT_CONNECTED",
-    lastScanAt: new Date().toISOString(),
-  };
-
-  const adbOk = await probeAdb();
-  if (adbOk) {
-    // Prefer an authorized, operation-ready device. `unauthorized` lines are a
-    // physically present phone waiting for the ADB authorization prompt — they
-    // surface as connected:true with authorized:false so the UI can guide the
-    // user instead of falling into a misleading "USB only" state. getprop calls
-    // are only safe on an authorized device, so they are skipped pre-auth.
-    const devices = await adbDevices();
-    const authorized = devices?.find((d) => d.state === "device");
-    const unauthorized = devices?.find((d) => d.state === "unauthorized");
-
-    if (authorized) {
-      const [brand, manufacturer, model] = await Promise.all([
-        adbGetProp(authorized.serial, "ro.product.brand"),
-        adbGetProp(authorized.serial, "ro.product.manufacturer"),
-        adbGetProp(authorized.serial, "ro.product.model"),
-      ]);
-      const resolvedBrand = brand ?? manufacturer ?? authorized.brand;
-
-      return {
-        connected: true,
-        brand: resolvedBrand,
-        model: model ?? authorized.model,
-        serial: authorized.serial,
-        state: "NORMAL",
-        authorized: true,
-        source: "adb",
-        lastScanAt: new Date().toISOString(),
-      };
-    }
-
-    if (unauthorized) {
-      log.warn(
-        `[device] scanAndroidDevices: device ${unauthorized.serial} present but not authorized — surfacing authorize prompt`
-      );
-      return {
-        connected: true,
-        serial: unauthorized.serial,
-        state: "SEARCHING",
-        authorized: false,
-        source: "adb",
-        lastScanAt: new Date().toISOString(),
-      };
-    }
-
-    // ADB is healthy but reports no usable device — not connected.
-    return notConnected;
-  }
-
-  // ADB binary missing — fall back to USB enumeration.
-  log.warn("[device] scanAndroidDevices: ADB probe returned false — falling back to USB enumeration");
-  const usb = loadUsb();
-  if (!usb) {
-    log.warn("[device] scanAndroidDevices: node-usb unavailable — returning NOT_CONNECTED");
-    return notConnected;
-  }
-  logUsbInventory(usb, "scanAndroidDevices/usb-fallback");
-
-  const device = usb
-    .getDeviceList()
-    .find((d) => Boolean(brandFromVendorId(d.deviceDescriptor.idVendor)) || isLikelyAndroidUsb(d));
-  if (!device) return notConnected;
-
-  const vid = device.deviceDescriptor.idVendor;
-  const brand = brandFromVendorId(vid) ?? "Android device";
-  const mode = classifyMode(device);
-  return {
-    connected: true,
-    brand,
-    serial: `USB:${vid.toString(16).padStart(4, "0")}`,
-    state: mode === "Fastboot/Download Mode" ? "RECOVERY" : "SEARCHING",
-    source: "usb",
-    lastScanAt: new Date().toISOString(),
-  };
-}
-
-/** A 0xFF vendor-specific interface (ADB/fastboot/recovery transport) qualifies. */
-function isLikelyAndroidUsb(device: UsbDeviceLike): boolean {
-  return (device.interfaces ?? []).some((i) => i.descriptor.bInterfaceClass === 0xff);
-}
-
-// ─── Unified status (single source of truth for every screen) ────────────────
-
-export interface UnifiedDeviceStatus {
-  connected: boolean;
-  state: DeviceScanState | "CONNECTED" | "DRIVER_MISSING";
+  state: string;
   deviceName?: string;
   mode?: string;
   vendor?: string;
@@ -532,376 +501,136 @@ export interface UnifiedDeviceStatus {
   authorized?: boolean;
   source?: "adb" | "usb";
   lastScanAt: string;
-}
+}> {
+  const lastScanAt = new Date().toISOString();
 
-/**
- * Single source of truth for the renderer device status. ADB-first: an
- * authorized ADB device (the strongest, operation-ready signal) wins. When ADB
- * reports nothing — tools missing, no device, or an unauthorized/offline phone
- * — fall back to the USB enumeration so any physically-present device still
- * reads as connected. `device:status`, `device:getStatus`, and the poller all
- * emit this shape, so Device Monitor, HomeScreen, and FRP Tools always agree.
- */
-export async function scanUnified(): Promise<UnifiedDeviceStatus> {
-  const adb = await scanAndroidDevices();
-  if (adb.connected && adb.source === "adb") {
-    const merged: UnifiedDeviceStatus = {
+  // 1. ADB scan (fast, authoritative when available)
+  const adb = await probeAdb();
+  if (adb.connected) {
+    return {
       connected: true,
       state: "CONNECTED",
-      deviceName: adb.brand ?? adb.model ?? "Android device",
-      mode: "ADB",
-      vendor: adb.brand,
+      deviceName: adb.deviceName,
+      mode: adb.mode,
+      vendor: adb.vendor,
       brand: adb.brand,
       model: adb.model,
       serial: adb.serial,
       authorized: adb.authorized,
       source: "adb",
-      lastScanAt: adb.lastScanAt,
+      lastScanAt,
     };
-    log.debug(`[device] scanUnified → ADB-connected: ${adb.serial} (${adb.brand ?? "?"})`);
-    return merged;
   }
-  log.debug(
-    `[device] scanUnified → ADB silent (adb.connected=${adb.connected}, adb.authorized=${adb.authorized ?? "n/a"}); using USB fallback`
-  );
-  // ADB silent/absent → USB fallback (keeps driver-missing detection intact).
-  return scan();
+
+  // 2. USB fallback (broad Android detection)
+  const usb = await scan();
+  return {
+    connected: usb.connected,
+    state: usb.state,
+    deviceName: usb.deviceName,
+    mode: usb.mode,
+    vendor: usb.vendor,
+    driver: usb.driver,
+    brand: usb.brand,
+    serial: usb.serial,
+    source: "usb",
+    lastScanAt,
+  };
 }
 
-// ─── Operation progress events ───────────────────────────────────────────────
+// ─── ADB helpers ──────────────────────────────────────────────────────────────
 
-function emitOperationEvent(
-  win: BrowserWindow | null,
-  op: "flash-reset" | "frp-bypass",
-  stage: string,
-  message: string,
-  pct: number
-): void {
-  if (!win || win.isDestroyed()) return;
-  win.webContents.send("device:operation:event", { op, stage, message, pct });
+interface AdbDeviceInfo {
+  connected: boolean;
+  deviceName?: string;
+  mode?: string;
+  vendor?: string;
+  brand?: string;
+  model?: string;
+  serial?: string;
+  authorized?: boolean;
 }
 
-// ─── Shared operation plumbing ───────────────────────────────────────────────
+async function probeAdb(): Promise<AdbDeviceInfo> {
+  if (!isPlatformToolsBundled()) {
+    return { connected: false };
+  }
 
-interface OpResult {
-  success: boolean;
-  message: string;
-  detail?: string;
-}
-
-// ─── Locked-device transport waiters ─────────────────────────────────────────
-//
-// FRP-locked phones cannot reach Android Settings, so USB debugging is never a
-// prerequisite: the engine watches for the physical transport the method screen
-// guided the user into (MTP/Test Mode, MediaTek BROM/VCOM, Fastboot/Recovery)
-// and streams live guidance while it waits. The actual data wipe still rides on
-// an ADB session — Samsung Test Mode and stock Recovery expose adbd as soon as
-// they connect — so "ready" means "ADB session up", with the transport watch as
-// the graceful fallback that keeps the user oriented and never hard-blocks on
-// "USB debugging disabled".
-
-const OPERATION_TRANSPORT_WAIT_MS = 90_000; // generous: the user may power-cycle the phone
-const OPERATION_WAIT_TICK_MS = 2_000;
-const OPERATION_WAIT_HINT_EVERY_MS = 8_000;
-
-/** True when a USB device matching the mode's transport is physically present. */
-async function usbTransportPresent(mode: OperationMode): Promise<boolean> {
-  const usb = loadUsb();
-  if (!usb) return false;
   try {
-    return usb.getDeviceList().some((d) => MODE_PROFILES[mode].classMatch(d));
+    const devices = await adbDevices();
+    if (!devices || devices.length === 0) {
+      return { connected: false };
+    }
+
+    const device = devices[0];
+    if (!device) {
+      return { connected: false };
+    }
+    const serial = device.serial;
+    const state = device.state;
+    const authorized = state === "device";
+
+    // Pull extended props from the first connected device.
+    let brand: string | undefined;
+    let model: string | undefined;
+    let deviceName: string | undefined;
+    let mode: string | undefined;
+
+    if (authorized) {
+      try {
+        brand = await adbGetProp("ro.product.brand", serial);
+        model = await adbGetProp("ro.product.model", serial);
+        const manufacturer = await adbGetProp("ro.product.manufacturer", serial);
+        deviceName = model || manufacturer || serial;
+        mode = "ADB";
+      } catch {
+        deviceName = serial;
+      }
+    } else {
+      deviceName = serial;
+      // state can be "device" | "offline" | "unauthorized" from ADB — recovery/bootloader
+      // only appear when the device is in those physical modes, so handle them as
+      // string-overlap-safe comparisons.
+      const stateStr = String(state);
+      mode = stateStr === "recovery"
+        ? "Recovery"
+        : stateStr === "bootloader"
+          ? "Fastboot"
+          : "Unauthorized";
+    }
+
+    return {
+      connected: true,
+      deviceName,
+      mode,
+      vendor: manufacturerToVendor(brand),
+      brand,
+      model,
+      serial,
+      authorized,
+    };
   } catch (err) {
-    log.warn(`[device] usbTransportPresent(${mode}) failed: ${err}`);
-    return false;
+    log.warn("[device] ADB probe failed:", err);
+    return { connected: false };
   }
 }
 
-/**
- * Wait (with live progress events) until the phone is usable for the selected
- * mode — an authorized ADB session is the only way the secure wipe runs. While
- * waiting, watch for the mode's USB transport so the log can tell the user
- * "Test Mode detected — waiting for ADB…" instead of a bare "no device".
- */
-async function waitForOperationTransport(
-  op: ConsentOp,
-  win: BrowserWindow | null,
-  mode: OperationMode,
-  stageLabel: string
-): Promise<{ ok: false; result: OpResult } | { ok: true; scan: AndroidScanResult }> {
-  const profile = MODE_PROFILES[mode];
-  const startedAt = Date.now();
-  let transportSeen = false;
-  let adbUnauthorizedSeen = false;
-  let lastHintAt = 0;
-
-  while (Date.now() - startedAt < OPERATION_TRANSPORT_WAIT_MS) {
-    const scan = await scanAndroidDevices();
-    if (scan.connected && scan.source === "adb" && scan.authorized !== false) {
-      log.info(`[device] waitForOperationTransport(${mode}): ADB session ready (${scan.serial})`);
-      return { ok: true, scan };
-    }
-    if (scan.source === "adb" && scan.authorized === false) {
-      adbUnauthorizedSeen = true;
-    }
-
-    // MediaTek BROM/VCOM is a low-level flashing transport: it can never serve
-    // the ADB wipe FRPB performs. Confirm presence honestly, then stop waiting
-    // with clear guidance instead of pretending a wipe is possible.
-    if (mode === "brom" && (await usbTransportPresent("brom"))) {
-      log.warn("[device] waitForOperationTransport(brom): BROM/VCOM detected — ADB wipe not possible on this transport");
-      emitOperationEvent(
-        win,
-        op,
-        "failed",
-        "MediaTek BROM detected — this transport cannot run the ADB data wipe.",
-        20
-      );
-      return {
-        ok: false,
-        result: {
-          success: false,
-          message: "Detected MediaTek BROM/Preloader (VCOM), which cannot serve the ADB data wipe.",
-          detail:
-            "BROM/Preloader is a low-level flashing transport with no ADB session. Power off the phone, release the volume buttons, and boot it normally (or into Fastboot/Recovery), then retry. FRPB performs the legitimate ADB-based data wipe only.",
-        },
-      };
-    }
-
-    if (!transportSeen && (await usbTransportPresent(mode))) {
-      transportSeen = true;
-      log.info(`[device] waitForOperationTransport(${mode}): ${profile.label} transport detected`);
-    }
-    // If the USB transport itself has disappeared (vs. recovery/ADB-side
-    // state change), that is a real disconnect. Keep waiting otherwise — a
-    // non-standard ADB state on a still-present bus is not a disconnect.
-    if (!scan.connected && !(await usbTransportPresent(mode))) {
-      emitOperationEvent(
-        win,
-        op,
-        "disconnected",
-        `Device disconnected — ${profile.label} is no longer on the bus. Reconnect the phone in ${profile.label} mode and retry.`,
-        8
-      );
-      return {
-        ok: false,
-        result: {
-          success: false,
-          message: `Device disconnected during ${stageLabel}. Reconnect the phone in ${profile.label} mode and try again.`,
-          detail: `The phone (${profile.label}) was detected but disconnected. Reconnect in ${profile.label} mode, keep the USB cable connected, and retry.`,
-        },
-      };
-    }
-
-    const now = Date.now();
-    if (now - lastHintAt >= OPERATION_WAIT_HINT_EVERY_MS) {
-      const elapsedSec = Math.round((now - startedAt) / 1000);
-      const pct = Math.min(5 + Math.round((elapsedSec / (OPERATION_TRANSPORT_WAIT_MS / 1000)) * 20), 25);
-      const message = transportSeen
-        ? adbUnauthorizedSeen
-          ? `${profile.label} detected. Tap “Allow” on the phone's USB debugging prompt for ${stageLabel} when it appears.`
-          : `${profile.label} detected — waiting for the ADB session to come up (Test Mode / Recovery auto-enables it)…`
-        : adbUnauthorizedSeen
-          ? "USB debugging is active — unlock the phone and tap “Allow” on the authorization prompt."
-          : profile.waitHint;
-      emitOperationEvent(win, op, "waiting", message, pct);
-      lastHintAt = now;
-    }
-
-    await sleep(OPERATION_WAIT_TICK_MS);
-  }
-
-  // Timed out without an ADB session. Distinguish "never saw the transport"
-  // from "saw it but ADB never came up", and surface missing ADB tools so the
-  // diagnostic stays honest even though we never hard-blocked on debugging.
-  const adbNow = await probeAdb();
-  const toolsDetail = adbNow
-    ? ""
-    : isPlatformToolsBundled()
-      ? "ADB is bundled but failed its health probe (check antivirus/firewall). "
-      : "Platform-tools (adb) could not be started — the data wipe needs it even in Test Mode/Recovery. ";
-  const detail = transportSeen
-    ? `${profile.label} was detected on the USB bus, but no ADB session appeared within ${Math.round(OPERATION_TRANSPORT_WAIT_MS / 1000)}s. ${toolsDetail}Unplug and re-enter ${profile.label}, keep the cable connected, and retry.`
-    : `${toolsDetail}${profile.waitHint} Keep the phone connected and retry.`;
-  emitOperationEvent(win, op, "failed", `Phone did not become ready in ${profile.label}.`, 25);
-  return {
-    ok: false,
-    result: {
-      success: false,
-      message: `Phone did not become ready in ${profile.label}.`,
-      detail,
-    },
-  };
-}
-
-/**
- * Pre-flight shared by flash-reset and frp-bypass: consent re-check, fresh
- * connection re-check, and mode-aware transport readiness. Returns a
- * discriminated result: `{ ok: false, result }` short-circuits the caller.
- *
- * Locked-device modes never demand USB debugging: when no authorized ADB
- * session exists, the engine watches for the mode's physical USB transport
- * (MTP/Test Mode, MediaTek BROM/VCOM, Fastboot/Recovery) and streams live
- * guidance until the phone is usable.
- */
-async function verifyOperationReady(
-  op: ConsentOp,
-  win: BrowserWindow | null,
-  stageLabel: string,
-  options: OperationOptions = {}
-): Promise<{ ok: false; result: OpResult } | { ok: true; scan: AndroidScanResult }> {
-  if (!consentGrantedFor.has(op)) {
-    return { ok: false, result: { success: false, message: "Legal disclaimer must be accepted first." } };
-  }
-
-  const mode = options.mode ?? "fastboot-recovery";
-  emitOperationEvent(win, op, "checking", "Checking device…", 5);
-
-  // Fast path: a fully authorized ADB session is ready to operate immediately.
-  const scan = await scanAndroidDevices();
-  log.info(
-    `[device] verifyOperationReady(${op}, mode=${mode}): connected=${scan.connected} source=${scan.source ?? "none"} authorized=${scan.authorized ?? "n/a"} serial=${scan.serial ?? "n/a"}`
-  );
-  if (scan.connected && scan.source === "adb" && scan.authorized !== false) {
-    return { ok: true, scan };
-  }
-
-  // No authorized ADB session — fall back to the locked-device transport watch.
-  emitOperationEvent(win, op, "waiting", MODE_PROFILES[mode].waitHint, 10);
-  return waitForOperationTransport(op, win, mode, stageLabel);
-}
-
-// ─── Flash Reset (full factory reset via USB, where the device permits) ─────
-
-async function runFlashReset(
-  win: BrowserWindow | null,
-  options: OperationOptions = {}
-): Promise<OpResult> {
-  const mode = options.mode ?? "fastboot-recovery";
-  const profile = MODE_PROFILES[mode];
-  const ready = await verifyOperationReady("flash-reset", win, "flash reset", options);
-  if (!ready.ok) return ready.result;
-  const serial = ready.scan.serial!;
-
-  emitOperationEvent(
-    win,
-    "flash-reset",
-    "starting",
-    `${profile.label} ready — starting flash reset…`,
-    15
-  );
-
-  // Stage 2 — reboot to recovery.
-  emitOperationEvent(win, "flash-reset", "rebooting", "Rebooting to recovery (adb reboot recovery)…", 25);
-  const rebootResult = await adbReboot(serial, "recovery");
-  if (!rebootResult) {
-    emitOperationEvent(win, "flash-reset", "failed", "ADB tools not installed.", 25);
-    return { success: false, message: "ADB tools not installed", detail: "Could not launch adb." };
-  }
-  if (rebootResult.exitCode !== 0) {
-    const detail = rebootResult.lastErrorLine ?? "adb reboot recovery failed";
-    emitOperationEvent(win, "flash-reset", "failed", detail, 25);
-    return { success: false, message: `Could not reboot to recovery: ${detail}` };
-  }
-
-  // Wait for the device to drop off the bus, then re-appear in recovery.
-  emitOperationEvent(win, "flash-reset", "waiting", "Waiting for device in recovery…", 45);
-  await sleep(12_000);
-
-  // Stage 3 — wipe user data via the ADB-supported recovery path.
-  emitOperationEvent(
-    win,
-    "flash-reset",
-    "wiping",
-    "Wiping user data (recovery --wipe_data / adb shell wipe)…",
-    70
-  );
-  const wipe = await adbWipeData(serial);
-  if (!wipe.ok) {
-    const detail = wipe.detail ?? "recovery rejected the wipe command";
-    emitOperationEvent(win, "flash-reset", "failed", detail, 70);
-    return {
-      success: false,
-      message: "Device did not allow a data wipe. The wipe command was rejected by the device.",
-      detail,
-    };
-  }
-
-  // Stage 4 — reboot back to the system.
-  emitOperationEvent(win, "flash-reset", "rebooting", "Rebooting…", 95);
-  await adbReboot(serial);
-
-  log.info(`[device] flash-reset completed on ${serial}`);
-  emitOperationEvent(win, "flash-reset", "done", "Factory reset complete.", 100);
-  return {
-    success: true,
-    message: "Factory reset completed successfully.",
-    detail: `User data was wiped via ${wipe.detail ?? "adb"} and the device is rebooting.`,
-  };
-}
-
-// ─── FRP flow (legitimate recovery guidance + secure wipe) ──────────────────
-
-async function runFrpBypass(
-  win: BrowserWindow | null,
-  options: OperationOptions = {}
-): Promise<OpResult> {
-  const mode = options.mode ?? "fastboot-recovery";
-  const profile = MODE_PROFILES[mode];
-  const ready = await verifyOperationReady("frp-bypass", win, "FRP recovery", options);
-  if (!ready.ok) return ready.result;
-  const serial = ready.scan.serial!;
-
-  emitOperationEvent(
-    win,
-    "frp-bypass",
-    "starting",
-    `${profile.label} ready — starting FRP secure wipe…`,
-    15
-  );
-
-  // Wipe user data through the same safe ADB path as flash reset.
-  emitOperationEvent(
-    win,
-    "frp-bypass",
-    "wiping",
-    "Wiping user data (recovery --wipe_data / adb shell wipe)…",
-    30
-  );
-  const wipe = await adbWipeData(serial);
-  if (!wipe.ok) {
-    const detail = wipe.detail ?? "recovery rejected the wipe command";
-    emitOperationEvent(win, "frp-bypass", "failed", detail, 30);
-    return {
-      success: false,
-      message: "Device did not allow a data wipe. FRP protection remains active on this device.",
-      detail,
-    };
-  }
-
-  emitOperationEvent(win, "frp-bypass", "rebooting", "Rebooting…", 75);
-  await adbReboot(serial);
-
-  // Structured, non-HTML, plain-text recovery guidance (informational only).
-  emitOperationEvent(
-    win,
-    "frp-bypass",
-    "account-recovery",
-    [
-      "Account recovery guidance (legitimate path only):",
-      "1. On the Google sign-in screen, sign in with the Google account that was last synced on this device.",
-      "2. If the password is unknown, the account owner must reset it at https://accounts.google.com using the recovery email/phone on file.",
-      "3. After signing in, the device completes normal setup. FRP (Factory Reset Protection) remains enforced by Google.",
-      "FRPB does not and cannot disable FRP security.",
-    ].join("\n"),
-    90
-  );
-
-  log.info(`[device] frp-bypass wipe completed on ${serial}; FRP protection remains active`);
-  emitOperationEvent(win, "frp-bypass", "done", "Data wipe complete.", 100);
-  return {
-    success: true,
-    message:
-      "User data was wiped. FRP protection remains active on this device — sign in with the original Google account or use Google's account recovery at accounts.google.com.",
-    detail: `Data wiped via ${wipe.detail ?? "adb"}. FRPB does not defeat FRP security; the guidance shown is the legitimate account-recovery path.`,
-  };
+function manufacturerToVendor(brand: string | undefined): string | undefined {
+  if (!brand) return undefined;
+  const lower = brand.toLowerCase();
+  if (lower.includes("samsung")) return "Samsung";
+  if (lower.includes("xiaomi") || lower.includes("redmi") || lower.includes("poco")) return "Xiaomi";
+  if (lower.includes("oppo")) return "OPPO";
+  if (lower.includes("realme")) return "Realme";
+  if (lower.includes("vivo")) return "Vivo";
+  if (lower.includes("motorola")) return "Motorola";
+  if (lower.includes("oneplus")) return "OnePlus";
+  if (lower.includes("huawei") || lower.includes("honor")) return "Huawei";
+  if (lower.includes("google") || lower.includes("pixel")) return "Google";
+  if (lower.includes("lenovo")) return "Lenovo";
+  if (lower.includes("nokia")) return "Nokia";
+  if (lower.includes("htc")) return "HTC";
+  if (lower.includes("lg")) return "LG";
+  if (lower.includes("sony")) return "Sony";
+  return brand;
 }

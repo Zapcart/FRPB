@@ -9,6 +9,7 @@ export const ANDROID_VENDOR_IDS: Record<number, string> = {
   0x04e8: "Samsung",
   0x18d1: "Google",
   0x22d9: "OnePlus", // shared VID used by OnePlus / Oppo family devices
+  0x2e40: "OPPO",
   0x2717: "Xiaomi",
   0x12d1: "Huawei",
   0x22b8: "Motorola",
