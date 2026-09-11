@@ -79,9 +79,11 @@ export default function HomePage() {
       <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
         <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-accent-500 text-sm font-black text-white shadow-lg shadow-brand-500/30">
-              F
-            </span>
+            <img
+              src="/logo.png"
+              alt="FRPB"
+              className="h-9 w-9 shrink-0 rounded-xl"
+            />
             <span className="text-lg font-extrabold tracking-tight text-ink">FRPB</span>
           </Link>
 
@@ -469,9 +471,11 @@ export default function HomePage() {
           <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
             <div>
               <Link href="/" className="flex items-center gap-2.5">
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-accent-500 text-sm font-black text-white shadow-lg shadow-brand-500/30">
-                  F
-                </span>
+                <img
+                  src="/logo.png"
+                  alt="FRPB"
+                  className="h-9 w-9 shrink-0 rounded-xl"
+                />
                 <span className="text-lg font-extrabold tracking-tight text-ink">FRPB</span>
               </Link>
               <p className="mt-4 max-w-xs text-sm leading-relaxed text-slate-500">

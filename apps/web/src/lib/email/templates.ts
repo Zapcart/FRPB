@@ -6,8 +6,19 @@ export interface LicenseEmailTemplateInput {
   licenseKey: string;
   planName: string;
   expiresAt: Date | null;
+  /** Base download URL (e.g. https://frpb.in/downloads). Filenames are appended. */
   downloadUrl: string;
   quickStartPdfUrl: string;
+}
+
+/**
+ * Join a base URL with a filename, preserving any query string already on the
+ * base. Without this, a base like `https://x/downloads?token=1` would produce
+ * `https://x/downloads?token=1/frpb-setup.exe` (broken).
+ */
+function joinUrl(base: string, filename: string): string {
+  const [root = "", query] = base.split("?");
+  return `${root.replace(/\/+$/, "")}/${filename}${query ? `?${query}` : ""}`;
 }
 
 export function licenseDeliveredTemplate(input: LicenseEmailTemplateInput): {
@@ -48,10 +59,10 @@ export function licenseDeliveredTemplate(input: LicenseEmailTemplateInput): {
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td align="center" style="padding:0 6px;">
-                  <a href="${input.downloadUrl}/frpb-setup.exe" style="display:inline-block;background:#06b6d4;color:#fff;text-decoration:none;font-weight:bold;font-size:13px;padding:12px 24px;border-radius:8px;">⬇ Download for Windows</a>
+                  <a href="${joinUrl(input.downloadUrl, "FRPB-Setup.exe")}" style="display:inline-block;background:#06b6d4;color:#fff;text-decoration:none;font-weight:bold;font-size:13px;padding:12px 24px;border-radius:8px;">⬇ Download for Windows</a>
                 </td>
                 <td align="center" style="padding:0 6px;">
-                  <a href="${input.downloadUrl}/frpb-setup.dmg" style="display:inline-block;background:#0284c7;color:#fff;text-decoration:none;font-weight:bold;font-size:13px;padding:12px 24px;border-radius:8px;">⬇ Download for macOS</a>
+                  <a href="${joinUrl(input.downloadUrl, "FRPB-Setup.dmg")}" style="display:inline-block;background:#0284c7;color:#fff;text-decoration:none;font-weight:bold;font-size:13px;padding:12px 24px;border-radius:8px;">⬇ Download for macOS</a>
                 </td>
               </tr>
             </table>

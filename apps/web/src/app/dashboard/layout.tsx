@@ -6,7 +6,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { Download, LogOut, LayoutDashboard } from "lucide-react";
+import { ArrowRight, Download, LogOut, LayoutDashboard } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
@@ -72,11 +72,13 @@ export default async function DashboardLayout({
   return (
     <div className="flex min-h-screen bg-slate-50">
       {/* Sidebar */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-slate-200 bg-white p-5 md:flex">
+      <aside className="w-64 shrink-0 flex-col border-r border-slate-200 bg-white p-5 md:w-64">
         <Link href="/" className="mb-8 flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-brand-500 to-accent-500 text-sm font-black text-white">
-            F
-          </span>
+          <img
+            src="/logo.png"
+            alt="FRPB"
+            className="h-8 w-8 shrink-0 rounded-lg"
+          />
           <span className="text-lg font-bold tracking-tight text-slate-900">FRPB</span>
         </Link>
 
@@ -89,6 +91,12 @@ export default async function DashboardLayout({
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
           >
             <Download className="h-4 w-4" /> Downloads
+          </Link>
+          <Link
+            href="/pricing"
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+          >
+            <ArrowRight className="h-4 w-4" /> Buy a new plan
           </Link>
         </nav>
 
@@ -124,9 +132,31 @@ export default async function DashboardLayout({
       {/* Main */}
       <div className="flex-1">
         <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur">
-          <div className="flex h-16 items-center justify-between px-6">
+          <div className="flex h-16 items-center justify-between px-4 sm:px-6">
             <h1 className="text-lg font-bold text-slate-900">Dashboard</h1>
-            <span className="text-xs text-slate-500">{email}</span>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/pricing"
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+              >
+                <ArrowRight className="h-3.5 w-3.5" /> Choose Plan
+              </Link>
+              <form
+                action={async () => {
+                  "use server";
+                  const supabase = createClient();
+                  await supabase.auth.signOut({ scope: "local" });
+                  redirect("/");
+                }}
+              >
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-rose-600"
+                >
+                  <LogOut className="h-3.5 w-3.5" /> Logout
+                </button>
+              </form>
+            </div>
           </div>
         </header>
         {dbUnreachable ? (

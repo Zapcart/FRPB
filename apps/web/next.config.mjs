@@ -17,6 +17,19 @@ const nextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
         ],
       },
+      {
+        // Installer binaries served straight from public/downloads must always
+        // be treated as opaque downloads — never rendered/executed by a browser.
+        source: "/downloads/:file*.exe",
+        headers: [
+          { key: "Content-Type", value: "application/octet-stream" },
+          {
+            key: "Content-Disposition",
+            value: 'attachment; filename="FRPB-Setup.exe"',
+          },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
     ];
   },
 };

@@ -3,6 +3,7 @@
 import type { PaymentGateway, PaymentProviderName } from "./gateway";
 import { StripeGateway } from "./stripe";
 import { RazorpayGateway } from "./razorpay";
+import { CashfreeGateway } from "./cashfree";
 
 /**
  * Raised when a gateway cannot be constructed because the required
@@ -34,6 +35,14 @@ export function getPaymentGateway(provider: PaymentProviderName): PaymentGateway
         throw new PaymentConfigError(provider);
       }
       return new RazorpayGateway(keyId, keySecret);
+    }
+    case "CASHFREE": {
+      const clientId = process.env.CASHFREE_CLIENT_ID;
+      const clientSecret = process.env.CASHFREE_CLIENT_SECRET;
+      if (!clientId || !clientSecret) {
+        throw new PaymentConfigError(provider);
+      }
+      return new CashfreeGateway(clientId, clientSecret);
     }
     default:
       throw new Error(`Unsupported payment provider: ${provider}`);

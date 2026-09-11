@@ -70,7 +70,7 @@ export type UnbindRequest = z.infer<typeof UnbindRequestSchema>;
 
 export const CheckoutRequestSchema = z.object({
   planSlug: z.enum(["MONTH_1", "YEAR_1", "LIFETIME"]),
-  provider: z.enum(["STRIPE", "RAZORPAY"]).optional().default("STRIPE"),
+  provider: z.enum(["STRIPE", "RAZORPAY", "CASHFREE"]).optional().default("STRIPE"),
   successUrl: z.string().url().optional(),
   cancelUrl: z.string().url().optional(),
 });

@@ -1,17 +1,23 @@
 // FRPB — pricing page
 // Light-mode SaaS layout. Renders the three plans from @frpb/shared
-// and starts Stripe/Razorpay checkout for authenticated users.
+// and starts Stripe/Razorpay/Cashfree checkout for authenticated users.
 
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, CreditCard, Zap, ArrowRight, ShieldCheck } from "lucide-react";
+import { Check, Loader2, CreditCard, Zap, Wallet, ArrowRight, ShieldCheck } from "lucide-react";
 import { PLANS, type PlanSlug } from "@frpb/shared";
 import { createClient } from "@/lib/supabase/client";
 
-type Provider = "STRIPE" | "RAZORPAY";
+type Provider = "STRIPE" | "RAZORPAY" | "CASHFREE";
+
+const PROVIDERS: ReadonlyArray<{ id: Provider; label: string }> = [
+  { id: "STRIPE", label: "Card (Stripe)" },
+  { id: "RAZORPAY", label: "UPI / Cards (Razorpay)" },
+  { id: "CASHFREE", label: "UPI / Cards (Cashfree)" },
+];
 
 const PRICING_NOTES: Record<string, string> = {
   MONTH_1: "per month",
@@ -30,9 +36,17 @@ export default function PricingPage() {
     setError(null);
 
     const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+
+    // Robust auth check: try getUser, and also check session directly
+    let user = null;
+    try {
+      const { data } = await supabase.auth.getUser();
+      user = data.user;
+    } catch {
+      // getUser failed — try getSession as fallback
+      const { data: sessionData } = await supabase.auth.getSession();
+      user = sessionData.session?.user ?? null;
+    }
 
     if (!user) {
       router.push(`/auth?returnTo=/pricing`);
@@ -44,6 +58,7 @@ export default function PricingPage() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ planSlug, provider }),
+      credentials: "include",
     });
 
     const data = (await res.json()) as { success?: boolean; checkoutUrl?: string; message?: string };
@@ -100,22 +115,24 @@ export default function PricingPage() {
 
         {/* Provider toggle */}
         <div className="mt-8 flex items-center justify-center gap-2">
-          {(["STRIPE", "RAZORPAY"] as const).map((p) => (
+          {PROVIDERS.map(({ id, label }) => (
             <button
-              key={p}
-              onClick={() => setProvider(p)}
+              key={id}
+              onClick={() => setProvider(id)}
               className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium transition ${
-                provider === p
+                provider === id
                   ? "border-brand-200 bg-brand-50 text-brand-700 shadow-sm"
                   : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700"
               }`}
             >
-              {p === "STRIPE" ? (
+              {id === "STRIPE" ? (
                 <CreditCard className="h-4 w-4" />
-              ) : (
+              ) : id === "RAZORPAY" ? (
                 <Zap className="h-4 w-4" />
+              ) : (
+                <Wallet className="h-4 w-4" />
               )}
-              {p === "STRIPE" ? "Card (Stripe)" : "UPI / Cards (Razorpay)"}
+              {label}
             </button>
           ))}
         </div>

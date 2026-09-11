@@ -88,7 +88,8 @@ function createWebBridge(): FrpbBridge {
             plan: "LIFETIME",
             planName: "Lifetime License",
             expiresAt: null,
-            deviceLimit: 3,
+            // Must mirror shared PLANS: LIFETIME grants 5 device activations.
+            deviceLimit: 5,
             devicesUsed: 1,
             activatedAt: new Date().toISOString(),
           };

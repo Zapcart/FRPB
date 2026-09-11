@@ -1,8 +1,8 @@
 // FRPB — payment gateway interface.
-// Both Stripe and Razorpay adapters implement this so checkout + webhooks
+// Stripe, Razorpay and Cashfree adapters implement this so checkout + webhooks
 // stay provider-agnostic at the call site.
 
-export type PaymentProviderName = "STRIPE" | "RAZORPAY";
+export type PaymentProviderName = "STRIPE" | "RAZORPAY" | "CASHFREE";
 
 export interface CreateCheckoutInput {
   planSlug: string;

@@ -29,6 +29,7 @@ enum LicenseStatus {
 enum PaymentProvider {
   STRIPE
   RAZORPAY
+  CASHFREE
 }
 
 enum PaymentStatus {
@@ -132,7 +133,7 @@ model Payment {
   licenseId        String?         @unique
   license          License?        @relation(fields: [licenseId], references: [id])
   provider         PaymentProvider
-  providerTxnId    String          @unique // Stripe payment_intent id / Razorpay payment id
+  providerTxnId    String          @unique // Stripe session id / Razorpay order id / Cashfree order id
   providerEventId  String? // webhook event id for idempotency
   amountCents      Int
   currency         String          @default("USD")
@@ -149,7 +150,7 @@ model Payment {
 
 model WebhookEvent {
   id          String          @id @default(cuid())
-  provider    PaymentProvider // STRIPE or RAZORPAY
+  provider    PaymentProvider // STRIPE | RAZORPAY | CASHFREE
   eventId     String          @unique // provider event id (e.g., evt_..., event_...)
   eventType   String // payment_intent.succeeded / payment.captured
   payload     Json // raw provider payload for audit + replay

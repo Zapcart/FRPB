@@ -9,7 +9,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 // Prisma generates the PaymentProvider enum but does not export it as a value;
 // use the string literal union matching the schema enum for runtime comparisons.
-type PaymentProviderName = "STRIPE" | "RAZORPAY";
+type PaymentProviderName = "STRIPE" | "RAZORPAY" | "CASHFREE";
 import { prisma } from "@/lib/prisma";
 import { sha256 } from "@/lib/crypto/sha256";
 import { generateLicenseKey } from "@/lib/license/generate";
@@ -77,16 +77,20 @@ export async function processWebhook(
   }
 
   try {
-    // ── 2. Double-guard: providerTxnId already granted? ────────────────
+    // ── 2. Double-guard: has this txn already been granted? ────────────
+    // NOTE: /api/v1/checkout writes a PENDING row with the SAME providerTxnId
+    // before the customer pays. Only a row that already carries a licenseId
+    // means "already granted" — a bare PENDING row must be reconciled (updated)
+    // inside the transaction below, never mistaken for a duplicate.
     const existingPayment = await client.payment.findUnique({
       where: { providerTxnId: input.txnId },
     });
-    if (existingPayment) {
+    if (existingPayment?.licenseId) {
       await client.webhookEvent.update({
         where: { id: event.id },
         data: { status: "IGNORED", processedAt: new Date(), licenseId: existingPayment.licenseId },
       });
-      return { outcome: "DUPLICATE", licenseId: existingPayment.licenseId ?? undefined };
+      return { outcome: "DUPLICATE", licenseId: existingPayment.licenseId };
     }
 
     await client.webhookEvent.update({
@@ -138,19 +142,23 @@ export async function processWebhook(
         },
       });
 
-      const payment = await tx.payment.create({
-        data: {
-          userId: user.id,
-          licenseId: license.id,
-          provider: input.provider,
-          providerTxnId: input.txnId,
-          providerEventId: input.eventId,
-          amountCents: input.amountCents,
-          currency: input.currency,
-          status: "SUCCEEDED",
-          planSlug: input.planSlug,
-        },
-      });
+      const paymentData = {
+        userId: user.id,
+        licenseId: license.id,
+        provider: input.provider,
+        providerTxnId: input.txnId,
+        providerEventId: input.eventId,
+        amountCents: input.amountCents,
+        currency: input.currency,
+        status: "SUCCEEDED" as const,
+        planSlug: input.planSlug,
+      };
+
+      // Reconcile the PENDING row created at checkout (same providerTxnId)
+      // instead of colliding with its unique index; otherwise insert it now.
+      const payment = existingPayment
+        ? await tx.payment.update({ where: { id: existingPayment.id }, data: paymentData })
+        : await tx.payment.create({ data: paymentData });
 
       await tx.webhookEvent.update({
         where: { id: event.id },

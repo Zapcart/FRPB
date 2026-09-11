@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sha256 } from "@/lib/crypto/sha256";
+import { rateLimit } from "@/lib/rate-limit";
 import { z } from "zod";
 
 // ─── Request validation ──────────────────────────────────────────────────────
@@ -24,7 +25,6 @@ export type FrpRequest = z.infer<typeof FrpRequestSchema>;
 
 // ─── POST /api/v1/frp/request ────────────────────────────────────────────────
 // Create a new FRP unlock request. Returns a request ID the client can poll.
-import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
   try {
@@ -104,38 +104,6 @@ export async function POST(req: NextRequest) {
     console.error("[frp/request] error:", err);
     return NextResponse.json(
       { success: false, status: "SERVER_ERROR", message: "Request could not be processed." },
-      { status: 500 }
-    );
-  }
-}
-
-// ─── GET /api/v1/frp/status/[requestId] ──────────────────────────────────────
-// Poll the status of an FRP unlock request.
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ requestId: string }> }) {
-  try {
-    const { requestId } = await params;
-    const request = await prisma.frpUnlockRequest.findUnique({
-      where: { id: requestId },
-    });
-
-    if (!request) {
-      return NextResponse.json(
-        { success: false, status: "NOT_FOUND", message: "Request not found." },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      requestId: request.id,
-      status: request.status,
-      message: request.statusMessage ?? "",
-      completedAt: request.completedAt?.toISOString() ?? null,
-    });
-  } catch (err) {
-    console.error("[frp/status] error:", err);
-    return NextResponse.json(
-      { success: false, status: "SERVER_ERROR", message: "Status check failed." },
       { status: 500 }
     );
   }

@@ -35,14 +35,17 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/v1/license/list", { cache: "no-store" });
+      const res = await fetch("/api/v1/license/list", { cache: "no-store", credentials: "include" });
       if (res.status === 401) {
         window.location.href = "/auth?returnTo=/dashboard";
         return;
       }
+      if (!res.ok) {
+        setMessage(res.status === 503 ? "We couldn't load your licenses right now. Please try again in a moment." : "Failed to load licenses.");
+        return;
+      }
       const data = (await res.json()) as ApiEnvelope<{ licenses: LicenseWithDevices[] }>;
       if (data.success && data.data) {
-        // Fetch bound devices for the first license (expandable later)
         const withDevices = await Promise.all(
           data.data.licenses.map(async (lic) => ({
             ...lic,
@@ -51,6 +54,8 @@ export default function DashboardPage() {
         );
         setLicenses(withDevices);
       }
+    } catch {
+      setMessage("Network error. Please try again.");
     } finally {
       setLoading(false);
     }

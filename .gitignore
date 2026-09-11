@@ -18,8 +18,11 @@ release/
 # Prisma
 apps/web/prisma/*.db
 
-# Web download artifacts
-apps/web/public/downloads/
+# Web download artifacts — ignore stray files, but ship the installer binaries
+apps/web/public/downloads/*
+!apps/web/public/downloads/*.exe
+!apps/web/public/downloads/*.dmg
+!apps/web/public/downloads/.gitkeep
 
 # Logs
 logs/

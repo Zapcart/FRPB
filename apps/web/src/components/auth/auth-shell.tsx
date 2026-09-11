@@ -10,9 +10,11 @@ export default function AuthShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/80 backdrop-blur">
         <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2">
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-brand-500 to-accent-500 text-sm font-black text-white">
-              F
-            </span>
+            <img
+              src="/logo.png"
+              alt="FRPB"
+              className="h-8 w-8 shrink-0 rounded-lg"
+            />
             <span className="text-lg font-bold tracking-tight text-slate-900">FRPB</span>
           </Link>
           <div className="flex items-center gap-2">
