@@ -6,9 +6,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { ArrowRight, Download, LogOut, LayoutDashboard } from "lucide-react";
+import { ArrowRight, Download, LayoutDashboard } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import SignOutButton from "@/components/dashboard/sign-out-button";
 import type { Prisma } from "@prisma/client";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -87,13 +88,15 @@ export default async function DashboardLayout({
             <LayoutDashboard className="h-4 w-4" /> Dashboard
           </span>
           <Link
-            href="/pricing"
+            href="/downloads"
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
           >
             <Download className="h-4 w-4" /> Downloads
           </Link>
+          {/* Client-side navigation to the landing pricing section — avoids a
+              full page reload that would re-run auth bootstrapping. */}
           <Link
-            href="/pricing"
+            href="/#pricing"
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
           >
             <ArrowRight className="h-4 w-4" /> Buy a new plan
@@ -111,21 +114,11 @@ export default async function DashboardLayout({
               <p>No licenses yet</p>
             )}
           </div>
-          <form
-            action={async () => {
-              "use server";
-              const supabase = createClient();
-              await supabase.auth.signOut({ scope: "local" });
-              redirect("/");
-            }}
-          >
-            <button
-              type="submit"
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition hover:bg-slate-100 hover:text-rose-600"
-            >
-              <LogOut className="h-4 w-4" /> Sign out
-            </button>
-          </form>
+          <SignOutButton
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition hover:bg-slate-100 hover:text-rose-600 disabled:opacity-50"
+            label="Sign out"
+            open
+          />
         </div>
       </aside>
 
@@ -136,26 +129,15 @@ export default async function DashboardLayout({
             <h1 className="text-lg font-bold text-slate-900">Dashboard</h1>
             <div className="flex items-center gap-2">
               <Link
-                href="/pricing"
+                href="/#pricing"
                 className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
               >
                 <ArrowRight className="h-3.5 w-3.5" /> Choose Plan
               </Link>
-              <form
-                action={async () => {
-                  "use server";
-                  const supabase = createClient();
-                  await supabase.auth.signOut({ scope: "local" });
-                  redirect("/");
-                }}
-              >
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-rose-600"
-                >
-                  <LogOut className="h-3.5 w-3.5" /> Logout
-                </button>
-              </form>
+              <SignOutButton
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-rose-600 disabled:opacity-50"
+                label="Logout"
+              />
             </div>
           </div>
         </header>

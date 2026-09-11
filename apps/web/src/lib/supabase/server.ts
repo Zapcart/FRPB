@@ -1,6 +1,9 @@
 // FRPB — Supabase server client (server components / route handlers).
 // Binds the user's session to the request via the next/headers cookie store.
 // Package: @supabase/ssr (replaces deprecated @supabase/auth-helpers-nextjs).
+//
+// Server components/route handlers only — client components must use the
+// persistent cookie-based browser client (lib/supabase/client.ts).
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";

@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   KeyRound,
   Smartphone,
@@ -27,6 +28,7 @@ interface LicenseWithDevices extends ListLicensesItem {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [licenses, setLicenses] = useState<LicenseWithDevices[]>([]);
   const [loading, setLoading] = useState(true);
   const [unbinding, setUnbinding] = useState<string | null>(null);
@@ -34,14 +36,24 @@ export default function DashboardPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setMessage(null);
     try {
       const res = await fetch("/api/v1/license/list", { cache: "no-store", credentials: "include" });
       if (res.status === 401) {
-        window.location.href = "/auth?returnTo=/dashboard";
+        // The session is genuinely invalid. Navigate client-side to sign-in —
+        // we never clear the session token here and never trigger a full page
+        // reload (which would drop client auth state mid-transition).
+        router.replace("/auth?returnTo=/dashboard");
         return;
       }
       if (!res.ok) {
-        setMessage(res.status === 503 ? "We couldn't load your licenses right now. Please try again in a moment." : "Failed to load licenses.");
+        // Backend/DB failures (e.g. 503) must NOT touch the auth session.
+        // Surface a non-destructive message and keep the user signed in.
+        setMessage(
+          res.status === 503
+            ? "We couldn't load your licenses right now. Please try again in a moment."
+            : "Failed to load licenses."
+        );
         return;
       }
       const data = (await res.json()) as ApiEnvelope<{ licenses: LicenseWithDevices[] }>;
@@ -55,17 +67,20 @@ export default function DashboardPage() {
         setLicenses(withDevices);
       }
     } catch {
+      // Network hiccups also must not log the user out.
       setMessage("Network error. Please try again.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router]);
 
   const loadDevices = async (licenseId: string): Promise<DashboardDeviceItem[]> => {
     try {
       const res = await fetch(`/api/v1/license/devices?licenseId=${licenseId}`, {
         cache: "no-store",
+        credentials: "include",
       });
+      if (!res.ok) return [];
       const data = (await res.json()) as ApiEnvelope<{ devices: DashboardDeviceItem[] }>;
       return data.success && data.data ? data.data.devices : [];
     } catch {
@@ -114,7 +129,7 @@ export default function DashboardPage() {
         icon={<KeyRound className="h-8 w-8 text-brand-500" />}
         title="No active licenses yet"
         body="Buy a plan to receive your license key instantly and unlock the FRPB desktop app."
-        cta={{ href: "/pricing", label: "Choose a plan" }}
+        cta={{ href: "/#pricing", label: "Choose a plan" }}
       />
     );
   }
@@ -152,7 +167,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <Link
-              href="/pricing"
+              href="/#pricing"
               className="btn-ghost rounded-lg px-4 py-2 text-sm font-medium"
             >
               Upgrade plan
