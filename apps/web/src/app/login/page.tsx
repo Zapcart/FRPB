@@ -8,13 +8,32 @@ import { safeReturnTo } from "@/lib/auth/return-to";
 export const dynamic = "force-dynamic";
 
 interface LoginPageProps {
-  searchParams?: { returnTo?: string; callbackUrl?: string };
+  searchParams?: {
+    returnTo?: string;
+    callbackUrl?: string;
+    redirectTo?: string;
+    plan?: string;
+  };
 }
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const returnTo = safeReturnTo(
-    searchParams?.returnTo ?? searchParams?.callbackUrl
+  // Accept `redirectTo` (preferred) as well as the legacy `returnTo`/`callbackUrl`.
+  const base = safeReturnTo(
+    searchParams?.redirectTo ??
+      searchParams?.returnTo ??
+      searchParams?.callbackUrl
   );
+
+  // Preserve the selected plan across the post-login hop so the destination
+  // (e.g. /checkout) can resume the exact purchase the user started.
+  const plan = searchParams?.plan;
+  let returnTo = base;
+  if (plan) {
+    const [path, existingQuery = ""] = base.split("?");
+    const params = new URLSearchParams(existingQuery);
+    params.set("plan", plan);
+    returnTo = `${path}?${params.toString()}`;
+  }
 
   return (
     <AuthShell>

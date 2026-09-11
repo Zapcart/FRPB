@@ -11,6 +11,12 @@
     scroll-behavior: smooth;
   }
 
+  /* Offset in-page anchor targets so the sticky header never overlaps them. */
+  section[id],
+  [id]:target {
+    scroll-margin-top: 5rem;
+  }
+
   body {
     @apply bg-white font-sans text-slate-900 antialiased;
   }

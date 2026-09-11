@@ -30,6 +30,7 @@ import {
   Award,
 } from "lucide-react";
 import { PLANS } from "@frpb/shared";
+import SmoothScrollLink from "@/components/smooth-scroll-link";
 
 const NAV_LINKS = [
   { label: "Features", href: "#features" },
@@ -191,11 +192,15 @@ export default function HomePage() {
               <Download className="h-5 w-5" />
               Try for Free
             </Link>
-            <Link href="#pricing" className="btn-ghost w-full px-8 py-3.5 text-sm sm:w-auto">
+            <SmoothScrollLink
+              targetId="pricing"
+              ariaLabel="See pricing"
+              className="btn-ghost w-full px-8 py-3.5 text-sm sm:w-auto"
+            >
               <Play className="h-4 w-4 text-brand-500" />
               See Pricing
               <ArrowRight className="h-4 w-4" />
-            </Link>
+            </SmoothScrollLink>
           </div>
 
           {/* Platform compatibility indicators */}

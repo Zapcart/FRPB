@@ -49,47 +49,65 @@ export default function PricingPage() {
   }
 
   async function handlePurchase(planSlug: PlanSlug) {
+    if (loadingPlan !== null) return;
     setLoadingPlan(planSlug);
     setError(null);
 
     const supabase = createClient();
 
-    // Robust auth check: try getUser, and also check session directly
+    // Resolve the active session. Read the persisted session first (no
+    // network round-trip), then fall back to a server-validated getUser().
+    // This path only ever *reads* auth state — it never signs the user out
+    // or clears storage, so an accidental logout is impossible here.
     let user = null;
     try {
-      const { data } = await supabase.auth.getUser();
-      user = data.user;
-    } catch {
       const { data: sessionData } = await supabase.auth.getSession();
       user = sessionData.session?.user ?? null;
+      if (!user) {
+        const { data } = await supabase.auth.getUser();
+        user = data.user ?? null;
+      }
+    } catch {
+      user = null;
     }
 
+    // Not logged in → send to the login entry with the plan + post-auth target.
     if (!user) {
-      router.push(`/auth?returnTo=/pricing`);
       setLoadingPlan(null);
+      router.push(
+        `/auth/login?plan=${encodeURIComponent(planSlug)}&redirectTo=${encodeURIComponent(
+          "/checkout"
+        )}`
+      );
       return;
     }
 
-    const res = await fetch("/api/v1/checkout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ planSlug }),
-      credentials: "include",
-    });
+    // Logged in → go straight to the payment handler for the selected plan.
+    try {
+      const res = await fetch("/api/v1/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planSlug }),
+        credentials: "include",
+      });
 
-    const data = (await res.json()) as {
-      success?: boolean;
-      checkoutUrl?: string;
-      message?: string;
-    };
+      const data = (await res.json()) as {
+        success?: boolean;
+        checkoutUrl?: string;
+        message?: string;
+      };
 
-    if (data.success && data.checkoutUrl) {
-      window.location.href = data.checkoutUrl;
-      return;
+      if (data.success && data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+
+      setError(data.message ?? "Checkout failed. Please try again.");
+    } catch {
+      setError("Checkout failed. Please try again.");
+    } finally {
+      setLoadingPlan(null);
     }
-
-    setError(data.message ?? "Checkout failed. Please try again.");
-    setLoadingPlan(null);
   }
 
   return (
