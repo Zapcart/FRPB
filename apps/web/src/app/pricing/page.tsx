@@ -14,9 +14,20 @@ import { createClient } from "@/lib/supabase/client";
 
 type Currency = "USD" | "INR";
 
-const CURRENCY_INFO: Record<Currency, { symbol: string; label: string; rate: number }> = {
-  USD: { symbol: "$", label: "USD", rate: 1 },
-  INR: { symbol: "₹", label: "INR", rate: 83.5 },
+const CURRENCY_INFO: Record<
+  Currency,
+  { symbol: string; label: string; rate: number; locale: string }
+> = {
+  USD: { symbol: "$", label: "USD", rate: 1, locale: "en-US" },
+  INR: { symbol: "₹", label: "INR", rate: 83.5, locale: "en-IN" },
+};
+
+// Billing interval suffix, keyed by plan slug + display currency.
+// Lifetime plans render a one-time label only — never a recurring interval.
+const BILLING_SUFFIX: Record<PlanSlug, Record<Currency, string>> = {
+  MONTH_1: { USD: "/ month", INR: "prati mahine" },
+  YEAR_1: { USD: "/ year", INR: "prati saal" },
+  LIFETIME: { USD: "one-time", INR: "ek baar" },
 };
 
 export default function PricingPage() {
@@ -27,12 +38,14 @@ export default function PricingPage() {
 
   function formatPrice(cents: number, cur: Currency): string {
     const info = CURRENCY_INFO[cur];
-    const amount = cents * info.rate;
-    if (cur === "USD") {
-      return `${info.symbol}${(amount / 100).toFixed(2)}`;
-    }
-    // INR: paise -> rupees, no decimals for clean display
-    return `${info.symbol}${(amount / 100).toFixed(0)}`;
+    const amount = (cents * info.rate) / 100; // cents/paise -> major units
+    // USD keeps 2 decimals; INR is rounded to whole rupees.
+    const fractionDigits = cur === "USD" ? 2 : 0;
+    const formatted = new Intl.NumberFormat(info.locale, {
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    }).format(amount);
+    return `${info.symbol}${formatted}`;
   }
 
   async function handlePurchase(planSlug: PlanSlug) {
@@ -170,10 +183,7 @@ export default function PricingPage() {
                     {formatPrice(plan.priceCents, currency)}
                   </span>
                   <span className="text-sm font-medium text-slate-400">
-                    {currency === "USD" ? "per month" : "prati mahine"}{" "}
-                    {plan.slug === "LIFETIME" ? (
-                      <span className="text-slate-500"> · {currency === "USD" ? "one-time" : "ek baar"}</span>
-                    ) : null}
+                    {BILLING_SUFFIX[plan.slug][currency]}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-slate-400">

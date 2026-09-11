@@ -163,7 +163,7 @@ export default function HomePage() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-brand-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-brand-500" />
             </span>
-            FRPB Utility V13 — Complete Toolkit
+            FRPB Utility V1 — Complete Toolkit
           </div>
 
           {/* Headline */}
@@ -337,7 +337,7 @@ export default function HomePage() {
                 <Award className="h-5 w-5 text-brand-600" />
               </span>
               <div className="text-left">
-                <p className="text-sm font-extrabold leading-none text-ink">V13 Ultimate</p>
+                <p className="text-sm font-extrabold leading-none text-ink">FRPB Utility V1</p>
                 <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
                   Latest release
                 </p>
