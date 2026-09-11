@@ -4,11 +4,10 @@
 
 import { app, BrowserWindow, shell } from "electron";
 import path from "node:path";
-import { autoUpdater } from "electron-updater";
 import { registerLicenseHandlers } from "./ipc/license";
 import { registerDeviceHandlers } from "./ipc/device";
 import { registerLinkHandlers } from "./ipc/links";
-import { registerUpdaterHandlers } from "./ipc/updater";
+import { registerUpdaterHandlers, checkForUpdatesOnLaunch } from "./ipc/updater";
 import { getHardwareId } from "./utils/hardwareId";
 import { log } from "./utils/logger";
 
@@ -84,13 +83,11 @@ app.whenReady().then(async () => {
   createWindow();
 
   // Background auto-update check on every launch (silent, non-blocking).
-  // Only run for packaged builds — electron-updater has no app-update.yml
-  // in dev and would otherwise throw on every `pnpm dev:all` session.
-  if (app.isPackaged) {
-    autoUpdater.checkForUpdates().catch(() => {
-      /* non-fatal: no network or no update channel configured */
-    });
-  }
+  // Fully guarded: electron-updater is required lazily inside the helper, so a
+  // packaging/resolution failure degrades to "updates unavailable" rather than
+  // throwing an uncaught exception during boot. Only runs for packaged builds
+  // (dev has no app-update.yml and would otherwise throw every `pnpm dev:all`).
+  checkForUpdatesOnLaunch();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
