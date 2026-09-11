@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { planSlug, provider } = parsed.data;
+  const { planSlug, currency } = parsed.data;
   const plan = getPlanDefinition(planSlug);
   const successUrl = parsed.data.successUrl ?? `${APP_URL}/dashboard?checkout=success`;
   const cancelUrl = parsed.data.cancelUrl ?? `${APP_URL}/pricing?checkout=cancelled`;
@@ -78,11 +78,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 4. Create the gateway session/order — config errors and provider
-  //    failures surface as a 502 instead of a generic 500.
+  // 4. Create the gateway session/order — Cashfree is the default gateway.
+  //    If Cashfree is not configured, surface as 502.
   let checkoutResult;
   try {
-    const gateway = getPaymentGateway(provider);
+    const gateway = getPaymentGateway("CASHFREE");
     checkoutResult = await gateway.createCheckout({
       planSlug,
       customerEmail: userRecord.email,
@@ -108,10 +108,10 @@ export async function POST(req: NextRequest) {
     await prisma.payment.create({
       data: {
         userId: userRecord.id,
-        provider,
+        provider: "CASHFREE",
         providerTxnId: checkoutResult.providerTxnId,
-        amountCents: plan.priceCents,
-        currency: plan.currency,
+        amountCents: currency === "INR" ? plan.priceInr : plan.priceCents,
+        currency: currency,
         status: "PENDING",
         planSlug,
       },

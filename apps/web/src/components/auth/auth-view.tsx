@@ -5,6 +5,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2, Mail, Lock, User, ShieldCheck, Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -14,6 +15,7 @@ interface AuthViewProps {
 }
 
 export default function AuthView({ initialMode, returnTo }: AuthViewProps) {
+  const router = useRouter();
   const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -58,7 +60,9 @@ export default function AuthView({ initialMode, returnTo }: AuthViewProps) {
     }
 
     // Session is set — go to the destination the user was heading to.
-    window.location.href = returnTo;
+    // Use router.push instead of window.location.href so Next.js handles
+    // the transition cleanly without dropping session cookies.
+    router.push(returnTo);
   }
 
   return (

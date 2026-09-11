@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   FileDown,
   Smartphone,
+  Info,
 } from "lucide-react";
 
 export const metadata = {
@@ -106,8 +107,17 @@ export default function DownloadsPage() {
             </a>
 
             <p className="mt-4 text-xs text-slate-400">
-              {EXE_NAME} · ~180 MB · Windows 10/11 · Free trial available
+              {EXE_NAME} · ~91 MB · Windows 10/11 · Free trial available
             </p>
+
+            {/* Windows SmartScreen guidance */}
+            <div className="mt-5 flex w-full max-w-md items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-left">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <p className="text-xs leading-relaxed text-slate-500">
+                Note: If Windows SmartScreen displays a warning, click 'More info' and select
+                'Run anyway'.
+              </p>
+            </div>
 
             {/* Version + checksum strip */}
             <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5">

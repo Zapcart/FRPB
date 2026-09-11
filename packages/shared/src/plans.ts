@@ -9,8 +9,9 @@ export type PlanSlug = (typeof PLAN_TYPE_VALUES)[number];
 export interface PlanDefinition {
   slug: PlanSlug;
   name: string;
-  priceCents: number;
-  currency: string;
+  priceCents: number;          // USD in cents ($19.99 = 1999)
+  currency: string;            // "USD"
+  priceInr: number;            // INR in paise (₹1,670 = 167000)
   /** null = lifetime */
   durationDays: number | null;
   deviceLimit: number;
@@ -23,6 +24,7 @@ export const PLANS: readonly PlanDefinition[] = [
     name: "1-Month Plan",
     priceCents: 1999,
     currency: "USD",
+    priceInr: 167000,   // ₹1,670
     durationDays: 30,
     deviceLimit: 1,
     features: [
@@ -37,6 +39,7 @@ export const PLANS: readonly PlanDefinition[] = [
     name: "1-Year Plan",
     priceCents: 4999,
     currency: "USD",
+    priceInr: 417500,   // ₹4,175
     durationDays: 365,
     deviceLimit: 3,
     features: [
@@ -52,6 +55,7 @@ export const PLANS: readonly PlanDefinition[] = [
     name: "Lifetime Plan",
     priceCents: 9999,
     currency: "USD",
+    priceInr: 835000,   // ₹8,350
     durationDays: null,
     deviceLimit: 5,
     features: [

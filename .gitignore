@@ -43,3 +43,6 @@ Thumbs.db
 # Electron
 apps/desktop/dist-electron/
 apps/desktop/release/
+
+# Local installer test artifacts (never commit)
+.tmp-nsis-test/

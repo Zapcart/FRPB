@@ -38,6 +38,9 @@ importers:
       react-dom:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
+      sax:
+        specifier: ^1.4.1
+        version: 1.6.1
       usb:
         specifier: ^2.13.0
         version: 2.18.0

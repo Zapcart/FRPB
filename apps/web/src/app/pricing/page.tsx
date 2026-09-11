@@ -1,35 +1,39 @@
 // FRPB — pricing page
 // Light-mode SaaS layout. Renders the three plans from @frpb/shared
-// and starts Stripe/Razorpay/Cashfree checkout for authenticated users.
+// and starts checkout for authenticated users.
+// Currency display only — no payment provider branding on the frontend.
 
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, CreditCard, Zap, Wallet, ArrowRight, ShieldCheck } from "lucide-react";
+import { Check, Loader2, ArrowRight, ShieldCheck, Globe } from "lucide-react";
 import { PLANS, type PlanSlug } from "@frpb/shared";
 import { createClient } from "@/lib/supabase/client";
 
-type Provider = "STRIPE" | "RAZORPAY" | "CASHFREE";
+type Currency = "USD" | "INR";
 
-const PROVIDERS: ReadonlyArray<{ id: Provider; label: string }> = [
-  { id: "STRIPE", label: "Card (Stripe)" },
-  { id: "RAZORPAY", label: "UPI / Cards (Razorpay)" },
-  { id: "CASHFREE", label: "UPI / Cards (Cashfree)" },
-];
-
-const PRICING_NOTES: Record<string, string> = {
-  MONTH_1: "per month",
-  YEAR_1: "per year",
-  LIFETIME: "one-time",
+const CURRENCY_INFO: Record<Currency, { symbol: string; label: string; rate: number }> = {
+  USD: { symbol: "$", label: "USD", rate: 1 },
+  INR: { symbol: "₹", label: "INR", rate: 83.5 },
 };
 
 export default function PricingPage() {
   const router = useRouter();
   const [loadingPlan, setLoadingPlan] = useState<PlanSlug | null>(null);
-  const [provider, setProvider] = useState<Provider>("STRIPE");
+  const [currency, setCurrency] = useState<Currency>("USD");
   const [error, setError] = useState<string | null>(null);
+
+  function formatPrice(cents: number, cur: Currency): string {
+    const info = CURRENCY_INFO[cur];
+    const amount = cents * info.rate;
+    if (cur === "USD") {
+      return `${info.symbol}${(amount / 100).toFixed(2)}`;
+    }
+    // INR: paise -> rupees, no decimals for clean display
+    return `${info.symbol}${(amount / 100).toFixed(0)}`;
+  }
 
   async function handlePurchase(planSlug: PlanSlug) {
     setLoadingPlan(planSlug);
@@ -43,7 +47,6 @@ export default function PricingPage() {
       const { data } = await supabase.auth.getUser();
       user = data.user;
     } catch {
-      // getUser failed — try getSession as fallback
       const { data: sessionData } = await supabase.auth.getSession();
       user = sessionData.session?.user ?? null;
     }
@@ -57,11 +60,15 @@ export default function PricingPage() {
     const res = await fetch("/api/v1/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ planSlug, provider }),
+      body: JSON.stringify({ planSlug }),
       credentials: "include",
     });
 
-    const data = (await res.json()) as { success?: boolean; checkoutUrl?: string; message?: string };
+    const data = (await res.json()) as {
+      success?: boolean;
+      checkoutUrl?: string;
+      message?: string;
+    };
 
     if (data.success && data.checkoutUrl) {
       window.location.href = data.checkoutUrl;
@@ -77,9 +84,11 @@ export default function PricingPage() {
       <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
         <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-accent-500 text-sm font-black text-white shadow-lg shadow-brand-500/30">
-              F
-            </span>
+            <img
+              src="/logo.png"
+              alt="FRPB"
+              className="h-8 w-8 shrink-0 rounded-xl"
+            />
             <span className="text-lg font-extrabold tracking-tight text-ink">FRPB</span>
           </Link>
           <div className="flex items-center gap-3">
@@ -113,28 +122,25 @@ export default function PricingPage() {
           </p>
         </div>
 
-        {/* Provider toggle */}
-        <div className="mt-8 flex items-center justify-center gap-2">
-          {PROVIDERS.map(({ id, label }) => (
-            <button
-              key={id}
-              onClick={() => setProvider(id)}
-              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium transition ${
-                provider === id
-                  ? "border-brand-200 bg-brand-50 text-brand-700 shadow-sm"
-                  : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700"
-              }`}
-            >
-              {id === "STRIPE" ? (
-                <CreditCard className="h-4 w-4" />
-              ) : id === "RAZORPAY" ? (
-                <Zap className="h-4 w-4" />
-              ) : (
-                <Wallet className="h-4 w-4" />
-              )}
-              {label}
-            </button>
-          ))}
+        {/* Currency switcher — display only, no provider branding */}
+        <div className="mt-6 flex items-center justify-center gap-3">
+          <Globe className="h-4 w-4 text-slate-400" />
+          <span className="text-xs font-medium text-slate-500">Show prices in:</span>
+          <div className="flex rounded-xl border border-slate-200 overflow-hidden">
+            {(["USD", "INR"] as const).map((cur) => (
+              <button
+                key={cur}
+                onClick={() => setCurrency(cur)}
+                className={`px-4 py-1.5 text-sm font-semibold transition ${
+                  currency === cur
+                    ? "bg-brand-500 text-white shadow-sm"
+                    : "bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                {CURRENCY_INFO[cur].label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {error && (
@@ -161,10 +167,13 @@ export default function PricingPage() {
                 <h2 className="text-xl font-bold text-slate-900">{plan.name}</h2>
                 <div className="mt-4 flex items-baseline gap-1.5">
                   <span className="text-4xl font-black tracking-tight text-ink">
-                    ${(plan.priceCents / 100).toFixed(2)}
+                    {formatPrice(plan.priceCents, currency)}
                   </span>
                   <span className="text-sm font-medium text-slate-400">
-                    {PRICING_NOTES[plan.slug]}
+                    {currency === "USD" ? "per month" : "prati mahine"}{" "}
+                    {plan.slug === "LIFETIME" ? (
+                      <span className="text-slate-500"> · {currency === "USD" ? "one-time" : "ek baar"}</span>
+                    ) : null}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-slate-400">
