@@ -26,7 +26,10 @@
     "builder-util-runtime": "9.7.0",
     "electron-updater": "^6.3.4",
     "lazy-val": "^1.0.5",
+    "lodash.escaperegexp": "^4.1.2",
+    "lodash.isequal": "^4.5.0",
     "lucide-react": "^0.446.0",
+    "node-gyp-build": "^4.8.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "sax": "^1.4.1",
@@ -66,8 +69,10 @@
       "**/node_modules/sax/**/*",
       "**/node_modules/builder-util-runtime/**/*",
       "**/node_modules/usb/**/*",
+      "**/node_modules/node-gyp-build/**/*",
       "bin/platform-tools/**"
     ],
+    "npmRebuild": true,
     "extraResources": [
       {
         "from": "bin/platform-tools",
