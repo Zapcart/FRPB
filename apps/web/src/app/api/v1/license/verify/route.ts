@@ -13,9 +13,13 @@ import {
   recordFailure,
   clearFailures,
 } from "@/lib/rate-limit";
+import { preflight, withCorsResponse } from "@/lib/cors";
 
 // Runtime-only route (rate limiting, DB) — never statically prerender.
 export const dynamic = "force-dynamic";
+
+// CORS preflight — the Electron client calls this endpoint cross-origin.
+export const OPTIONS = preflight;
 
 // 10 req/min per (IP, HWID); 5 consecutive failures → 1h lockout.
 const MAX_PER_WINDOW = 10;
@@ -54,8 +58,9 @@ export async function POST(req: NextRequest) {
   // Top-level catch-all: no matter what happens below (unexpected Prisma
   // errors, rate-limiter failures, serialization issues), the client always
   // receives structured JSON — never an HTML error page or an empty 500.
+  // Every branch gains the CORS headers at this single boundary.
   try {
-    return await verify(req);
+    return withCorsResponse(await verify(req));
   } catch (err) {
     console.error("[license/verify] unexpected error:", err);
     return NextResponse.json(

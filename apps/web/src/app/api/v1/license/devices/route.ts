@@ -5,14 +5,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import type { DashboardDeviceItem, ApiEnvelope } from "@frpb/shared";
+import { preflight, withCorsResponse } from "@/lib/cors";
 
 // Session + DB work — never statically prerender this route.
 export const dynamic = "force-dynamic";
+
+// CORS preflight for cross-origin (desktop) callers.
+export const OPTIONS = preflight;
 
 const DB_UNAVAILABLE_MESSAGE =
   "We couldn't load your devices right now. Please try again in a moment.";
 
 export async function GET(req: NextRequest) {
+  return withCorsResponse(await handleDevices(req));
+}
+
+async function handleDevices(req: NextRequest) {
   // getUser() validates the JWT server-side, so a stale cookie can't pass.
   const supabase = createClient();
   const {

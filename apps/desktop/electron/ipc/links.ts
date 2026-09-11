@@ -5,7 +5,7 @@
 import { ipcMain, shell } from "electron";
 
 const ALLOWED_ORIGINS = [
-  "https://frpb.app",
+  "https://frpb.in",
   "https://developer.samsung.com",
   "https://developer.android.com",
   "https://www.oneplus.com",

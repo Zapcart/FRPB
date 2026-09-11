@@ -159,7 +159,9 @@ export default function ActivationScreen({ cached, onActivated }: ActivationScre
               </button>
 
               <button
-                onClick={() => window.frpb.links.openExternal("https://frpb.app").catch(() => {})}
+                onClick={() =>
+                  window.frpb.links.openExternal("https://frpb.in/#pricing").catch(() => {})
+                }
                 className="mt-3 inline-flex w-full items-center justify-center gap-1.5 text-sm font-medium text-brand-600 transition hover:text-brand-700"
               >
                 <ExternalLink className="h-3.5 w-3.5" />

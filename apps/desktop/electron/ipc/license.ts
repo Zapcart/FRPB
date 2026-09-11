@@ -14,13 +14,18 @@ import { log } from "../utils/logger";
 
 // Verification endpoint resolution. Priority:
 //   1. FRPB_VERIFY_URL env override (explicit, works for dev + prod).
-//   2. VITE_API_BASE_URL env override — the same name Vite injects into the
-//      renderer, so a single .env var can point both sides at the same origin.
-//   3. Unpackaged (dev) builds -> local Next.js API on :3000.
-//   4. Packaged builds -> hosted FRPB API.
+//   2. VITE_API_URL env override — the canonical name Vite injects into the
+//      renderer, so a single .env var points both sides at the same origin.
+//   3. VITE_API_BASE_URL — legacy alias kept for backward compatibility.
+//   4. Unpackaged (dev) builds -> local Next.js API on :3000.
+//   5. Packaged builds -> hosted FRPB API (https://frpb.in).
+//
+// In production builds with no VITE_API_URL defined this resolves to
+// https://frpb.in/api/v1/license/verify.
 const VERIFY_ENDPOINT = ((): string => {
   const override =
     process.env.FRPB_VERIFY_URL ??
+    process.env.VITE_API_URL ??
     process.env.VITE_API_BASE_URL ??
     (process.env.NODE_ENV === "development" ? "http://localhost:3000" : "");
   const base = override || (!app.isPackaged ? "http://localhost:3000" : "https://frpb.in");

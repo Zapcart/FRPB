@@ -7,11 +7,19 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import type { ListLicensesItem, ListLicensesResponse } from "@frpb/shared";
+import { preflight, withCorsResponse } from "@/lib/cors";
 
 // Session + DB work — never statically prerender this route.
 export const dynamic = "force-dynamic";
 
+// CORS preflight for cross-origin (desktop) callers.
+export const OPTIONS = preflight;
+
 export async function GET() {
+  return withCorsResponse(await handleList());
+}
+
+async function handleList() {
   // 1. Resolve the Supabase user — getUser() validates the JWT server-side,
   //    so a stale/expired cookie cannot be treated as a valid session.
   const supabase = createClient();

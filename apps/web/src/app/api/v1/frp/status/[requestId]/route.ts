@@ -4,8 +4,22 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import { preflight, withCorsResponse } from "@/lib/cors";
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ requestId: string }> }) {
+// CORS preflight for cross-origin (desktop) callers.
+export const OPTIONS = preflight;
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ requestId: string }> }
+) {
+  return withCorsResponse(await handleStatus(req, { params }));
+}
+
+async function handleStatus(
+  _req: NextRequest,
+  { params }: { params: Promise<{ requestId: string }> }
+) {
   try {
     const { requestId } = await params;
     const request = await prisma.frpUnlockRequest.findUnique({

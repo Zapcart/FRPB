@@ -1,11 +1,13 @@
 // FRPB — POST /api/v1/checkout
-// Creates a Stripe Checkout Session or Razorpay Order for the selected plan.
-// Logs a PENDING Payment row so webhooks can upsert idempotently.
+// Cashfree-hosted checkout for the selected plan. Creates a Cashfree order
+// server-side, records a PENDING Payment row, and returns the hosted payment URL
+// so the customer can complete payment. Webhooks grant the license
+// idempotently (see api/v1/webhooks/cashfree + lib/webhooks/processor).
 //
-// Error stratification (blueprint fix 6):
+// Error stratification:
 //   - DB unreachable  → 503 (payment system temporarily unavailable)
 //   - gateway config  → 502 (checkout not configured)
-//   - provider error  → 502 (checkout temporarily unavailable)
+//   - gateway error   → 502 (checkout temporarily unavailable)
 //   - anything else   → 500 (generic last resort)
 
 import { NextRequest, NextResponse } from "next/server";
@@ -14,10 +16,14 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { getPaymentGateway, PaymentConfigError } from "@/lib/payments";
 import { getPlanDefinition } from "@/lib/license/constants";
+import { preflight, withCorsResponse } from "@/lib/cors";
 import type { CheckoutResponse } from "@frpb/shared";
 
 // Session + gateway work — never statically prerender this route.
 export const dynamic = "force-dynamic";
+
+// CORS preflight for cross-origin callers.
+export const OPTIONS = preflight;
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://frpb.in";
 
@@ -25,6 +31,10 @@ const DB_UNAVAILABLE_MESSAGE =
   "We're having trouble reaching our payment system right now. Please try again in a moment.";
 
 export async function POST(req: NextRequest) {
+  return withCorsResponse(await handleCheckout(req));
+}
+
+async function handleCheckout(req: NextRequest) {
   // 1. Auth — checkout requires a signed-in user (license is bound to the account).
   //    getUser() validates the JWT against Supabase on every request, so a
   //    stale/expired cookie can never slip through as a valid session.

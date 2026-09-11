@@ -6,15 +6,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { UnbindRequestSchema } from "@frpb/shared";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { preflight, withCorsResponse } from "@/lib/cors";
 import type { UnbindResponse } from "@frpb/shared";
 
 // Session + DB work — never statically prerender this route.
 export const dynamic = "force-dynamic";
 
+// CORS preflight for cross-origin (desktop) callers.
+export const OPTIONS = preflight;
+
 const DB_UNAVAILABLE_MESSAGE =
   "We couldn't complete that right now. Please try again in a moment.";
 
 export async function POST(req: NextRequest) {
+  return withCorsResponse(await handleUnbind(req));
+}
+
+async function handleUnbind(req: NextRequest) {
   // 1. Auth — getUser() validates the JWT server-side on every request.
   const supabase = createClient();
   const {

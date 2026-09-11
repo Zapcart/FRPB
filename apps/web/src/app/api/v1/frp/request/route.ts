@@ -8,7 +8,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sha256 } from "@/lib/crypto/sha256";
 import { rateLimit } from "@/lib/rate-limit";
+import { preflight, withCorsResponse } from "@/lib/cors";
 import { z } from "zod";
+
+// CORS preflight for cross-origin (desktop) callers.
+export const OPTIONS = preflight;
 
 // ─── Request validation ──────────────────────────────────────────────────────
 const FrpRequestSchema = z.object({
@@ -27,6 +31,10 @@ export type FrpRequest = z.infer<typeof FrpRequestSchema>;
 // Create a new FRP unlock request. Returns a request ID the client can poll.
 
 export async function POST(req: NextRequest) {
+  return withCorsResponse(await handleRequest(req));
+}
+
+async function handleRequest(req: NextRequest) {
   try {
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
 

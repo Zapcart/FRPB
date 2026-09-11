@@ -3,6 +3,10 @@
 
 import { NextResponse } from "next/server";
 import type { HealthResponse } from "@frpb/shared";
+import { preflight, withCorsResponse } from "@/lib/cors";
+
+// CORS preflight — probes and the desktop client call this cross-origin.
+export const OPTIONS = preflight;
 
 export async function GET() {
   const body: HealthResponse = {
@@ -10,5 +14,5 @@ export async function GET() {
     service: "frpb-web-api",
     timestamp: new Date().toISOString(),
   };
-  return NextResponse.json(body, { status: 200 });
+  return withCorsResponse(NextResponse.json(body, { status: 200 }));
 }
