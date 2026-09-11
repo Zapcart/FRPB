@@ -196,7 +196,6 @@ model FrpUnlockRequest {
   brand          String
   model          String
   androidVersion String?          // e.g. "13", "14", "15"
-  imei           String?          // for online unlock path (not stored long-term in prod)
   imeiHash       String?          // salted SHA-256 of IMEI for privacy-safe dedupe/lookup
   method         String           // setup-wizard | download-mode | edl-mode | mtk-brom | oem-service
   ipAddress      String
@@ -212,6 +211,5 @@ model FrpUnlockRequest {
 
   @@index([status])
   @@index([userId])
-  @@index([imei])
   @@index([imeiHash])
 }

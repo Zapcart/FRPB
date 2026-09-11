@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       });
       if (!license || license.status !== "ACTIVE" || (license.expiresAt && license.expiresAt < new Date())) {
         return NextResponse.json(
-          { success: false, status: "UNAUTHORIZED", message: "Invalid or inactive license." },
+          { success: false, status: "UNAUTHORIZED", message: "Invalid license." },
           { status: 401 }
         );
       }
@@ -74,8 +74,7 @@ export async function POST(req: NextRequest) {
         brand: data.brand,
         model: data.model,
         androidVersion: data.androidVersion ?? null,
-        imei: data.imei ?? null,
-        imeiHash: data.imei ? await sha256(data.imei) : null, // hash for privacy
+        imeiHash: data.imei ? await sha256(data.imei) : null, // hash only — never store plain IMEI
         method: data.method,
         ipAddress: ip,
         userId,

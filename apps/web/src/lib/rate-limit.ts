@@ -109,10 +109,11 @@ export async function rateLimit(
 
 export async function checkLockout(keys: string[]): Promise<boolean> {
   const redis = getRedis();
-  const results = redis
-    ? await Promise.all(keys.map((k) => redis.get(`lock:${k}`)))
-    : keys.map((k) => mem.get(`lock:${k}`) === 1);
-  return results.some((v) => v === "1");
+  if (redis) {
+    const results = await Promise.all(keys.map((k) => redis.get(`lock:${k}`)));
+    return results.some((v) => v === "1" || v === 1);
+  }
+  return keys.some((k) => mem.get(`lock:${k}`) === 1);
 }
 
 export async function recordFailure(
