@@ -22,6 +22,16 @@ export interface VerifyResponse {
   message?: string;
 }
 
+/** Result of a dev/test activation-state reset (see electron/ipc/reset.ts). */
+export interface ResetResult {
+  ok: boolean;
+  /** Human-readable list of the stores that were actually cleared. */
+  cleared: string[];
+  /** Absolute path of the encrypted license cache on this machine. */
+  cachePath: string;
+  error?: string;
+}
+
 export type DeviceState = "SEARCHING" | "CONNECTED" | "DRIVER_MISSING";
 
 export type DeviceScanState = "NORMAL" | "RECOVERY" | "SEARCHING" | "NOT_CONNECTED";
@@ -119,6 +129,15 @@ export interface FrpbBridge {
   license: {
     verify: (key: string) => Promise<VerifyResponse>;
     getCachedProfile: () => Promise<LicenseProfile | null>;
+  };
+  /**
+   * Developer/test utilities. `reset()` wipes the encrypted license cache plus
+   * renderer web storage and Chromium caches so a fresh activation can be
+   * tested; `cacheInfo()` reports where the activation state is persisted.
+   */
+  system: {
+    reset: () => Promise<ResetResult>;
+    cacheInfo: () => Promise<{ cachePath: string }>;
   };
   device: {
     status: () => Promise<DeviceStatus>;

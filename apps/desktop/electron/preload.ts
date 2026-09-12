@@ -13,6 +13,7 @@ import type {
   OperationKind,
   OperationOptions,
   OperationResult,
+  ResetResult,
   UpdaterStatus,
   VerifyResponse,
 } from "../src/lib/ipc";
@@ -31,6 +32,10 @@ const bridge: FrpbBridge = {
       ipcRenderer.invoke("license:verify", key),
     getCachedProfile: (): Promise<LicenseProfile | null> =>
       ipcRenderer.invoke("license:getCachedProfile"),
+  },
+  system: {
+    reset: (): Promise<ResetResult> => ipcRenderer.invoke("app:reset"),
+    cacheInfo: (): Promise<{ cachePath: string }> => ipcRenderer.invoke("app:cacheInfo"),
   },
   device: {
     status: (): Promise<DeviceStatus> => ipcRenderer.invoke("device:status"),

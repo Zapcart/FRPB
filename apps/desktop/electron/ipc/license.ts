@@ -33,6 +33,23 @@ const VERIFY_ENDPOINT = ((): string => {
 })();
 const CACHE_FILE = "license-metadata.enc";
 
+/** Absolute path of the encrypted license-profile cache (for reset/diagnostics). */
+export function licenseCachePath(): string {
+  return path.join(app.getPath("userData"), CACHE_FILE);
+}
+
+/**
+ * Delete the encrypted license-profile cache. Returns true when a file was
+ * actually removed. Used by the dev/test reset flow (see ipc/reset.ts); safe to
+ * call when no cache exists.
+ */
+export function clearCachedLicenseProfile(): boolean {
+  const file = licenseCachePath();
+  if (!fs.existsSync(file)) return false;
+  fs.rmSync(file, { force: true });
+  return true;
+}
+
 export function registerLicenseHandlers(): void {
   ipcMain.handle("license:verify", async (_event, licenseKey: string) => {
     // Last-resort safety net. Everything below is individually guarded, but if

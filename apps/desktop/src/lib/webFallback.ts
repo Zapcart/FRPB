@@ -25,6 +25,7 @@ import type {
   OperationKind,
   OperationOptions,
   OperationResult,
+  ResetResult,
   VerifyResponse,
 } from "./ipc";
 
@@ -171,6 +172,24 @@ function createWebBridge(): FrpbBridge {
       download: async (): Promise<{ started: boolean }> => ({ started: false }),
       install: async (): Promise<{ started: boolean }> => ({ started: false }),
       onStatus: noopUnsubscribe,
+    },
+    system: {
+      // Browser preview has no Electron userData; clear the web equivalents so
+      // the in-app reset control behaves consistently in both environments.
+      reset: async (): Promise<ResetResult> => {
+        const cleared: string[] = [];
+        try {
+          window.localStorage.clear();
+          window.sessionStorage.clear();
+          cleared.push("browser localStorage + sessionStorage");
+        } catch {
+          // Storage can be unavailable under strict privacy settings.
+        }
+        return { ok: true, cleared, cachePath: "(browser preview — no Electron userData)" };
+      },
+      cacheInfo: async (): Promise<{ cachePath: string }> => ({
+        cachePath: "(browser preview — no Electron userData)",
+      }),
     },
   };
 }

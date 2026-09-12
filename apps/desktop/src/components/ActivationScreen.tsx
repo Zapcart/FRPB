@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { VerifyStatus } from "@frpb/shared";
 import type { LicenseProfile } from "../lib/ipc";
 import { MASTER_TEST_KEY, isWebPreviewMode } from "../lib/webFallback";
@@ -39,6 +39,15 @@ export default function ActivationScreen({ cached, onActivated }: ActivationScre
   const [error, setError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [activated, setActivated] = useState<LicenseProfile | null>(null);
+
+  // Keep the hint box in sync with the latest persisted state: a dev reset
+  // re-reads the cache (null) and clears the field, while a fresh server
+  // activation re-populates it. Only touch the input while idle so a reset can
+  // never clobber a key the user is mid-typing.
+  useEffect(() => {
+    if (verifying || activated) return;
+    setKey(cached?.key ?? "");
+  }, [cached, verifying, activated]);
 
   // Dev-only hint: the master test key exists solely for local browser preview
   // (Vite dev server without Electron). `import.meta.env.DEV` is statically

@@ -2,12 +2,13 @@
 // Registers all IPC handlers, creates the BrowserWindow, and enforces
 // a locked-down renderer (contextIsolation + no nodeIntegration + sandbox).
 
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, Menu, shell } from "electron";
 import path from "node:path";
 import { registerLicenseHandlers } from "./ipc/license";
 import { registerDeviceHandlers } from "./ipc/device";
 import { registerLinkHandlers } from "./ipc/links";
 import { registerUpdaterHandlers, checkForUpdatesOnLaunch } from "./ipc/updater";
+import { performReset, registerResetHandlers } from "./ipc/reset";
 import { getHardwareId } from "./utils/hardwareId";
 import { log } from "./utils/logger";
 
@@ -70,6 +71,56 @@ function isAllowedExternalUrl(url: string): boolean {
   }
 }
 
+/**
+ * Development-only application menu exposing a "Reset activation data" action.
+ * Wipes the encrypted license cache + renderer storage and reloads back to the
+ * activation screen, so the full first-run flow can be re-tested without
+ * touching the AppData folder by hand. Never attached to packaged builds.
+ */
+function installDevMenu(): void {
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: "FRPB Dev",
+        submenu: [
+          {
+            label: "Reset activation data (license + storage)",
+            accelerator: "CmdOrCtrl+Shift+R",
+            click: async () => {
+              const result = await performReset();
+              log.info(`dev menu reset -> ${JSON.stringify(result)}`);
+              mainWindow?.webContents.reloadIgnoringCache();
+            },
+          },
+          {
+            label: "Open DevTools",
+            accelerator: "CmdOrCtrl+Shift+I",
+            click: () => mainWindow?.webContents.openDevTools({ mode: "detach" }),
+          },
+          { type: "separator" },
+          { role: "reload" },
+          { role: "forceReload" },
+          { role: "toggleDevTools" },
+          { type: "separator" },
+          { role: "quit" },
+        ],
+      },
+    ])
+  );
+}
+
+/**
+ * Opt-in clean-slate reset for development builds. Set FRPB_RESET_ON_START=1
+ * (e.g. `set FRPB_RESET_ON_START=1 && npm run dev`) to guarantee the app boots
+ * on the activation screen with no cached key. Never runs in packaged builds
+ * and always disabled by default so a normal dev session stays fast.
+ */
+async function resetOnStartIfRequested(): Promise<void> {
+  if (app.isPackaged || process.env.FRPB_RESET_ON_START !== "1") return;
+  const result = await performReset();
+  log.info(`FRPB_RESET_ON_START reset -> ${JSON.stringify(result)}`);
+}
+
 app.whenReady().then(async () => {
   // Warm the hardware fingerprint early so first verify is fast and stable.
   getHardwareId().catch((err) => log.warn(`hardwareId init failed: ${err}`));
@@ -79,8 +130,15 @@ app.whenReady().then(async () => {
   registerDeviceHandlers();
   registerLinkHandlers();
   registerUpdaterHandlers();
+  registerResetHandlers();
+
+  // Dev-only clean-slate boot (opt-in via FRPB_RESET_ON_START=1).
+  await resetOnStartIfRequested();
 
   createWindow();
+
+  // Dev-only menu with the manual "reset activation data" action.
+  if (!app.isPackaged) installDevMenu();
 
   // Background auto-update check on every launch (silent, non-blocking).
   // Fully guarded: electron-updater is required lazily inside the helper, so a
