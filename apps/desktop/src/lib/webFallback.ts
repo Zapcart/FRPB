@@ -17,14 +17,17 @@
 import type {
   AcceptConsentResult,
   ConsentState,
+  DeviceInfo,
   DeviceModelsResult,
   DeviceStatus,
   FrpbBridge,
   LicenseProfile,
+  LogEntry,
   OperationEvent,
   OperationKind,
   OperationOptions,
   OperationResult,
+  OperationRunState,
   ResetResult,
   VerifyResponse,
 } from "./ipc";
@@ -41,10 +44,21 @@ function noopUnsubscribe(): () => void {
 function createWebBridge(): FrpbBridge {
   // Local state shared by the operation mocks.
   const operationListeners = new Set<(event: OperationEvent) => void>();
+  const runStateListeners = new Set<(state: OperationRunState) => void>();
   let consent: ConsentState = { flashReset: false, frpBypass: false };
 
   function emitOperation(event: OperationEvent): void {
     operationListeners.forEach((cb) => cb(event));
+  }
+
+  // Keeps the mock operation stream + console tab consistent with the real
+  // main-process behaviour (running flag + rolling log buffer).
+  let runState: OperationRunState = { running: false, op: null, logs: [] };
+  // Monotonic identity mirroring the main process `logSeq` (see device.ts).
+  let simSeq = 0;
+  function emitRunState(next: Partial<OperationRunState>): void {
+    runState = { ...runState, ...next };
+    runStateListeners.forEach((cb) => cb(runState));
   }
 
   const SIM_MODE_LABEL: Record<NonNullable<OperationOptions["mode"]>, string> = {
@@ -52,6 +66,20 @@ function createWebBridge(): FrpbBridge {
     brom: "MediaTek BROM / Preloader (VCOM)",
     "fastboot-recovery": "Fastboot / Recovery",
   };
+
+  const MAX_SIM_LOGS = 500;
+  function pushSimLog(stage: string, message: string, pct: number | null): void {
+    const entry: LogEntry = {
+      stage,
+      message,
+      pct,
+      kind: "info",
+      ts: new Date().toTimeString().slice(0, 8),
+      seq: ++simSeq,
+    };
+    const logs = [...runState.logs, entry];
+    emitRunState({ logs: logs.length > MAX_SIM_LOGS ? logs.slice(-MAX_SIM_LOGS) : logs });
+  }
 
   async function simulateOperation(
     op: OperationKind,
@@ -67,16 +95,23 @@ function createWebBridge(): FrpbBridge {
       ["rebooting", "Rebooting device…", 90],
       ["done", "Operation complete.", 100],
     ];
-    for (const [stage, message, pct] of stages) {
-      emitOperation({ op, stage, message, pct });
-      await new Promise((resolve) => setTimeout(resolve, 600));
+    // Mirror the main process: mark running + stream logs for the Console tab.
+    emitRunState({ running: true, op, logs: [] });
+    try {
+      for (const [stage, message, pct] of stages) {
+        emitOperation({ op, stage, message, pct });
+        pushSimLog(stage.toUpperCase(), message, pct);
+        await new Promise((resolve) => setTimeout(resolve, 600));
+      }
+      return {
+        success: true,
+        message: `Simulated in web preview mode (${label}).`,
+        detail:
+          "Web preview mode — no real device was touched. Connect the FRPB desktop app to run the actual operation.",
+      };
+    } finally {
+      emitRunState({ running: false, op: null });
     }
-    return {
-      success: true,
-      message: `Simulated in web preview mode (${label}).`,
-      detail:
-        "Web preview mode — no real device was touched. Connect the FRPB desktop app to run the actual operation.",
-    };
   }
 
   return {
@@ -116,6 +151,12 @@ function createWebBridge(): FrpbBridge {
         state: "SEARCHING",
         lastScanAt: new Date().toISOString(),
       }),
+      getRunState: async (): Promise<OperationRunState> => runState,
+      seedLogs: async (): Promise<OperationRunState> => runState,
+      clearLogs: async (upTo?: number): Promise<void> => {
+        const tombstone = typeof upTo === "number" && upTo > 0 ? upTo : simSeq;
+        emitRunState({ logs: runState.logs.filter((e) => (e.seq ?? 0) > tombstone) });
+      },
       startPolling: async (): Promise<void> => {},
       stopPolling: async (): Promise<void> => {},
       onStatus: noopUnsubscribe,
@@ -127,6 +168,18 @@ function createWebBridge(): FrpbBridge {
       listModels: async (): Promise<DeviceModelsResult> => ({
         models: ["Galaxy A54", "Redmi Note 12", "Pixel 7", "Moto G84"],
       }),
+      getDeviceInfo: async (): Promise<DeviceInfo> => {
+        throw new Error("No ADB device connected");
+      },
+      onOperationStatus: (cb: (state: OperationRunState) => void): (() => void) => {
+        runStateListeners.add(cb);
+        // Deliver the current snapshot immediately so a tab mounted mid-operation
+        // (or after one finished) is consistent without waiting for the next tick.
+        cb(runState);
+        return () => {
+          runStateListeners.delete(cb);
+        };
+      },
       checkConsent: async (): Promise<ConsentState> => consent,
       acceptConsent: async (
         operation: OperationKind

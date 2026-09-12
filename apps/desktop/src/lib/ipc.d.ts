@@ -52,6 +52,102 @@ export interface DeviceStatus {
   authorized?: boolean;
   /** "adb" | "usb" — how the device was detected. */
   source?: "adb" | "usb";
+  /** Full Android system properties (read via ADB shell getprop / ro.*). */
+  deviceInfo?: DeviceInfo;
+  /** Real-time operation log entries (pushed by the engine). */
+  logs?: LogEntry[];
+  /** Whether an operation is currently running. */
+  running?: boolean;
+}
+
+/** Single log entry pushed by the operation engine to the console log UI. */
+export interface LogEntry {
+  stage: string;
+  message: string;
+  pct: number | null;
+  kind: "info" | "warn" | "error" | "ok";
+  ts: string;
+  /**
+   * Monotonic sequence assigned by the main process when the entry is appended
+   * to the global run-state buffer. It is the stable, collision-free identity of
+   * an entry: the renderer uses it to (a) seed only entries it has not rendered
+   * yet — so repeated engine lines (e.g. several "Rebooting…") are kept — and
+   * (b) mark everything with `seq <= N` as cleared after a Clear, preventing the
+   * rolling buffer from resurrecting cleared lines on the next poll.
+   */
+  seq?: number;
+}
+
+export interface DeviceInfo {
+  build: {
+    brand: string;
+    manufacturer: string;
+    manufacturer2: string;
+    model: string;
+    device: string;
+    name: string;
+    product: string;
+    hardware: string;
+    fingerprint: string;
+    board: string;
+    cpu_abi: string;
+    cpu_abi2: string;
+  };
+  os: {
+    version_release: string;
+    sdk: string;
+    security_patch: string;
+    incremental: string;
+    preview_sdk: string;
+    bootimage_fingerprint?: string;
+  };
+  hardware: {
+    chipset: string;
+    platform: string;
+    cpu_abi: string;
+    board_platform: string;
+    serial: string;
+    secureboot?: string;
+    hardware_type?: string;
+  };
+  identity: {
+    serialno: string;
+    wifi_hostname: string;
+    product_name: string;
+    product_device: string;
+    product_board: string;
+    product_manufacturer: string;
+    product_brand: string;
+    build_product: string;
+  };
+  buildMeta: {
+    date: string;
+    dateUtc: string;
+    versionIncremental: string;
+    versionSdk: string;
+    versionRelease: string;
+    versionSecurityPatch: string;
+    versionPreviewSdk: string;
+    bootimageBuildFingerprint?: string;
+  };
+  extra: {
+    cpuAbi: string;
+    hardware: string;
+    manufacturer: string;
+    model: string;
+    device: string;
+    brand: string;
+    name: string;
+    product: string;
+    board: string;
+    fingerprint: string;
+    platform: string;
+    chipset: string;
+    serial: string;
+    securityPatch: string;
+    androidVersion: string;
+    sdkVersion: string;
+  };
 }
 
 export interface DeviceModelsResult {
@@ -106,6 +202,19 @@ export interface OperationEvent {
   pct: number;
 }
 
+/**
+ * Global operation run-state pushed on "device:operation:status" by the main
+ * process. Unlike the per-component `OperationEvent` stream, this carries the
+ * authoritative `running` flag plus the rolling log buffer so the Console Log
+ * tab reflects operations started from ANY tab (cross-tab state isolation),
+ * and lets every tab disable conflicting controls while an op is in flight.
+ */
+export interface OperationRunState {
+  running: boolean;
+  op: OperationKind | null;
+  logs: LogEntry[];
+}
+
 export type UpdaterState =
   | "IDLE"
   | "CHECKING"
@@ -141,16 +250,34 @@ export interface FrpbBridge {
   };
   device: {
     status: () => Promise<DeviceStatus>;
+    /** Authoritative cross-tab run-state (running flag + rolling log buffer). */
+    getRunState: () => Promise<OperationRunState>;
+    /**
+     * Adopt the authoritative main-process run-state after a renderer restart or
+     * a render-crash recovery (the main process keeps running). Returns the same
+     * snapshot as `getRunState` so callers can seed their local buffer directly.
+     */
+    seedLogs: () => Promise<OperationRunState>;
+    /**
+     * Clear the global rolling log buffer. `upTo` is the highest log `seq` the
+     * caller has rendered; the main process drops every entry with `seq <= upTo`
+     * (defaults to the full buffer) and rebroadcasts on "device:operation:status"
+     * so every subscribed Console surface clears. Entries appended after `upTo`
+     * are preserved.
+     */
+    clearLogs: (upTo?: number) => Promise<void>;
     startPolling: () => Promise<void>;
     stopPolling: () => Promise<void>;
     onStatus: (cb: (status: DeviceStatus) => void) => () => void;
     getStatus: () => Promise<DeviceStatus>;
     listModels: () => Promise<DeviceModelsResult>;
+    getDeviceInfo: () => Promise<DeviceInfo>;
     checkConsent: () => Promise<ConsentState>;
     acceptConsent: (operation: OperationKind) => Promise<AcceptConsentResult>;
     flashReset: (options?: OperationOptions) => Promise<OperationResult>;
     frpBypass: (options?: OperationOptions) => Promise<OperationResult>;
     onOperationEvent: (cb: (event: OperationEvent) => void) => () => void;
+    onOperationStatus: (cb: (state: OperationRunState) => void) => () => void;
   };
   links: { openExternal: (url: string) => Promise<void> };
   updater: {

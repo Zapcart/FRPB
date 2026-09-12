@@ -37,9 +37,19 @@ const MAX_LOG_ENTRIES = 200;
 interface FRPToolsScreenProps {
   status: DeviceStatus | null;
   onRefresh: () => void | Promise<void>;
+  /**
+   * Authoritative cross-tab run-state (from MainDashboard/useDevice). When an
+   * operation is running in ANY tab, this screen locks its conflicting
+   * controls instead of relying solely on its own local `runningOp`.
+   */
+  operationRunning: boolean;
 }
 
-export default function FRPToolsScreen({ status, onRefresh }: FRPToolsScreenProps) {
+export default function FRPToolsScreen({
+  status,
+  onRefresh,
+  operationRunning,
+}: FRPToolsScreenProps) {
   // Screen navigation
   const [screen, setScreen] = useState<Screen>("home");
   const [tab, setTab] = useState<"usb" | "wireless">("usb");
@@ -160,7 +170,9 @@ export default function FRPToolsScreen({ status, onRefresh }: FRPToolsScreenProp
   // engine never demands USB debugging: it waits for the physical transport
   // (Samsung Test Mode / MediaTek BROM / Fastboot-Recovery) instead.
   async function runOperation(op: OperationKind) {
-    if (runningOpRef.current) return;
+    // Reject if this screen is already busy OR another tab holds the global
+    // run-state lock (main process enforces the same invariant).
+    if (runningOpRef.current || operationRunning) return;
     setRunningOp(op);
     runningOpRef.current = op;
     setResult(null);
@@ -264,7 +276,7 @@ export default function FRPToolsScreen({ status, onRefresh }: FRPToolsScreenProp
   const lastRefreshAt = status?.lastScanAt ?? null;
   const flashConsented = Boolean(consent?.flashReset);
   const frpConsented = Boolean(consent?.frpBypass);
-  const busy = runningOp !== null;
+  const busy = runningOp !== null || operationRunning;
   const modelReady = modelInput.trim().length > 0;
   const canStart = isConnected && modelReady && selectedBrand !== null;
   const methods = methodsForBrand(selectedBrand);

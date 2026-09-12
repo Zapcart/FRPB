@@ -5,6 +5,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   AcceptConsentResult,
   ConsentState,
+  DeviceInfo,
   DeviceModelsResult,
   DeviceStatus,
   FrpbBridge,
@@ -13,6 +14,7 @@ import type {
   OperationKind,
   OperationOptions,
   OperationResult,
+  OperationRunState,
   ResetResult,
   UpdaterStatus,
   VerifyResponse,
@@ -39,6 +41,12 @@ const bridge: FrpbBridge = {
   },
   device: {
     status: (): Promise<DeviceStatus> => ipcRenderer.invoke("device:status"),
+    getRunState: (): Promise<OperationRunState> =>
+      ipcRenderer.invoke("device:getRunState"),
+    seedLogs: (): Promise<OperationRunState> =>
+      ipcRenderer.invoke("device:seedLogs"),
+    clearLogs: (upTo?: number): Promise<void> =>
+      ipcRenderer.invoke("device:clearLogs", upTo),
     startPolling: (): Promise<void> => ipcRenderer.invoke("device:startPolling"),
     stopPolling: (): Promise<void> => ipcRenderer.invoke("device:stopPolling"),
     onStatus: (cb: (status: DeviceStatus) => void): (() => void) =>
@@ -46,6 +54,8 @@ const bridge: FrpbBridge = {
     getStatus: (): Promise<DeviceStatus> => ipcRenderer.invoke("device:getStatus"),
     listModels: (): Promise<DeviceModelsResult> =>
       ipcRenderer.invoke("device:listModels"),
+    getDeviceInfo: (): Promise<DeviceInfo> =>
+      ipcRenderer.invoke("device:getDeviceInfo"),
     checkConsent: (): Promise<ConsentState> =>
       ipcRenderer.invoke("device:checkConsent"),
     acceptConsent: (operation: OperationKind): Promise<AcceptConsentResult> => {
@@ -63,6 +73,8 @@ const bridge: FrpbBridge = {
       ipcRenderer.invoke("device:frpBypass", options),
     onOperationEvent: (cb: (event: OperationEvent) => void): (() => void) =>
       onChannel<OperationEvent>("device:operation:event", cb),
+    onOperationStatus: (cb: (state: OperationRunState) => void): (() => void) =>
+      onChannel<OperationRunState>("device:operation:status", cb),
   },
   links: {
     openExternal: (url: string): Promise<void> =>
@@ -81,3 +93,5 @@ const bridge: FrpbBridge = {
 };
 
 contextBridge.exposeInMainWorld("frpb", bridge);
+
+

@@ -1,10 +1,18 @@
-import { useState } from "react";
-import type { LicenseProfile } from "../lib/ipc";
+import { useCallback, useState, useEffect } from "react";
+import type {
+  LicenseProfile,
+  DeviceStatus,
+  DeviceInfo,
+  LogEntry,
+  OperationRunState,
+} from "../lib/ipc";
 import { useUpdater } from "../hooks/useUpdater";
 import { useDevice } from "../hooks/useDevice";
 import DeviceMonitor from "./DeviceMonitor";
 import DriverCenter from "./DriverCenter";
 import FRPToolsScreen from "./FRPToolsScreen";
+import DeviceInfoScreen from "./DeviceInfoScreen";
+import ConsoleLog from "./ConsoleLog";
 import UpdateModal from "./UpdateModal";
 import {
   ShieldCheck,
@@ -17,9 +25,12 @@ import {
   MonitorSmartphone,
   RefreshCw,
   KeyRound,
+  Info,
+  Terminal,
+  AlertTriangle,
 } from "lucide-react";
 
-type Tab = "monitor" | "drivers" | "frp";
+type Tab = "monitor" | "drivers" | "frp" | "device-info" | "console";
 
 interface MainDashboardProps {
   profile: LicenseProfile;
@@ -41,6 +52,130 @@ function formatExpiry(expiresAt: string | null): string {
 }
 
 /**
+ * Device Info tab. The shared 2s poll payload only carries brand/model/serial,
+ * never the full property set (see `scanUnified()` in device.ts), so this tab
+ * fetches the complete `DeviceInfo` via the `device:getDeviceInfo` handle and
+ * owns it in local state. It re-fetches whenever the connected serial changes
+ * (device swap) and exposes a manual Refresh. `locked` disables the controls
+ * while another operation is running.
+ */
+function DeviceInfoTabContent({
+  deviceStatus,
+  refresh,
+  locked,
+}: {
+  deviceStatus: DeviceStatus | null;
+  refresh: () => void;
+  locked: boolean;
+}) {
+  const [info, setInfo] = useState<DeviceInfo | null>(
+    deviceStatus?.deviceInfo ?? null
+  );
+  // Start in the loading state: `loadInfo()` runs on mount, so this reflects the
+  // in-flight read instead of briefly flashing "No device connected" before the
+  // first result (or error) arrives.
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadInfo = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const next = await window.frpb.device.getDeviceInfo();
+      setInfo(next);
+    } catch (err) {
+      // getDeviceInfo throws when no ADB device is connected/authorized.
+      // Keep the UI informative rather than blank.
+      setInfo(null);
+      setError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Could not read device properties."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch on mount and re-fetch whenever the connected device changes.
+  useEffect(() => {
+    void loadInfo();
+  }, [loadInfo, deviceStatus?.serial]);
+
+  if (error && !info) {
+    return (
+      <div className="frpb-card p-6">
+        <div className="flex flex-col items-center gap-3 py-8 text-center">
+          <AlertTriangle className="h-8 w-8 text-amber-500" />
+          <p className="text-sm font-medium text-slate-800">Device info unavailable</p>
+          <p className="text-xs text-slate-500">{error}</p>
+          <button
+            type="button"
+            onClick={() => {
+              void loadInfo();
+              refresh();
+            }}
+            disabled={locked || loading}
+            className="frpb-btn-ghost px-3 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? "Reading…" : "Retry"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-slate-500">
+          {deviceStatus?.serial ? (
+            <>
+              Serial: <span className="font-mono">{deviceStatus.serial}</span>
+            </>
+          ) : (
+            "No device connected"
+          )}
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            void loadInfo();
+            refresh();
+          }}
+          disabled={locked || loading}
+          className="frpb-btn-ghost px-3 py-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading ? "Reading…" : "Refresh"}
+        </button>
+      </div>
+      <DeviceInfoScreen info={info} loading={loading} />
+    </div>
+  );
+}
+
+/** Simple console log panel that shows operation logs pushed by the engine.
+ *  Prefers the authoritative cross-tab run-state (getRunState /
+ *  onOperationStatus) and falls back to the shared device poll payload.
+ */
+function ConsoleLogTabContent({
+  deviceStatus,
+  operationRunning,
+  operationLogs,
+}: {
+  deviceStatus: DeviceStatus | null;
+  operationRunning: boolean;
+  operationLogs: LogEntry[] | null;
+}) {
+  return (
+    <ConsoleLog
+      running={operationRunning}
+      entries={operationLogs ?? deviceStatus?.logs ?? []}
+    />
+  );
+}
+
+/**
  * Post-activation shell: top bar with license status + update button, then a
  * three-tab workspace (Device Monitor / Driver Center / FRP Tools). The
  * UpdateModal overlays whenever the auto-updater reports an available update.
@@ -52,6 +187,31 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
   // Single global device state — shared by Device Monitor + FRP Tools so both
   // screens always render from the identical status object.
   const { status: deviceStatus, refresh: refreshDevice } = useDevice();
+
+  // Authoritative cross-tab run-state. Subscribing here (rather than only via
+  // the 2s poll payload) means a tab switch is instant: the Console Log fills
+  // immediately and every conflicting control locks the moment an operation
+  // starts, in any tab. Seeded once so a tab opened mid-run shows history.
+  const [runState, setRunState] = useState<OperationRunState | null>(null);
+  useEffect(() => {
+    let disposed = false;
+    window.frpb.device
+      .getRunState()
+      .then((state) => {
+        if (!disposed) setRunState(state);
+      })
+      .catch(() => {});
+    const off = window.frpb.device.onOperationStatus((state) => {
+      if (!disposed) setRunState(state);
+    });
+    return () => {
+      disposed = true;
+      off();
+    };
+  }, []);
+
+  const operationRunning =
+    runState?.running ?? deviceStatus?.running ?? false;
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
@@ -131,6 +291,18 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
         </div>
       </div>
 
+      {/* Cross-tab operation lock banner: visible from every tab while an op
+          runs, so the user always knows the engine is busy even after
+          switching away from the tab that started it. */}
+      {operationRunning && (
+        <div className="border-b border-amber-200 bg-amber-50">
+          <div className="mx-auto flex max-w-5xl items-center gap-2 px-6 py-2 text-xs text-amber-800">
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-500" />
+            Operation in progress — conflicting controls are locked in all tabs.
+          </div>
+        </div>
+      )}
+
       {/* Tab bar */}
       <nav className="mx-auto flex w-full max-w-5xl gap-1 px-6 pt-5">
         <button
@@ -166,6 +338,28 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
           <KeyRound className="h-4 w-4" />
           FRP Unlock
         </button>
+        <button
+          onClick={() => setTab("device-info")}
+          className={`inline-flex items-center gap-2 rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition ${
+            tab === "device-info"
+              ? "border-brand-500 text-brand-700"
+              : "border-transparent text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <Info className="h-4 w-4" />
+          Device Info
+        </button>
+        <button
+          onClick={() => setTab("console")}
+          className={`inline-flex items-center gap-2 rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition ${
+            tab === "console"
+              ? "border-brand-500 text-brand-700"
+              : "border-transparent text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <Terminal className="h-4 w-4" />
+          Console Log
+        </button>
       </nav>
 
       {/* Content */}
@@ -173,7 +367,25 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
         {tab === "monitor" && <DeviceMonitor status={deviceStatus} />}
         {tab === "drivers" && <DriverCenter />}
         {tab === "frp" && (
-          <FRPToolsScreen status={deviceStatus} onRefresh={refreshDevice} />
+          <FRPToolsScreen
+            status={deviceStatus}
+            onRefresh={refreshDevice}
+            operationRunning={operationRunning}
+          />
+        )}
+        {tab === "device-info" && (
+          <DeviceInfoTabContent
+            deviceStatus={deviceStatus}
+            refresh={refreshDevice}
+            locked={operationRunning}
+          />
+        )}
+        {tab === "console" && (
+          <ConsoleLogTabContent
+            deviceStatus={deviceStatus}
+            operationRunning={operationRunning}
+            operationLogs={runState?.logs ?? null}
+          />
         )}
       </main>
 

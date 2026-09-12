@@ -9,13 +9,15 @@
 //
 // IPC surface emitted by this module:
 //   device:status                  → DeviceStatus (unified ADB+USB scan)
-//   device:status-changed (push)   → DeviceStatus
+//   device:status-changed (push)   → DeviceStatus (+ running/logs run-state)
 //   device:getStatus (handle)      → DeviceStatus (same unified scan)
 //   device:startPolling / stopPolling (handle)
 //   device:listModels (handle)     → { models: string[], detectedModel?: string }
+//   device:getDeviceInfo (handle)  → DeviceInfo (throws when no authorized ADB device)
 //   device:checkConsent (handle)   → { flashReset: boolean, frpBypass: boolean }
 //   device:acceptConsent (handle)  → { ok: boolean; flashReset?: boolean; frpBypass?: boolean; error?: string }
 //   device:operation:event (push)  → { op: "flash-reset"|"frp-bypass", stage, message, pct }
+//   device:operation:status (push) → { running, op, logs } (global cross-tab run-state)
 //   device:flashReset (handle)     → { success, message, detail? }
 //   device:frpBypass (handle)      → { success, message, detail? }
 
@@ -143,6 +145,93 @@ const CONSENT_OPS = ["flash-reset", "frp-bypass"] as const;
 type ConsentOp = (typeof CONSENT_OPS)[number];
 const consentGrantedFor = new Set<ConsentOp>();
 
+// ─── Global operation run-state (cross-tab console + control locking) ────────
+// A single authoritative source for "is an operation running" plus a rolling
+// log buffer. The Console Log tab and every operation surface subscribe to
+// "device:operation:status" so an operation started in one tab is visible — and
+// blocks conflicting controls — in all the others. The buffer is capped to
+// bound renderer memory during chatty, high-frequency operations.
+const MAX_OPERATION_LOGS = 500;
+
+interface OperationLogEntry {
+  stage: string;
+  message: string;
+  pct: number | null;
+  kind: "info" | "warn" | "error" | "ok";
+  ts: string;
+  /** Monotonic identity — stable across the capped rolling buffer. */
+  seq: number;
+}
+
+let operationRunning = false;
+let operationKind: ConsentOp | null = null;
+let operationLogs: OperationLogEntry[] = [];
+// Monotonic counter backing `OperationLogEntry.seq`. Never reused, never
+// reset by `beginOperation` — so a `clearLogs(upTo)` tombstone stays valid
+// even when a new operation has already started.
+let logSeq = 0;
+// The most recently seen renderer window; used to broadcast run-state even
+// outside a poll tick or a specific handle invocation.
+let activeWindow: BrowserWindow | null = null;
+
+function clockNow(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+function liveRunState(): {
+  running: boolean;
+  op: ConsentOp | null;
+  logs: OperationLogEntry[];
+} {
+  return { running: operationRunning, op: operationKind, logs: operationLogs };
+}
+
+function broadcastRunState(): void {
+  const win = activeWindow;
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
+  try {
+    win.webContents.send("device:operation:status", liveRunState());
+  } catch (err) {
+    log.warn("[device] broadcastRunState failed:", err);
+  }
+}
+
+function pushOperationLog(
+  stage: string,
+  message: string,
+  pct: number | null,
+  kind: OperationLogEntry["kind"] = "info"
+): void {
+  const next = [...operationLogs, { stage, message, pct, kind, ts: clockNow(), seq: ++logSeq }];
+  operationLogs = next.length > MAX_OPERATION_LOGS ? next.slice(-MAX_OPERATION_LOGS) : next;
+  broadcastRunState();
+}
+
+function beginOperation(op: ConsentOp): void {
+  operationRunning = true;
+  operationKind = op;
+  operationLogs = [];
+  broadcastRunState();
+}
+
+function endOperation(): void {
+  operationRunning = false;
+  operationKind = null;
+  broadcastRunState();
+}
+
+/**
+ * True while a device operation is in flight. Exported so other IPC modules
+ * (e.g. future flash/erase handlers) can reject a conflicting request before
+ * it reaches the device, enforcing cross-tab control locking in the main
+ * process as well as in the renderer.
+ */
+export function isOperationRunning(): boolean {
+  return operationRunning;
+}
+
 // ─── Lazy-loaded node-usb ────────────────────────────────────────────────────
 function loadUsb(): {
   getDeviceList: () => UsbDeviceLike[];
@@ -161,9 +250,37 @@ function loadUsb(): {
 // ─── Handler registration ────────────────────────────────────────────────────
 
 export function registerDeviceHandlers(): void {
-  ipcMain.handle("device:status", () => scanUnified());
+  ipcMain.handle("device:status", async () => ({
+    ...(await scanUnified()),
+    running: operationRunning,
+    logs: operationLogs,
+  }));
 
-  ipcMain.handle("device:getStatus", () => scanUnified());
+  ipcMain.handle("device:getStatus", async () => ({
+    ...(await scanUnified()),
+    running: operationRunning,
+    logs: operationLogs,
+  }));
+
+  // Authoritative run-state snapshot. The renderer calls this on mount so a
+  // Console Log tab opened mid-operation shows the full rolling buffer, and
+  // after a renderer crash/restart the UI can re-seed from the main process
+  // (which keeps running independently of the renderer).
+  ipcMain.handle("device:getRunState", () => liveRunState());
+
+  // Explicit alias for the crash-recovery path: returns the same snapshot but
+  // exists as a named, self-documenting contract for "adopt main-process state".
+  ipcMain.handle("device:seedLogs", () => liveRunState());
+
+  // Clear the global rolling log buffer. Keeps the `seq` counter advancing so
+  // the renderer tombstone (`seq <= upTo`) remains meaningful, then broadcasts
+  // the empty state to every subscribed Console surface.
+  ipcMain.handle("device:clearLogs", (_event, upTo?: number) => {
+    const tombstone = typeof upTo === "number" && upTo > 0 ? upTo : logSeq;
+    operationLogs = operationLogs.filter((e) => e.seq > tombstone);
+    broadcastRunState();
+    return undefined;
+  });
 
   ipcMain.handle("device:startPolling", (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -183,6 +300,154 @@ export function registerDeviceHandlers(): void {
     }
     const detectedModel = devices[0]?.model;
     return { models: listKnownModels(), detectedModel };
+  });
+
+  ipcMain.handle("device:getDeviceInfo", async () => {
+    const adb = await probeAdb();
+    if (!adb.connected) {
+      throw new Error("No ADB device connected");
+    }
+    if (!adb.authorized) {
+      throw new Error("Device not authorized — enable USB debugging");
+    }
+    // Read full property set in parallel for speed.
+    const [
+      brand,
+      model,
+      device,
+      name,
+      product,
+      hardware,
+      fingerprint,
+      board,
+      cpuAbi,
+      cpuAbi2,
+      versionRelease,
+      sdk,
+      securityPatch,
+      incremental,
+      previewSdk,
+      bootimageFingerprint,
+      boardPlatform,
+      serial,
+      secureboot,
+      hardwareType,
+      wifiHostname,
+      buildDate,
+      buildDateUtc,
+      versionIncremental,
+      versionSdk,
+      versionReleaseMeta,
+      versionSecurityPatch,
+      versionPreviewSdk,
+      bootimageBuildFingerprint,
+      manufacturer,
+      manufacturer2,
+    ] = await Promise.all([
+      adbGetProp("ro.product.brand", adb.serial!),
+      adbGetProp("ro.product.model", adb.serial!),
+      adbGetProp("ro.product.device", adb.serial!),
+      adbGetProp("ro.product.name", adb.serial!),
+      adbGetProp("ro.product.name", adb.serial!),
+      adbGetProp("ro.product.hardware", adb.serial!),
+      adbGetProp("ro.build.fingerprint", adb.serial!),
+      adbGetProp("ro.build.board", adb.serial!),
+      adbGetProp("ro.product.cpu.abi", adb.serial!),
+      adbGetProp("ro.product.cpu.abi2", adb.serial!),
+      adbGetProp("ro.build.version.release", adb.serial!),
+      adbGetProp("ro.build.version.sdk", adb.serial!),
+      adbGetProp("ro.build.version.security_patch", adb.serial!),
+      adbGetProp("ro.build.version.incremental", adb.serial!),
+      adbGetProp("ro.build.version.preview_sdk", adb.serial!),
+      adbGetProp("ro.bootimage.build.fingerprint", adb.serial!),
+      adbGetProp("ro.board.platform", adb.serial!),
+      adbGetProp("ro.serialno", adb.serial!),
+      adbGetProp("ro.secureboot", adb.serial!),
+      adbGetProp("ro.hardware", adb.serial!),
+      adbGetProp("ro.wifi.hostname", adb.serial!),
+      adbGetProp("ro.build.date", adb.serial!),
+      adbGetProp("ro.build.date.utc", adb.serial!),
+      adbGetProp("ro.build.version.incremental", adb.serial!),
+      adbGetProp("ro.build.version.sdk", adb.serial!),
+      adbGetProp("ro.build.version.release", adb.serial!),
+      adbGetProp("ro.build.version.security_patch", adb.serial!),
+      adbGetProp("ro.build.version.preview_sdk", adb.serial!),
+      adbGetProp("ro.bootimage.build.fingerprint", adb.serial!),
+      adbGetProp("ro.product.manufacturer", adb.serial!),
+      adbGetProp("ro.product.manufacturer", adb.serial!),
+    ]);
+
+    return {
+      build: {
+        brand: brand ?? "",
+        manufacturer: manufacturer ?? "",
+        manufacturer2: manufacturer2 ?? "",
+        model: model ?? "",
+        device: device ?? "",
+        name: name ?? "",
+        product: product ?? "",
+        hardware: hardware ?? "",
+        fingerprint: fingerprint ?? "",
+        board: board ?? "",
+        cpu_abi: cpuAbi ?? "",
+        cpu_abi2: cpuAbi2 ?? "",
+      },
+      os: {
+        version_release: versionRelease ?? "",
+        sdk: sdk ?? "",
+        security_patch: securityPatch ?? "",
+        incremental: incremental ?? "",
+        preview_sdk: previewSdk ?? "",
+        bootimage_fingerprint: bootimageFingerprint ?? undefined,
+      },
+      hardware: {
+        chipset: boardPlatform ?? "",
+        platform: boardPlatform ?? "",
+        cpu_abi: cpuAbi ?? "",
+        board_platform: boardPlatform ?? "",
+        serial: serial ?? "",
+        secureboot: secureboot ?? undefined,
+        hardware_type: hardwareType ?? undefined,
+      },
+      identity: {
+        serialno: serial ?? "",
+        wifi_hostname: wifiHostname ?? "",
+        product_name: name ?? "",
+        product_device: device ?? "",
+        product_board: board ?? "",
+        product_manufacturer: manufacturer ?? "",
+        product_brand: brand ?? "",
+        build_product: product ?? "",
+      },
+      buildMeta: {
+        date: buildDate ?? "",
+        dateUtc: buildDateUtc ?? "",
+        versionIncremental: versionIncremental ?? "",
+        versionSdk: versionSdk ?? "",
+        versionRelease: versionReleaseMeta ?? "",
+        versionSecurityPatch: versionSecurityPatch ?? "",
+        versionPreviewSdk: versionPreviewSdk ?? "",
+        bootimageBuildFingerprint: bootimageBuildFingerprint ?? undefined,
+      },
+      extra: {
+        cpuAbi: cpuAbi ?? "",
+        hardware: hardware ?? "",
+        manufacturer: manufacturer ?? "",
+        model: model ?? "",
+        device: device ?? "",
+        brand: brand ?? "",
+        name: name ?? "",
+        product: product ?? "",
+        board: board ?? "",
+        fingerprint: fingerprint ?? "",
+        platform: boardPlatform ?? "",
+        chipset: boardPlatform ?? "",
+        serial: serial ?? "",
+        securityPatch: securityPatch ?? "",
+        androidVersion: versionRelease ?? "",
+        sdkVersion: sdk ?? "",
+      },
+    };
   });
 
   ipcMain.handle("device:checkConsent", () => ({
@@ -207,6 +472,7 @@ export function registerDeviceHandlers(): void {
   // Single handler for device:frpBypass — sanitizes + delegates to runFrpBypass.
   ipcMain.handle("device:frpBypass", async (event, options: unknown) => {
     const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) activeWindow = win;
     const opts = sanitizeFrpOptions(options);
     const transportMap: Record<string, "usb" | "download" | "edl" | "brom" | "adb"> = {
       "setup-wizard": "usb",
@@ -219,33 +485,85 @@ export function registerDeviceHandlers(): void {
     // brom / fastboot-recovery) onto a concrete engine `method`, so the map
     // below always yields the correct transport for the selected guide.
     const transport = transportMap[opts.method] ?? "usb";
-    const result = await runFrpBypass(
-      {
-        ...opts,
-        transport,
-        androidVersion: opts.androidVersion ? parseInt(opts.androidVersion, 10) : undefined,
-      },
-      (stage, pct, message) => {
-        if (win && !win.isDestroyed()) {
-          win.webContents.send("device:operation:event", {
-            op: "frp-bypass",
-            stage,
-            message,
-            pct,
-          });
+    beginOperation("frp-bypass");
+    pushOperationLog("START", `Starting FRP bypass (${opts.method})…`, 0);
+    try {
+      const result = await runFrpBypass(
+        {
+          ...opts,
+          transport,
+          androidVersion: opts.androidVersion ? parseInt(opts.androidVersion, 10) : undefined,
+        },
+        (stage, pct, message) => {
+          if (win && !win.isDestroyed()) {
+            win.webContents.send("device:operation:event", {
+              op: "frp-bypass",
+              stage,
+              message,
+              pct,
+            });
+          }
+          pushOperationLog(stage.toUpperCase(), message, pct);
         }
+      );
+      // Map BypassResult → OperationResult so the renderer always gets a typed
+      // { success, message, detail? } shape. Never leak BypassResult internals.
+      if (result.status === "success") {
+        const message = result.detail || "FRP lock removed successfully.";
+        pushOperationLog("DONE", message, 100, "ok");
+        return { success: true, message, detail: result.detail };
       }
-    );
-    // Map BypassResult → OperationResult so the renderer always gets a typed
-    // { success, message, detail? } shape. Never leak BypassResult internals.
-    if (result.status === "success") {
-      return { success: true, message: result.detail || "FRP lock removed successfully.", detail: result.detail };
+      // Narrow the union: only the "failed" variant carries `error`; the
+      // pending/running variants carry a `message`.
+      const message =
+        result.status === "failed"
+          ? result.error || "Operation failed."
+          : result.message || "Operation failed.";
+      pushOperationLog("ERROR", message, null, "error");
+      return { success: false, message };
+    } finally {
+      // Always clear the global running flag, even if the engine throws, so
+      // other tabs are never permanently locked out.
+      endOperation();
     }
-    if (result.status === "failed") {
-      return { success: false, message: result.error || "Operation failed." };
+  });
+
+  // device:flashReset — recover the data partition (userdata wipe) on an
+  // authorized ADB device. Consent-gated exactly like device:frpBypass so the
+  // renderer cannot trigger a destructive wipe without the legal modal.
+  ipcMain.handle("device:flashReset", async (event, options: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) activeWindow = win;
+    const opts = sanitizeOperationOptions(options);
+    beginOperation("flash-reset");
+    pushOperationLog("START", `Starting flash reset${opts.brand ? ` (${opts.brand})` : ""}…`, 0);
+    try {
+      const adb = await probeAdb();
+      if (!adb.connected || !adb.serial) {
+        const message = "No ADB device connected. Boot the phone into Recovery/Fastboot and retry.";
+        pushOperationLog("ERROR", message, null, "error");
+        return { success: false, message };
+      }
+      if (!adb.authorized) {
+        const message = "Device not authorized — enable USB debugging or use a supported recovery mode.";
+        pushOperationLog("ERROR", message, null, "error");
+        return { success: false, message };
+      }
+      pushOperationLog("WIPE", "Wiping user data…", 40);
+      const wipe = await adbWipeData(adb.serial);
+      if (!wipe.ok) {
+        const message = wipe.detail ? `Flash reset failed: ${wipe.detail}` : "Flash reset failed.";
+        pushOperationLog("ERROR", message, null, "error");
+        return { success: false, message };
+      }
+      pushOperationLog("REBOOT", "Data wiped — rebooting device…", 85);
+      await adbReboot(adb.serial);
+      const message = "Flash reset complete.";
+      pushOperationLog("DONE", message, 100, "ok");
+      return { success: true, message, detail: wipe.detail };
+    } finally {
+      endOperation();
     }
-    // pending/running should never be the settled state of a handle.
-    return { success: false, message: "Operation failed." };
   });
 
 }
@@ -307,13 +625,21 @@ function sanitizeFrpOptions(raw: unknown): {
 
 function startPolling(win: BrowserWindow): void {
   stopPolling();
+  activeWindow = win;
   const push = (status: { state: string; lastScanAt: string }) => {
     // Skip if the window is gone; a poll tick must never throw.
     if (win.isDestroyed() || win.webContents.isDestroyed()) {
       return;
     }
     try {
-      win.webContents.send("device:status-changed", status);
+      // Carry the global run-state on every tick so a freshly-mounted Console
+      // Log tab populates immediately (running flag + rolling log buffer)
+      // without a separate round-trip.
+      win.webContents.send("device:status-changed", {
+        ...status,
+        running: operationRunning,
+        logs: operationLogs,
+      });
     } catch (err) {
       // Defensive: the window can be torn down between the guard and send().
       log.warn("[device] startPolling: send failed:", err);
@@ -335,6 +661,8 @@ function stopPolling(): void {
     clearInterval(pollTimer);
     pollTimer = null;
   }
+  // Drop the broadcast target so a torn-down window is never written to.
+  activeWindow = null;
 }
 
 // Diagnostic: enumerate every USB device (VID:PID + interface classes) so
