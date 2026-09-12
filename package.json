@@ -27,5 +27,8 @@
     "node": ">=20.0.0",
     "pnpm": ">=9.0.0"
   },
-  "packageManager": "pnpm@9.9.0"
+  "packageManager": "pnpm@9.9.0",
+  "dependencies": {
+    "posthog-node": "^5.52.1"
+  }
 }
