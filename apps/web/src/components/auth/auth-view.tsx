@@ -8,6 +8,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Mail, Lock, User, ShieldCheck, Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import posthog from "posthog-js";
+import { isPostHogEnabled } from "@/app/providers";
 
 interface AuthViewProps {
   initialMode: "signin" | "signup";
@@ -57,6 +59,13 @@ export default function AuthView({ initialMode, returnTo }: AuthViewProps) {
         setLoading(false);
         return;
       }
+    }
+
+    // A session now exists, so authentication succeeded. Capture the event
+    // before navigating away. Guarded so it is a no-op during SSR and when
+    // PostHog is unconfigured (no NEXT_PUBLIC_POSTHOG_KEY).
+    if (typeof window !== "undefined" && isPostHogEnabled()) {
+      posthog.capture("user_logged_in", { method: "email_password", mode });
     }
 
     // Session is set — go to the destination the user was heading to.
