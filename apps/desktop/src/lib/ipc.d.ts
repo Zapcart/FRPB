@@ -172,6 +172,8 @@ export interface AcceptConsentResult {
 export interface OperationResult {
   success: boolean;
   message: string;
+  /** Raw stdout captured from the underlying adb/fastboot process (when any). */
+  stdout?: string;
   detail?: string;
 }
 
@@ -209,6 +211,21 @@ export interface OperationEvent {
   stage: string;
   message: string;
   pct: number;
+}
+
+/** Which pipe a streamed device-log chunk arrived from (`out` from stderr). */
+export type DeviceLogStream = "out" | "err";
+
+/**
+ * Live stdout/stderr chunk pushed on the "device:log" channel while a real
+ * adb/fastboot child process is running. `text` is the raw (un-buffered) chunk
+ * so a terminal-style panel can render output as it is produced.
+ */
+export interface DeviceLogPayload {
+  op: OperationKind | null;
+  stream: DeviceLogStream;
+  text: string;
+  ts: string;
 }
 
 /**
@@ -294,6 +311,18 @@ export interface FrpbBridge {
     rebootMode: (mode: RebootMode) => Promise<OperationResult>;
     onOperationEvent: (cb: (event: OperationEvent) => void) => () => void;
     onOperationStatus: (cb: (state: OperationRunState) => void) => () => void;
+    /**
+     * Subscribe to live child_process stdout/stderr chunks ("device:log") so the
+     * operation log panel can render real tool output as it streams. Returns an
+     * unsubscribe function.
+     */
+    onLog: (cb: (payload: DeviceLogPayload) => void) => () => void;
+    /**
+     * Enable/disable rendering live device logs into the shared global console
+     * buffer. Enabled by the Console Log tab; disabled elsewhere so only one
+     * surface mirrors the raw stream.
+     */
+    setLogSink: (enabled: boolean) => void;
   };
   links: { openExternal: (url: string) => Promise<void> };
   updater: {

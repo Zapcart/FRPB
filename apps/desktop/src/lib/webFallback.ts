@@ -18,6 +18,7 @@ import type {
   AcceptConsentResult,
   ConsentState,
   DeviceInfo,
+  DeviceLogPayload,
   DeviceModelsResult,
   DeviceStatus,
   FrpbBridge,
@@ -46,7 +47,30 @@ function createWebBridge(): FrpbBridge {
   // Local state shared by the operation mocks.
   const operationListeners = new Set<(event: OperationEvent) => void>();
   const runStateListeners = new Set<(state: OperationRunState) => void>();
+  const deviceLogListeners = new Set<(payload: DeviceLogPayload) => void>();
+  // Mirrors the main-process `deviceLogSinkEnabled` flag driven by
+  // `setLogSink`; raw chunks are only mirrored while a Console surface listens.
+  let deviceLogSinkEnabled = true;
   let consent: ConsentState = { flashReset: false, frpBypass: false, unlockScreen: false };
+
+  // Emits a synthetic raw chunk on the `device:log` channel + mirrors it into the
+  // rolling console, exactly like createDeviceLogSink() in electron/ipc/device.ts.
+  function emitDeviceLog(
+    op: OperationKind,
+    text: string,
+    stream: "out" | "err" = "out"
+  ): void {
+    const payload: DeviceLogPayload = {
+      op,
+      stream,
+      text,
+      ts: new Date().toTimeString().slice(0, 8),
+    };
+    deviceLogListeners.forEach((cb) => cb(payload));
+    if (!deviceLogSinkEnabled) return;
+    const trimmed = text.replace(/\r?\n$/, "").trim();
+    if (trimmed) pushSimLog(stream === "err" ? "STDERR" : "STDOUT", trimmed, null);
+  }
 
   function emitOperation(event: OperationEvent): void {
     operationListeners.forEach((cb) => cb(event));
@@ -109,7 +133,8 @@ function createWebBridge(): FrpbBridge {
     try {
       for (const [stage, message, pct] of stages) {
         emitOperation({ op, stage, message, pct });
-        pushSimLog(stage.toUpperCase(), message, pct);
+        emitDeviceLog(op, `$ adb shell recovery --wipe_data\n`);
+        emitDeviceLog(op, `${message}\n`);
         await new Promise((resolve) => setTimeout(resolve, 600));
       }
       return {
@@ -137,7 +162,11 @@ function createWebBridge(): FrpbBridge {
     try {
       for (const [stage, message, pct] of stages) {
         emitOperation({ op: "reboot-mode", stage, message, pct });
-        pushSimLog(stage.toUpperCase(), message, pct);
+        emitDeviceLog(
+          "reboot-mode",
+          `$ adb reboot${mode === "system" ? "" : ` ${mode}`}\n`
+        );
+        emitDeviceLog("reboot-mode", `${message}\n`);
         await new Promise((resolve) => setTimeout(resolve, 400));
       }
       return {
@@ -251,6 +280,15 @@ function createWebBridge(): FrpbBridge {
         return () => {
           operationListeners.delete(cb);
         };
+      },
+      onLog: (cb: (payload: DeviceLogPayload) => void): (() => void) => {
+        deviceLogListeners.add(cb);
+        return () => {
+          deviceLogListeners.delete(cb);
+        };
+      },
+      setLogSink: (enabled: boolean): void => {
+        deviceLogSinkEnabled = Boolean(enabled);
       },
     },
     links: {

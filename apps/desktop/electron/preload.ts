@@ -6,6 +6,7 @@ import type {
   AcceptConsentResult,
   ConsentState,
   DeviceInfo,
+  DeviceLogPayload,
   DeviceModelsResult,
   DeviceStatus,
   FrpbBridge,
@@ -80,6 +81,14 @@ const bridge: FrpbBridge = {
       onChannel<OperationEvent>("device:operation:event", cb),
     onOperationStatus: (cb: (state: OperationRunState) => void): (() => void) =>
       onChannel<OperationRunState>("device:operation:status", cb),
+    onLog: (cb: (payload: DeviceLogPayload) => void): (() => void) =>
+      onChannel<DeviceLogPayload>("device:log", cb),
+    setLogSink: (enabled: boolean): void => {
+      // Toggle whether the main process mirrors raw device output into the
+      // shared global console. Only the Console Log tab enables it so the raw
+      // stream is never duplicated across surfaces.
+      ipcRenderer.send("device:setLogSink", Boolean(enabled));
+    },
   },
   links: {
     openExternal: (url: string): Promise<void> =>

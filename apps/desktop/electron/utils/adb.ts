@@ -20,11 +20,22 @@
 // "ADB tools not installed" failure only surfaces after a genuine network
 // failure, never because the binary is simply missing from disk.
 
-import { spawn } from "node:child_process";
+import { exec, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 import { app, net } from "electron";
 import { log } from "./logger";
+
+// `exec` runs a fixed, developer-controlled command string only — device
+// serials/models are passed as discrete argv tokens via the spawn path, never
+// interpolated into this shell string, so there is no command-injection
+// surface. `exec` is used as the fallback transport (and for shell operators
+// like `recovery --wipe_data`) when a direct spawn is unavailable.
+const execAsync = promisify(exec) as unknown as (
+  command: string,
+  options: { timeout?: number; windowsHide?: boolean; maxBuffer?: number }
+) => Promise<{ stdout: string; stderr: string }>;
 
 const ADB_TIMEOUT_MS = 60_000;
 
@@ -287,16 +298,28 @@ export interface ToolResult {
   lastErrorLine: string | null;
 }
 
+/** Which pipe a streamed chunk came from. */
+export type StreamPhase = "out" | "err";
+
+/** Live-chunk sink handed to `runTool` / `runPlatformTool`. */
+export type StreamCallback = (chunk: string, phase: StreamPhase) => void;
+
 /**
  * Spawn a tool with an explicit args array (never a shell string), capture
  * stdout/stderr, and hard-timeout after `timeoutMs`. Returns a structured
  * result; throws only when the binary cannot be spawned at all (ENOENT etc.).
+ *
+ * When `onData` is supplied every stdout/stderr chunk is forwarded to it the
+ * moment it arrives (true live streaming, not an end-of-run flush) so callers
+ * can push a `device:log` payload to the renderer while the child is still
+ * running.
  */
 export function runTool(
   toolPath: string,
   args: string[],
   timeoutMs: number = ADB_TIMEOUT_MS,
-  stdinData?: Buffer | string
+  stdinData?: Buffer | string,
+  onData?: StreamCallback
 ): Promise<ToolResult> {
   return new Promise<ToolResult>((resolve, reject) => {
     const child = spawn(toolPath, args, {
@@ -315,10 +338,14 @@ export function runTool(
     }, timeoutMs);
 
     child.stdout?.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8");
+      const text = chunk.toString("utf8");
+      stdout += text;
+      if (onData && text) onData(text, "out");
     });
     child.stderr?.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8");
+      const text = chunk.toString("utf8");
+      stderr += text;
+      if (onData && text) onData(text, "err");
     });
 
     if (stdinData !== undefined && child.stdin) {
@@ -368,7 +395,8 @@ export function runTool(
 export async function runPlatformTool(
   base: "adb" | "fastboot",
   args: string[],
-  timeoutMs?: number
+  timeoutMs?: number,
+  onData?: StreamCallback
 ): Promise<ToolResult | null> {
   // Auto-install (download) when no binary exists anywhere — a device check
   // must never fail because the binary is merely absent from disk.
@@ -381,7 +409,7 @@ export async function runPlatformTool(
     return null;
   }
   try {
-    return await runTool(toolPath, args, timeoutMs);
+    return await runTool(toolPath, args, timeoutMs, undefined, onData);
   } catch (err) {
     log.error(`[adb] failed to spawn ${base} at ${toolPath}:`, err);
     return null;
@@ -391,6 +419,72 @@ export async function runPlatformTool(
 /** Human-friendly path used in logs / errors. */
 export function toolDisplayName(base: "adb" | "fastboot"): string {
   return platformToolName(base);
+}
+
+/**
+ * Resolve a tool to an absolute path with auto-install enabled (returns null
+ * only after a genuine download/resolution failure). Exposed so handlers can
+ * report the real binary path in the UI operation log.
+ */
+export async function resolvePlatformToolPath(base: "adb" | "fastboot"): Promise<string | null> {
+  await ensurePlatformTools();
+  return resolveToolPath(base);
+}
+
+/** Quote a single argv token for a shell command line (never user device input). */
+function quoteArg(arg: string): string {
+  if (arg === "") return '""';
+  return /[\s"&|<>^]/.test(arg) ? `"${arg.replace(/"/g, '\\"')}"` : arg;
+}
+
+export interface ExecToolResult {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+}
+
+/**
+ * Execute a tool through the promisified `child_process.exec` shell path.
+ * Used as the fallback transport when a direct `spawn` is unavailable, and for
+ * commands that rely on shell tokenisation (e.g. `recovery --wipe_data`).
+ * Resolves with the real exit code for non-zero exits (never rejects on a
+ * failing command); rejects only when the binary cannot be launched at all.
+ */
+export async function execTool(
+  base: "adb" | "fastboot",
+  args: string[],
+  onData?: StreamCallback,
+  timeoutMs: number = ADB_TIMEOUT_MS
+): Promise<ExecToolResult> {
+  const ready = await ensurePlatformTools();
+  const toolPath = resolveToolPath(base);
+  if (!ready || !toolPath) {
+    throw new Error(`${platformToolName(base)} not available — install Android platform-tools and retry.`);
+  }
+  const command = [toolPath, ...args].map(quoteArg).join(" ");
+  try {
+    const { stdout, stderr } = await execAsync(command, {
+      timeout: timeoutMs,
+      windowsHide: true,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    const out = String(stdout ?? "");
+    const err = String(stderr ?? "");
+    if (onData && out) onData(out, "out");
+    if (onData && err) onData(err, "err");
+    return { exitCode: 0, stdout: out.trim(), stderr: err.trim() };
+  } catch (raw) {
+    const e = raw as { code?: number | string; stdout?: string; stderr?: string; message?: string };
+    const out = e.stdout ? String(e.stdout) : "";
+    const err = e.stderr ? String(e.stderr) : e.message ?? "command failed";
+    if (onData && out) onData(out, "out");
+    if (onData && err) onData(err, "err");
+    return {
+      exitCode: typeof e.code === "number" ? e.code : 1,
+      stdout: out.trim(),
+      stderr: err.trim(),
+    };
+  }
 }
 
 // ─── ADB command helpers ─────────────────────────────────────────────────────
@@ -589,13 +683,23 @@ export async function fastbootWipeUserData(
   return { ok: false, detail: lastDetail };
 }
 
+/** Erase a single fastboot partition (`fastboot erase <partition>`). */
+export async function fastbootErasePartition(
+  serial: string,
+  partition: string,
+  onData?: StreamCallback
+): Promise<ToolResult | null> {
+  return runPlatformTool("fastboot", ["-s", serial, "erase", partition], ADB_TIMEOUT_MS, onData);
+}
+
 /** Reboot a fastboot device back into Android (or an explicit target). */
 export async function fastbootReboot(
   serial: string,
-  target?: string
+  target?: string,
+  onData?: StreamCallback
 ): Promise<ToolResult | null> {
   const args = target ? ["-s", serial, "reboot", target] : ["-s", serial, "reboot"];
-  return runPlatformTool("fastboot", args, 30_000);
+  return runPlatformTool("fastboot", args, 30_000, onData);
 }
 
 /** Simple blocking wait (promise) without event-loop starvation. */

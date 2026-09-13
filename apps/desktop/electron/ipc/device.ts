@@ -18,10 +18,11 @@
 //   device:acceptConsent (handle)  → { ok: boolean; flashReset?: boolean; frpBypass?: boolean; error?: string }
 //   device:operation:event (push)  → { op: "flash-reset"|"frp-bypass", stage, message, pct }
 //   device:operation:status (push) → { running, op, logs } (global cross-tab run-state)
-//   device:flashReset (handle)     → { success, message, detail? }
+//   device:log (push)              → { op, stream, text, ts } (live child_process stdout/stderr)
+//   device:flashReset (handle)     → { success, message, stdout?, detail? }
 //   device:frpBypass (handle)      → { success, message, detail? }
-//   device:unlockScreen (handle)   → { success, message }
-//   device:rebootMode (handle)     → { success, message }  (bootloader|recovery|edl|system)
+//   device:unlockScreen (handle)   → { success, message, stdout? }
+//   device:rebootMode (handle)     → { success, message, stdout? }  (bootloader|recovery|edl|system)
 
 import { ipcMain, BrowserWindow } from "electron";
 import { log } from "../utils/logger";
@@ -32,13 +33,22 @@ import {
   adbReboot,
   adbWipeData,
   adbShell,
+  execTool,
   fastbootDevices,
+  fastbootErasePartition,
   fastbootReboot,
   fastbootWipeUserData,
   isPlatformToolsBundled,
+  resolvePlatformToolPath,
+  runPlatformTool,
   sleep,
+  type StreamPhase,
 } from "../utils/adb";
 import { runFrpBypass } from "../utils/frp-engine";
+
+// Hard ceiling for a streamed reboot/wipe/erase command. `adb reboot` returns
+// almost instantly; the longer bound only covers a stalled USB transport.
+const ADB_REBOOT_TIMEOUT_MS = 60_000;
 
 // ─── USB vendor allow-list (recovery-relevant vendors only) ─────────────────
 const WATCHED_VENDORS: Record<number, string> = {
@@ -237,6 +247,99 @@ function pushOperationLog(
   broadcastRunState();
 }
 
+// ─── Live child_process log streaming (device:log) ───────────────────────────
+// The real adb/fastboot spawners forward every stdout/stderr chunk the moment
+// it arrives. Those chunks are (a) coalesced by line into the shared operation
+// console so the Console Log tab mirrors a terminal, and (b) pushed raw over a
+// dedicated `device:log` channel for a renderer that wants the un-buffered
+// stream. Nothing here is mock data — it is the actual tool output.
+interface DeviceLogPayload {
+  op: ConsentOp | null;
+  stream: StreamPhase;
+  text: string;
+  ts: string;
+}
+
+let deviceLogBuffer = "";
+// Raw chunks are always pushed over `device:log`; mirroring them into the
+// shared rolling console is opt-in so only a Console tab that subscribes
+// pays the line-coalescing cost. Toggled by the renderer via
+// `device:setLogSink`.
+let deviceLogSinkEnabled = true;
+// Chunk coalescing window: flushes ~120×/s at most, so a chatty `adb shell`
+// never floods the renderer with one IPC message per byte.
+const DEVICE_LOG_FLUSH_MS = 8;
+
+function createDeviceLogSink(op: ConsentOp): (chunk: string, stream: StreamPhase) => void {
+  return (chunk: string, stream: StreamPhase): void => {
+    if (!chunk) return;
+    const win = activeWindow;
+    if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+      try {
+        const payload: DeviceLogPayload = { op, stream, text: chunk, ts: clockNow() };
+        win.webContents.send("device:log", payload);
+      } catch (err) {
+        log.warn("[device] device:log send failed:", err);
+      }
+    }
+    // Coalesce the raw stream and surface it as line-grained console entries,
+    // but only while a Console surface has the sink enabled.
+    if (!deviceLogSinkEnabled) return;
+    deviceLogBuffer += chunk;
+    const lines = deviceLogBuffer.split(/\r?\n/);
+    deviceLogBuffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      pushOperationLog(stream === "err" ? "STDERR" : "STDOUT", trimmed, null, stream === "err" ? "warn" : "info");
+    }
+  };
+}
+
+/** Flush a trailing partial line that had no terminating newline. */
+function flushDeviceLogBuffer(): void {
+  const rest = deviceLogBuffer.trim();
+  deviceLogBuffer = "";
+  if (rest) pushOperationLog("STDOUT", rest, null, "info");
+}
+
+/**
+ * Run a real platform-tool command, streaming every chunk to the operation
+ * console + the `device:log` channel. Prefers a direct `spawn`; falls back to
+ * the promisified `exec` shell path when a spawn throws (e.g. a wrapper script
+ * that only works through the shell).
+ */
+async function runStreamedTool(
+  op: ConsentOp,
+  base: "adb" | "fastboot",
+  args: string[]
+): Promise<{ exitCode: number | null; stdout: string; stderr: string; notAvailable: boolean }> {
+  const sink = createDeviceLogSink(op);
+  try {
+    const result = await runPlatformTool(base, args, ADB_REBOOT_TIMEOUT_MS, sink);
+    flushDeviceLogBuffer();
+    if (!result) return { exitCode: null, stdout: "", stderr: "", notAvailable: true };
+    return {
+      exitCode: result.exitCode,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      notAvailable: false,
+    };
+  } catch (err) {
+    log.warn(`[device] spawn ${base} failed, falling back to exec:`, err);
+    try {
+      const res = await execTool(base, args, sink);
+      flushDeviceLogBuffer();
+      return { exitCode: res.exitCode, stdout: res.stdout, stderr: res.stderr, notAvailable: false };
+    } catch (err2) {
+      flushDeviceLogBuffer();
+      const msg = err2 instanceof Error ? err2.message : String(err2);
+      log.error(`[device] exec ${base} failed:`, err2);
+      return { exitCode: 1, stdout: "", stderr: msg, notAvailable: false };
+    }
+  }
+}
+
 function beginOperation(op: ConsentOp): void {
   operationRunning = true;
   operationKind = op;
@@ -319,6 +422,13 @@ export function registerDeviceHandlers(): void {
   ipcMain.handle("device:stopPolling", () => {
     stopPolling();
     return undefined;
+  });
+
+  // Renderer → main toggle: when a Console Log surface mounts it enables the
+  // sink so live adb/fastboot output is mirrored into the rolling console; when
+  // it unmounts it disables the sink so headless operations stay quiet.
+  ipcMain.on("device:setLogSink", (_event, enabled: unknown) => {
+    deviceLogSinkEnabled = Boolean(enabled);
   });
 
   ipcMain.handle("device:listModels", async () => {
@@ -558,9 +668,10 @@ export function registerDeviceHandlers(): void {
     }
   });
 
-  // device:flashReset — recover the data partition (userdata wipe) on an
-  // authorized ADB device. Consent-gated exactly like device:frpBypass so the
-  // renderer cannot trigger a destructive wipe without the legal modal.
+  // device:flashReset — wipe the userdata partition on the connected phone.
+  // Consent-gated exactly like device:frpBypass so the renderer cannot trigger
+  // a destructive wipe without the legal modal. Runs real adb/fastboot processes
+  // and streams every stdout/stderr chunk to the UI via `device:log`.
   ipcMain.handle("device:flashReset", async (event, options: unknown) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (win) activeWindow = win;
@@ -571,20 +682,38 @@ export function registerDeviceHandlers(): void {
       // ── Preferred transport: ADB (device booted / recovery with debugging) ──
       const adb = await probeAdb();
       if (adb.connected && adb.serial && adb.authorized) {
-        pushOperationLog("WIPE", "ADB device ready — wiping user data…", 40);
-        const wipe = await adbWipeData(adb.serial);
-        if (!wipe.ok) {
-          const message = wipe.detail
-            ? `Flash reset failed: ${wipe.detail}`
-            : "Flash reset failed.";
+        const adbPath = await resolvePlatformToolPath("adb");
+        pushOperationLog(
+          "RESOLVE",
+          `ADB device ${adb.serial} ready — using ${adbPath ?? "adb (PATH)"}…`,
+          20
+        );
+        pushOperationLog("WIPE", `adb shell recovery --wipe_data (${adb.serial})…`, 45);
+        const wipe = await runStreamedTool("flash-reset", "adb", [
+          "-s",
+          adb.serial,
+          "shell",
+          "recovery",
+          "--wipe_data",
+        ]);
+        const combined = `${wipe.stdout} ${wipe.stderr}`.trim();
+        if (wipe.notAvailable) {
+          const message = "ADB tools not installed — cannot wipe user data.";
           pushOperationLog("ERROR", message, null, "error");
           return { success: false, message };
         }
+        if (wipe.exitCode !== 0) {
+          const detail = wipe.stderr || wipe.stdout || `adb exited ${wipe.exitCode}`;
+          const message = `Flash reset failed: ${detail}`;
+          pushOperationLog("ERROR", message, null, "error");
+          return { success: false, message, stdout: combined };
+        }
+        // Wipe accepted — reboot the device so it comes back clean.
         pushOperationLog("REBOOT", "Data wiped — rebooting device…", 85);
-        await adbReboot(adb.serial);
+        await runStreamedTool("flash-reset", "adb", ["-s", adb.serial, "reboot", "recovery"]);
         const message = "Flash reset complete.";
         pushOperationLog("DONE", message, 100, "ok");
-        return { success: true, message, detail: wipe.detail };
+        return { success: true, message, stdout: combined };
       }
 
       // ── Fallback transport: Fastboot (bootloader mode, no ADB shell) ───────
@@ -613,20 +742,78 @@ export function registerDeviceHandlers(): void {
         return { success: false, message };
       }
 
-      pushOperationLog("WIPE", `Fastboot device ${serial} — wiping userdata…`, 45);
-      const wipe = await fastbootWipeUserData(serial);
-      if (!wipe.ok) {
-        const message = wipe.detail
-          ? `Fastboot reset failed: ${wipe.detail}`
-          : "Fastboot reset failed.";
+      const fastbootPath = await resolvePlatformToolPath("fastboot");
+      pushOperationLog(
+        "RESOLVE",
+        `Fastboot device ${serial} — using ${fastbootPath ?? "fastboot (PATH)"}…`,
+        35
+      );
+
+      // `fastboot erase userdata` — clears the data partition. This is the
+      // primary path; `fastbootWipeUserData` stays as the firmware-aware
+      // fallback for bootloaders that reject a bare erase.
+      pushOperationLog("WIPE", `fastboot erase userdata (${serial})…`, 50);
+      const userdata = await runStreamedTool("flash-reset", "fastboot", [
+        "-s",
+        serial,
+        "erase",
+        "userdata",
+      ]);
+      if (userdata.notAvailable) {
+        const message = "Fastboot tools not installed — cannot erase userdata.";
         pushOperationLog("ERROR", message, null, "error");
         return { success: false, message };
       }
-      pushOperationLog("REBOOT", "Userdata wiped — rebooting device…", 85);
-      await fastbootReboot(serial);
+      const streamed: string[] = [];
+      if (userdata.stdout) streamed.push(userdata.stdout);
+      if (userdata.stderr) streamed.push(userdata.stderr);
+
+      if (userdata.exitCode !== 0) {
+        pushOperationLog(
+          "WARN",
+          "fastboot erase userdata rejected — retrying with the firmware-aware wipe…",
+          null,
+          "warn"
+        );
+        const wipe = await fastbootWipeUserData(serial);
+        if (!wipe.ok) {
+          const message = wipe.detail
+            ? `Fastboot reset failed: ${wipe.detail}`
+            : "Fastboot reset failed.";
+          pushOperationLog("ERROR", message, null, "error");
+          return { success: false, message, stdout: streamed.join("\n") };
+        }
+        pushOperationLog("WIPE", `Fallback wipe accepted (${wipe.detail ?? "fastboot -w"})…`, 70);
+      }
+
+      // `fastboot erase cache` — best-effort; a missing/absent cache partition
+      // must not abort an otherwise successful userdata wipe.
+      pushOperationLog("WIPE", `fastboot erase cache (${serial})…`, 75);
+      const cache = await runStreamedTool("flash-reset", "fastboot", [
+        "-s",
+        serial,
+        "erase",
+        "cache",
+      ]);
+      if (cache.stdout) streamed.push(cache.stdout);
+      if (cache.stderr) streamed.push(cache.stderr);
+      if (cache.exitCode !== 0) {
+        pushOperationLog(
+          "WARN",
+          `fastboot erase cache skipped (exit ${cache.exitCode}) — non-fatal.`,
+          null,
+          "warn"
+        );
+      }
+
+      pushOperationLog("REBOOT", "Userdata wiped — rebooting device…", 90);
+      const reboot = await runStreamedTool("flash-reset", "fastboot", ["-s", serial, "reboot"]);
+      if (reboot.stdout) streamed.push(reboot.stdout);
+      if (reboot.stderr) streamed.push(reboot.stderr);
+
       const message = "Flash reset complete (Fastboot).";
       pushOperationLog("DONE", message, 100, "ok");
-      return { success: true, message, detail: wipe.detail };
+      return { success: true, message, stdout: streamed.join("\n") };
     } finally {
       endOperation();
     }
@@ -715,27 +902,26 @@ export function registerDeviceHandlers(): void {
       const adbMode = REBOOT_ADB_MODE[target];
       const cmdLabel = `adb reboot${adbMode ? ` ${adbMode}` : ""}`;
       pushOperationLog("SEND", `${cmdLabel} → ${label}`, 50);
-      const result = await adbReboot(adb.serial, adbMode);
-      if (!result) {
+      const args = adbMode ? ["-s", adb.serial, "reboot", adbMode] : ["-s", adb.serial, "reboot"];
+      const result = await runStreamedTool("reboot-mode", "adb", args);
+      if (result.notAvailable) {
         const message = "ADB tools not installed — cannot send reboot command.";
         pushOperationLog("ERROR", message, null, "error");
         return { success: false, message };
       }
-      // Surface captured stdout/stderr straight to the UI operation terminal.
-      const output = `${result.stdout} ${result.stderr}`.trim();
-      if (output) pushOperationLog("OUT", output, 80);
+      const stdout = result.stdout;
       // The adb transport routinely drops as the device leaves Android for
-      // bootloader/edl/recovery, so a non-zero exit is expected — report the
-      // captured detail but treat the reboot as successfully *requested*.
+      // bootloader/edl/recovery, so a non-zero exit is expected — surface the
+      // raw stderr but treat the reboot as successfully *requested*.
       if (result.exitCode !== 0 && result.exitCode !== null) {
-        const detail = result.lastErrorLine || output || `adb exited ${result.exitCode}`;
+        const detail = result.stderr || result.stdout || `adb exited ${result.exitCode}`;
         const message = `Reboot to ${label} requested. ${detail}`;
         pushOperationLog("WARN", message, 100, "warn");
-        return { success: true, message };
+        return { success: true, message, stdout };
       }
       const message = `Reboot to ${label} requested.`;
       pushOperationLog("DONE", message, 100, "ok");
-      return { success: true, message };
+      return { success: true, message, stdout };
     } catch (err) {
       const msg = err instanceof Error && err.message ? err.message : "Reboot failed.";
       pushOperationLog("ERROR", msg, null, "error");
