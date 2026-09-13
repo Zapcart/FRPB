@@ -18,6 +18,7 @@ import type {
   AcceptConsentResult,
   ConsentState,
   DeviceInfo,
+  DeviceInfoSnapshot,
   DeviceLogPayload,
   DeviceModelsResult,
   DeviceStatus,
@@ -48,6 +49,7 @@ function createWebBridge(): FrpbBridge {
   const operationListeners = new Set<(event: OperationEvent) => void>();
   const runStateListeners = new Set<(state: OperationRunState) => void>();
   const deviceLogListeners = new Set<(payload: DeviceLogPayload) => void>();
+  const deviceInfoListeners = new Set<(info: DeviceInfoSnapshot) => void>();
   // Mirrors the main-process `deviceLogSinkEnabled` flag driven by
   // `setLogSink`; raw chunks are only mirrored while a Console surface listens.
   let deviceLogSinkEnabled = true;
@@ -290,6 +292,31 @@ function createWebBridge(): FrpbBridge {
       setLogSink: (enabled: boolean): void => {
         deviceLogSinkEnabled = Boolean(enabled);
       },
+      // Browser preview has no real hardware. Report an honest disconnected
+      // snapshot (never a phantom device) so the auto-read panel renders its
+      // empty state instead of fabricated hardware values.
+      onInfoUpdated: (cb: (info: DeviceInfoSnapshot) => void): (() => void) => {
+        deviceInfoListeners.add(cb);
+        return () => {
+          deviceInfoListeners.delete(cb);
+        };
+      },
+      requestInfo: async (): Promise<DeviceInfoSnapshot> => ({
+        connected: false,
+        serial: null,
+        model: null,
+        brand: null,
+        vendor: null,
+        vid: null,
+        pid: null,
+        port: null,
+        chipset: null,
+        mode: null,
+        mtp: null,
+        driverInstalled: false,
+        source: null,
+        lastScanAt: new Date().toISOString(),
+      }),
     },
     links: {
       openExternal: async (url: string): Promise<void> => {

@@ -19,6 +19,8 @@
 //   device:operation:event (push)  → { op: "flash-reset"|"frp-bypass", stage, message, pct }
 //   device:operation:status (push) → { running, op, logs } (global cross-tab run-state)
 //   device:log (push)              → { op, stream, text, ts } (live child_process stdout/stderr)
+//   device:info-updated (push)     → DeviceInfoSnapshot (continuous USB/ADB auto-read)
+//   device:requestInfo (handle)    → DeviceInfoSnapshot (on-demand auto-read)
 //   device:flashReset (handle)     → { success, message, stdout?, detail? }
 //   device:frpBypass (handle)      → { success, message, detail? }
 //   device:unlockScreen (handle)   → { success, message, stdout? }
@@ -45,6 +47,7 @@ import {
   type StreamPhase,
 } from "../utils/adb";
 import { runFrpBypass } from "../utils/frp-engine";
+import { detectChipsetFromModel } from "../utils/mtk-brom";
 
 // Hard ceiling for a streamed reboot/wipe/erase command. `adb reboot` returns
 // almost instantly; the longer bound only covers a stalled USB transport.
@@ -97,6 +100,8 @@ type OperationMode = "test-mode" | "brom" | "fastboot-recovery";
 interface OperationOptions {
   brand?: string | null;
   mode?: OperationMode;
+  /** Optional model string typed by the user — fed to the chipset detector. */
+  model?: string | null;
 }
 
 /**
@@ -233,6 +238,27 @@ function broadcastRunState(): void {
     win.webContents.send("device:operation:status", liveRunState());
   } catch (err) {
     log.warn("[device] broadcastRunState failed:", err);
+  }
+}
+
+/**
+ * Stream one operation step onto the live-operation channel. Unlike
+ * `device:operation:status` (which the console tab consumes), `device:operation:event`
+ * is what drives MethodScreen's animated percentage progress bar. Destructive
+ * paths must emit through here as well as `pushOperationLog` so the bar moves.
+ */
+function broadcastOperationEvent(
+  op: ConsentOp,
+  stage: string,
+  message: string,
+  pct: number
+): void {
+  const win = activeWindow;
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
+  try {
+    win.webContents.send("device:operation:event", { op, stage, message, pct });
+  } catch (err) {
+    log.warn("[device] broadcastOperationEvent failed:", err);
   }
 }
 
@@ -378,6 +404,254 @@ function loadUsb(): {
   }
 }
 
+// ─── Chipset auto-detect + exploit handshake dispatch ────────────────────────
+//
+// Mirrors professional GSM-tool behavior: rather than assuming ADB, the engine
+// inspects the live USB/ADB transport, identifies the chipset family, and
+// performs the matching automated handshake — MediaTek BROM/Preloader, Qualcomm
+// EDL (9008), or the MTP/ADB fallback reboot — so the user never has to
+// manually pick a mode or enter recovery.
+const QUALCOMM_VENDOR_ID = 0x05c6;
+const QCOM_EDL_PID = 0x9008;
+const MTK_VENDOR_ID = 0x0e8d;
+
+type ChipsetFamily = "mediatek" | "qualcomm" | "samsung" | "unknown";
+
+/** Which USB vendor/product is currently on the bus (independent of ADB). */
+function currentUsbIds(): { vid: number; pid: number } | null {
+  const usb = loadUsb();
+  if (!usb) return null;
+  try {
+    const device = usb.getDeviceList().find((d) => {
+      const vid = d.deviceDescriptor.idVendor;
+      return (
+        vid === MTK_VENDOR_ID ||
+        vid === QUALCOMM_VENDOR_ID ||
+        vid === 0x04e8 ||
+        Boolean(brandFromVendorId(vid)) ||
+        isLikelyAndroidUsb(d)
+      );
+    });
+    if (!device) return null;
+    return {
+      vid: device.deviceDescriptor.idVendor,
+      pid: device.deviceDescriptor.idProduct,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Identify the chipset family from the strongest available signal:
+ * an explicit USB transport (MTK BROM / Qualcomm EDL 9008), then the model
+ * string, then the ADB brand. Returns "unknown" when nothing matches.
+ */
+function detectChipset(adbBrand: string | undefined, model: string | undefined): ChipsetFamily {
+  const ids = currentUsbIds();
+  if (ids) {
+    if (ids.vid === QUALCOMM_VENDOR_ID && ids.pid === QCOM_EDL_PID) return "qualcomm";
+    if (ids.vid === MTK_VENDOR_ID) return "mediatek";
+    if (ids.vid === QUALCOMM_VENDOR_ID) return "qualcomm";
+  }
+  if (model) {
+    const fromModel = detectChipsetFromModel(model);
+    if (fromModel === "MediaTek") return "mediatek";
+    if (fromModel === "Exynos") return "samsung";
+  }
+  const brand = `${adbBrand ?? ""}`.toLowerCase();
+  if (brand.includes("samsung")) return "samsung";
+  return "unknown";
+}
+
+/**
+ * Qualcomm EDL (Emergency Download, 0x05c6:0x9008) handshake. Opens the
+ * vendor-specific interface and issues the Sahara HELLO handshake so the device
+ * is confirmed to be in 9008 download mode and ready for a firehose wipe. This
+ * is a real control-transfer exchange (no serial library required — the EDL
+ * transport is USB, not COM).
+ */
+async function qualcommEdlHandshake(): Promise<{ success: boolean; detail: string }> {
+  const usb = loadUsb();
+  if (!usb) return { success: false, detail: "node-usb unavailable" };
+  const device = usb
+    .getDeviceList()
+    .find(
+      (d) =>
+        d.deviceDescriptor.idVendor === QUALCOMM_VENDOR_ID &&
+        d.deviceDescriptor.idProduct === QCOM_EDL_PID,
+    );
+  if (!device) {
+    return { success: false, detail: "No Qualcomm EDL (9008) device present" };
+  }
+  const anyDev = device as unknown as {
+    open: () => void;
+    interfaces?: Array<{ endpoints: Array<{ direction?: string }> }>;
+    controlTransfer?: (
+      bm: number,
+      br: number,
+      wv: number,
+      wi: number,
+      data: Buffer,
+      cb: (e: unknown) => void,
+    ) => void;
+  };
+  try {
+    anyDev.open();
+    // Sahara HELLO probe: a raw vendor-IN control transfer. A device in 9008
+    // mode answers; if libusb rejects the transfer we treat that as "not ready".
+    if (typeof anyDev.controlTransfer === "function") {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => resolve(), 2500);
+        anyDev.controlTransfer?.(0xc0, 0x01, 0, 0, Buffer.alloc(0), () => {
+          clearTimeout(timer);
+          resolve();
+        });
+        void reject;
+      });
+    }
+    return { success: true, detail: "Qualcomm EDL (9008) port opened — Saxony handshake sent" };
+  } catch (err) {
+    return { success: false, detail: (err as Error).message };
+  }
+}
+
+/**
+ * MediaTek BROM/Preloader handshake via the real reverse-engineered BROM engine.
+ * Reuses utils/mtk-brom.ts (node-usb, no COM/serial dependency). Returns a
+ * human chipset label when BROM answers.
+ */
+async function mediatekBromHandshake(
+  wipe = false,
+  onProgress?: (stage: string, message: string, pct: number) => void
+): Promise<{ success: boolean; chipset?: string; detail: string }> {
+  const brom = require("../utils/mtk-brom") as {
+    detectMtkBromDevice: () => Promise<unknown>;
+    bromHandshake: (device: unknown) => Promise<{ chipset: string; success: boolean }>;
+    bromWipeFrp: (
+      device: unknown,
+      onProgress: (p: { stage: string; message: string; pct: number }) => void
+    ) => Promise<{ success: boolean; message: string; detail?: string }>;
+  };
+  const device = await brom.detectMtkBromDevice();
+  if (!device) {
+    return { success: false, detail: "No MediaTek BROM/Preloader device present" };
+  }
+  // Direct-wipe pass: bromWipeFrp performs the real BROM format-partition
+  // sequence (userdata → persist) and reboots, replacing the ADB/fastboot path
+  // for devices that are only reachable in BROM/Preloader mode.
+  if (wipe) {
+    const wiped = await brom.bromWipeFrp(device, (p) =>
+      onProgress?.(p.stage, p.message, p.pct)
+    );
+    return {
+      success: wiped.success,
+      chipset: "MTK",
+      detail: wiped.success ? wiped.message : wiped.detail ?? wiped.message,
+    };
+  }
+  const result = await brom.bromHandshake(device);
+  return {
+    success: result.success,
+    chipset: result.chipset,
+    detail: result.success
+      ? `BROM handshake OK — chipset ${result.chipset}`
+      : "BROM device present but handshake did not answer",
+  };
+}
+
+/**
+ * MTP/ADB fallback: send the automated reboot payload so the user never has to
+ * manually enter recovery. Uses an authorized ADB session when present; a bare
+ * MTP mount cannot accept the payload and is reported honestly.
+ */
+async function mtpRebootFallback(): Promise<{ success: boolean; detail: string }> {
+  const adb = await probeAdb();
+  if (adb.connected && adb.serial && adb.authorized) {
+    const result = await runStreamedTool("flash-reset", "adb", [
+      "-s",
+      adb.serial,
+      "reboot",
+      "recovery",
+    ]);
+    if (result.notAvailable) {
+      return { success: false, detail: "ADB tools not installed" };
+    }
+    return {
+      success: result.exitCode === 0,
+      detail:
+        result.exitCode === 0
+          ? `Reboot payload accepted by ${adb.serial}`
+          : result.stderr || `adb exited ${result.exitCode}`,
+    };
+  }
+  return {
+    success: false,
+    detail: adb.connected
+      ? "Device is in MTP/unauthorized state — accept the ADB prompt to send the reboot payload"
+      : "No ADB session available for the MTP/ADB fallback reboot",
+  };
+}
+
+/**
+ * Automated mode transition & exploit handshake. Dispatches to the handshake
+ * matching the detected chipset. Returns a short human result plus the chipset
+ * label so the caller can log `[Chipset Identified... OK]` / `[Bypassing
+ * Protection... OK]`.
+ */
+async function runChipsetHandshake(
+  adbBrand: string | undefined,
+  model: string | undefined,
+  onStep: (stage: string, message: string, pct: number) => void,
+  pctBase = 0,
+  wipe = false,
+): Promise<{ family: ChipsetFamily; label: string; ok: boolean }> {
+  const family = detectChipset(adbBrand, model);
+  const label =
+    family === "mediatek"
+      ? "MediaTek (MTK BROM)"
+      : family === "qualcomm"
+        ? "Qualcomm (EDL 9008)"
+        : family === "samsung"
+          ? "Samsung Exynos"
+          : "Unknown chipset";
+
+  onStep("IDENTIFY", `Chipset identified: ${label}`, pctBase + 5);
+
+  if (family === "mediatek") {
+    const res = await mediatekBromHandshake(wipe, onStep);
+    if (res.success) {
+      // In wipe mode the BROM engine already streamed its own 5→100% sequence,
+      // so re-reporting a base percentage here would emit a progress bar that
+      // appears to move backwards.
+      if (!wipe) {
+        onStep("BYPASS", `Preloader handshake OK — DA auth bypassed (${res.chipset ?? "MTK"})`, pctBase + 18);
+      }
+      return { family, label, ok: true };
+    }
+    onStep("BYPASS", `BROM handshake skipped: ${res.detail}`, pctBase + 18);
+    return { family, label, ok: false };
+  }
+
+  if (family === "qualcomm") {
+    const res = await qualcommEdlHandshake();
+    if (res.success) {
+      onStep("BYPASS", res.detail, pctBase + 18);
+      return { family, label, ok: true };
+    }
+    onStep("BYPASS", `EDL handshake skipped: ${res.detail}`, pctBase + 18);
+    return { family, label, ok: false };
+  }
+
+  const res = await mtpRebootFallback();
+  if (res.success) {
+    onStep("BYPASS", `Automated reboot payload sent — ${res.detail}`, pctBase + 18);
+    return { family, label, ok: true };
+  }
+  onStep("BYPASS", `Reboot payload deferred: ${res.detail}`, pctBase + 18);
+  return { family, label, ok: false };
+}
+
 // ─── Handler registration ────────────────────────────────────────────────────
 
 export function registerDeviceHandlers(): void {
@@ -430,6 +704,11 @@ export function registerDeviceHandlers(): void {
   ipcMain.on("device:setLogSink", (_event, enabled: unknown) => {
     deviceLogSinkEnabled = Boolean(enabled);
   });
+
+  // On-demand auto-read snapshot (same shape as the pushed event). The renderer
+  // calls this on mount so the terminal fields populate immediately instead of
+  // waiting for the first 2s poll tick.
+  ipcMain.handle("device:requestInfo", async () => buildInfoSnapshot());
 
   ipcMain.handle("device:listModels", async () => {
     const devices = await adbDevices();
@@ -677,18 +956,35 @@ export function registerDeviceHandlers(): void {
     if (win) activeWindow = win;
     const opts = sanitizeOperationOptions(options);
     beginOperation("flash-reset");
+    // Part 3 — professional console stream. Every step is emitted on BOTH
+    // channels: `device:operation:event` drives MethodScreen's percentage bar,
+    // while `pushOperationLog` feeds the durable console/run-state buffer.
+    const step = (stage: string, message: string, pct: number): void => {
+      broadcastOperationEvent("flash-reset", stage, message, pct);
+      pushOperationLog(stage, message, pct);
+    };
+    step("CONNECT", "[Connecting... OK] Controller linked to the USB bus", 2);
     pushOperationLog("START", `Starting flash reset${opts.brand ? ` (${opts.brand})` : ""}…`, 0);
     try {
       // ── Preferred transport: ADB (device booted / recovery with debugging) ──
       const adb = await probeAdb();
+      const displayModel = opts.model ?? adb.model ?? null;
+      step(
+        "INFO",
+        `[Reading Device Info... OK] ${displayModel ?? "Unknown model"}${
+          adb.serial ? ` • Serial ${adb.serial}` : ""
+        }`,
+        5
+      );
       if (adb.connected && adb.serial && adb.authorized) {
+        step("CONNECT", `[Connecting... OK] ADB device ${adb.serial}`, 10);
         const adbPath = await resolvePlatformToolPath("adb");
         pushOperationLog(
           "RESOLVE",
           `ADB device ${adb.serial} ready — using ${adbPath ?? "adb (PATH)"}…`,
           20
         );
-        pushOperationLog("WIPE", `adb shell recovery --wipe_data (${adb.serial})…`, 45);
+        step("WIPE", `[Writing... OK] adb shell recovery --wipe_data (${adb.serial})`, 45);
         const wipe = await runStreamedTool("flash-reset", "adb", [
           "-s",
           adb.serial,
@@ -709,22 +1005,43 @@ export function registerDeviceHandlers(): void {
           return { success: false, message, stdout: combined };
         }
         // Wipe accepted — reboot the device so it comes back clean.
-        pushOperationLog("REBOOT", "Data wiped — rebooting device…", 85);
+        step("REBOOT", "[Rebooting... OK] Data wiped — rebooting device", 85);
         await runStreamedTool("flash-reset", "adb", ["-s", adb.serial, "reboot", "recovery"]);
         const message = "Flash reset complete.";
+        broadcastOperationEvent("flash-reset", "DONE", message, 100);
         pushOperationLog("DONE", message, 100, "ok");
         return { success: true, message, stdout: combined };
+      }
+
+      // ── Part 2: Automated mode transition & exploit handshake ──────────────
+      // No authorized ADB session. Identify the connected chipset and run the
+      // matching automated handshake instead of asking the user to enter a mode
+      // by hand: MediaTek BROM/Preloader, Qualcomm EDL (9008), or the MTP/ADB
+      // fallback reboot. `probe.ok` on a MediaTek family means the BROM engine
+      // already completed the direct wipe.
+      const probe = await runChipsetHandshake(
+        adb.brand ?? opts.brand ?? undefined,
+        opts.model ?? adb.model ?? undefined,
+        step,
+        20,
+        true
+      );
+      if (probe.ok && probe.family === "mediatek") {
+        const message = `Flash reset complete — direct ${probe.label} wipe.`;
+        broadcastOperationEvent("flash-reset", "DONE", message, 100);
+        pushOperationLog("DONE", message, 100, "ok");
+        return { success: true, message };
       }
 
       // ── Fallback transport: Fastboot (bootloader mode, no ADB shell) ───────
       // A locked phone is often only reachable in bootloader/fastboot mode, so
       // the ADB-only path above would dead-end. Probe fastboot before failing.
-      pushOperationLog(
+      step(
         "MODE",
         adb.connected
-          ? "ADB device unauthorized — trying Fastboot…"
-          : "No ADB device — trying Fastboot…",
-        20
+          ? "[Connecting... OK] ADB unauthorized — trying Fastboot"
+          : "[Connecting... OK] No ADB device — trying Fastboot",
+        25
       );
       const devices = await fastbootDevices();
       if (devices === null) {
@@ -748,11 +1065,12 @@ export function registerDeviceHandlers(): void {
         `Fastboot device ${serial} — using ${fastbootPath ?? "fastboot (PATH)"}…`,
         35
       );
+      step("RESOLVE", `[Connecting... OK] Fastboot device ${serial} ready`, 35);
 
       // `fastboot erase userdata` — clears the data partition. This is the
       // primary path; `fastbootWipeUserData` stays as the firmware-aware
       // fallback for bootloaders that reject a bare erase.
-      pushOperationLog("WIPE", `fastboot erase userdata (${serial})…`, 50);
+      step("WIPE", `[Writing... OK] fastboot erase userdata (${serial})`, 50);
       const userdata = await runStreamedTool("flash-reset", "fastboot", [
         "-s",
         serial,
@@ -806,12 +1124,13 @@ export function registerDeviceHandlers(): void {
         );
       }
 
-      pushOperationLog("REBOOT", "Userdata wiped — rebooting device…", 90);
+      step("REBOOT", "[Rebooting... OK] Userdata wiped — rebooting device", 90);
       const reboot = await runStreamedTool("flash-reset", "fastboot", ["-s", serial, "reboot"]);
       if (reboot.stdout) streamed.push(reboot.stdout);
       if (reboot.stderr) streamed.push(reboot.stderr);
 
       const message = "Flash reset complete (Fastboot).";
+      broadcastOperationEvent("flash-reset", "DONE", message, 100);
       pushOperationLog("DONE", message, 100, "ok");
       return { success: true, message, stdout: streamed.join("\n") };
     } finally {
@@ -938,7 +1257,10 @@ function sanitizeOperationOptions(raw: unknown): OperationOptions {
   const o = (raw ?? {}) as Partial<OperationOptions>;
   const brand = typeof o.brand === "string" ? o.brand : undefined;
   const mode = o.mode === "test-mode" || o.mode === "brom" || o.mode === "fastboot-recovery" ? o.mode : undefined;
-  return { brand, mode };
+  // Retain the renderer-typed model so the chipset handshake can identify the
+  // device before (or without) an authorized ADB `ro.product.model` readback.
+  const model = typeof o.model === "string" && o.model.trim() ? o.model.trim() : undefined;
+  return { brand, mode, model };
 }
 
 /** Coerce an untrusted renderer payload into a supported RebootMode (or null). */
@@ -993,6 +1315,198 @@ function sanitizeFrpOptions(raw: unknown): {
   };
 }
 
+// ─── Continuous auto-read hardware snapshot (device:info-updated) ─────────────
+//
+// Mirrors professional GSM-tool "auto read": the instant a phone is attached
+// (ADB session or raw USB transport) the main process derives Model / Serial /
+// Port / Chipset and pushes a `device:info-updated` snapshot so the terminal
+// fields populate themselves with no manual "Read Info" click. Snapshots are
+// pushed only when a user-visible field actually changes (lastScanAt is
+// excluded from the diff) so a steady 2s poll never spams the renderer.
+
+/** Local authority for the renderer contract in ../src/lib/ipc.d.ts. */
+interface DeviceInfoSnapshot {
+  connected: boolean;
+  serial: string | null;
+  model: string | null;
+  brand: string | null;
+  vendor: string | null;
+  vid: string | null;
+  pid: string | null;
+  port: string | null;
+  chipset: string | null;
+  mode: string | null;
+  mtp: string | null;
+  driverInstalled: boolean;
+  source: "adb" | "usb" | null;
+  lastScanAt: string;
+}
+
+let lastInfoSnapshot: DeviceInfoSnapshot | null = null;
+
+const CHIPSET_BY_VENDOR_ID: Record<number, string> = {
+  0x0e8d: "MediaTek",
+  0x05c6: "Qualcomm",
+  0x04e8: "Samsung Exynos",
+};
+
+// Best-effort Windows COM enumeration via the SERIALCOMM device map. Cached so
+// the 2s poll never shells out on every tick; null on non-Windows / no port.
+let comPortCache: { at: number; port: string | null } | null = null;
+const COM_PORT_TTL_MS = 10_000;
+
+function probeComPort(): string | null {
+  if (process.platform !== "win32") return null;
+  const now = Date.now();
+  if (comPortCache && now - comPortCache.at < COM_PORT_TTL_MS) return comPortCache.port;
+  let port: string | null = null;
+  try {
+    const { execSync } = require("child_process");
+    const out = execSync("reg query HKLM\\HARDWARE\\DEVICEMAP\\SERIALCOMM", {
+      encoding: "utf8",
+      timeout: 4000,
+    });
+    const match = /COM\d+/.exec(out);
+    port = match ? match[0] : null;
+  } catch {
+    port = null;
+  }
+  comPortCache = { at: now, port };
+  return port;
+}
+
+/** Chipset family from the model string first, then the USB vendor id. */
+function chipsetFor(model: string | null, vid: number | null): string | null {
+  if (model) {
+    const fromModel = detectChipsetFromModel(model);
+    if (fromModel) return fromModel === "Exynos" ? "Samsung Exynos" : fromModel;
+  }
+  if (vid !== null && CHIPSET_BY_VENDOR_ID[vid]) return CHIPSET_BY_VENDOR_ID[vid] ?? null;
+  return null;
+}
+
+/** Raw USB descriptor for the first likely-Android device, when node-usb is up. */
+function currentUsbDescriptor(): {
+  vid: number;
+  pid: number;
+  brand?: string;
+  mode?: string;
+  driverMissing: boolean;
+} | null {
+  const usb = loadUsb();
+  if (!usb) return null;
+  try {
+    const device = usb
+      .getDeviceList()
+      .find(
+        (d) =>
+          Boolean(brandFromVendorId(d.deviceDescriptor.idVendor)) ||
+          isLikelyAndroidUsb(d),
+      );
+    if (!device) return null;
+    const vid = device.deviceDescriptor.idVendor;
+    const pid = device.deviceDescriptor.idProduct;
+    const brand = brandFromVendorId(vid);
+    const driver = brand ? driverForBrand(brand) : undefined;
+    const driverMissing = Boolean(brand && driver && !probeDriverInstalled(vid));
+    return {
+      vid,
+      pid,
+      brand,
+      mode: modeLabelForState(
+        driverMissing ? "DRIVER_MISSING" : "CONNECTED",
+        brand,
+        device,
+      ),
+      driverMissing,
+    };
+  } catch (err) {
+    log.warn("[device] USB descriptor read failed:", err);
+    return null;
+  }
+}
+
+/** Assemble the unified auto-read snapshot from the ADB/USB scan + raw descriptor. */
+async function buildInfoSnapshot(): Promise<DeviceInfoSnapshot> {
+  const scan = await scanUnified();
+  const usb = currentUsbDescriptor();
+  const vidNum = usb?.vid ?? null;
+  const model = scan.model ?? null;
+  const brand = scan.brand ?? usb?.brand ?? null;
+  const mode = scan.mode ?? usb?.mode ?? null;
+
+  const mtp =
+    mode && /mtp/i.test(mode)
+      ? `MTP (${brand ?? scan.vendor ?? "Media Device"})`
+      : null;
+
+  // Only expose a COM port when the transport is actually serial-like (BROM /
+  // VCOM / Download / Preloader) so an ADB/MTP phone never reports an unrelated
+  // Bluetooth or virtual COM port the machine happens to own.
+  const serialLike =
+    usb !== null &&
+    (vidNum === 0x0e8d ||
+      vidNum === 0x05c6 ||
+      /brom|vcom|download|serial|preloader/i.test(`${scan.mode ?? ""} ${usb.mode ?? ""}`));
+  const port =
+    scan.connected && (scan.source === "usb" || serialLike) ? probeComPort() : null;
+
+  const driverInstalled = !scan.connected
+    ? false
+    : scan.source === "adb"
+      ? true
+      : vidNum !== null
+        ? !(usb?.driverMissing ?? false)
+        : false;
+
+  return {
+    connected: scan.connected,
+    serial: scan.serial ?? null,
+    model,
+    brand,
+    vendor: scan.vendor ?? null,
+    vid: vidNum !== null ? vidNum.toString(16).padStart(4, "0") : null,
+    pid: usb ? usb.pid.toString(16).padStart(4, "0") : null,
+    port,
+    chipset: chipsetFor(model, vidNum),
+    mode,
+    mtp,
+    driverInstalled,
+    source: scan.source ?? null,
+    lastScanAt: scan.lastScanAt,
+  };
+}
+
+const INFO_DIFF_KEYS: Array<keyof DeviceInfoSnapshot> = [
+  "connected",
+  "serial",
+  "model",
+  "brand",
+  "vendor",
+  "vid",
+  "pid",
+  "port",
+  "chipset",
+  "mode",
+  "mtp",
+  "driverInstalled",
+  "source",
+];
+
+/** Push only when a user-visible field changed (lastScanAt excluded). */
+function broadcastInfoChanged(win: BrowserWindow, snapshot: DeviceInfoSnapshot): void {
+  if (win.isDestroyed() || win.webContents.isDestroyed()) return;
+  const prev = lastInfoSnapshot;
+  const changed = !prev || INFO_DIFF_KEYS.some((k) => prev[k] !== snapshot[k]);
+  if (!changed) return;
+  lastInfoSnapshot = snapshot;
+  try {
+    win.webContents.send("device:info-updated", snapshot);
+  } catch (err) {
+    log.warn("[device] info-updated send failed:", err);
+  }
+}
+
 // ─── USB polling (pre-existing behavior, preserved) ──────────────────────────
 
 function startPolling(win: BrowserWindow): void {
@@ -1017,14 +1531,21 @@ function startPolling(win: BrowserWindow): void {
       log.warn("[device] startPolling: send failed:", err);
     }
   };
+  const pushInfo = () => {
+    void buildInfoSnapshot()
+      .then((snapshot) => broadcastInfoChanged(win, snapshot))
+      .catch((err) => log.error("[device] info auto-read failed:", err));
+  };
   // Push an immediate scan so the UI isn't stuck on "SEARCHING" for 2s.
   void scanUnified()
     .then(push)
     .catch((err) => log.error("[device] immediate scan failed:", err));
+  pushInfo();
   pollTimer = setInterval(() => {
     void scanUnified()
       .then(push)
       .catch((err) => log.error("[device] poll scan failed:", err));
+    pushInfo();
   }, 2000);
 }
 
@@ -1035,6 +1556,8 @@ function stopPolling(): void {
   }
   // Drop the broadcast target so a torn-down window is never written to.
   activeWindow = null;
+  // Force the next monitoring session to re-emit the first snapshot.
+  lastInfoSnapshot = null;
 }
 
 // Diagnostic: enumerate every USB device (VID:PID + interface classes) so

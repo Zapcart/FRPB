@@ -6,6 +6,7 @@ import type {
   AcceptConsentResult,
   ConsentState,
   DeviceInfo,
+  DeviceInfoSnapshot,
   DeviceLogPayload,
   DeviceModelsResult,
   DeviceStatus,
@@ -89,6 +90,10 @@ const bridge: FrpbBridge = {
       // stream is never duplicated across surfaces.
       ipcRenderer.send("device:setLogSink", Boolean(enabled));
     },
+    onInfoUpdated: (cb: (info: DeviceInfoSnapshot) => void): (() => void) =>
+      onChannel<DeviceInfoSnapshot>("device:info-updated", cb),
+    requestInfo: (): Promise<DeviceInfoSnapshot> =>
+      ipcRenderer.invoke("device:requestInfo"),
   },
   links: {
     openExternal: (url: string): Promise<void> =>

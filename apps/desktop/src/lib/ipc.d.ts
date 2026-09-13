@@ -204,6 +204,12 @@ export interface OperationOptions {
   brand?: string | null;
   /** Transport mode the phone should be in (defaults to fastboot-recovery). */
   mode?: OperationMode;
+  /**
+   * Optional model string typed by the user. Forwarded to the main process so
+   * the chipset handshake can identify the device when no authorized ADB
+   * `ro.product.model` readback is available yet.
+   */
+  model?: string | null;
 }
 
 export interface OperationEvent {
@@ -226,6 +232,38 @@ export interface DeviceLogPayload {
   stream: DeviceLogStream;
   text: string;
   ts: string;
+}
+
+/**
+ * Real-time hardware snapshot pushed on "device:info-updated" by the continuous
+ * USB/ADB monitor. Mirrors professional GSM-tool "auto read": the terminal
+ * fields (Model / Serial / Port status / Chipset) populate themselves the moment
+ * a phone is attached — no manual "Read Info" click required. A snapshot is
+ * pushed on connect, disconnect, and any transport/mode transition.
+ */
+export interface DeviceInfoSnapshot {
+  connected: boolean;
+  /** Android/ADB serial, or the USB hardware id when only the raw transport is up. */
+  serial: string | null;
+  model: string | null;
+  brand: string | null;
+  vendor: string | null;
+  /** USB vendor id, lowercase hex (e.g. "0e8d"). */
+  vid: string | null;
+  /** USB product id, lowercase hex (e.g. "0000"). */
+  pid: string | null;
+  /** Windows COM port exposed by the device (e.g. "COM7"), null when none. */
+  port: string | null;
+  /** Detected chipset family: "MediaTek" | "Qualcomm" | "Samsung Exynos" | … */
+  chipset: string | null;
+  /** Human transport label: "ADB", "Fastboot / Download / BROM", "MTP", … */
+  mode: string | null;
+  /** MTP/PTP mount description when the device enumerates as a media device. */
+  mtp: string | null;
+  /** Whether the OEM driver appears installed for the detected vendor. */
+  driverInstalled: boolean;
+  source: "adb" | "usb" | null;
+  lastScanAt: string;
 }
 
 /**
@@ -323,6 +361,15 @@ export interface FrpbBridge {
      * surface mirrors the raw stream.
      */
     setLogSink: (enabled: boolean) => void;
+    /**
+     * Subscribe to the continuous auto-read hardware snapshot
+     * ("device:info-updated"). Fires the instant a phone is connected and again
+     * on every change, so the terminal fields populate themselves. Returns an
+     * unsubscribe function.
+     */
+    onInfoUpdated: (cb: (info: DeviceInfoSnapshot) => void) => () => void;
+    /** On-demand hardware snapshot (same shape as the pushed event). */
+    requestInfo: () => Promise<DeviceInfoSnapshot>;
   };
   links: { openExternal: (url: string) => Promise<void> };
   updater: {

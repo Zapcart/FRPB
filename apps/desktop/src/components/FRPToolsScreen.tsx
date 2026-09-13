@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import type {
   ConsentState,
+  DeviceInfoSnapshot,
   DeviceLogPayload,
   DeviceModelsResult,
   DeviceStatus,
@@ -38,6 +39,62 @@ const MAX_LOG_ENTRIES = 200;
  * offered. Unlock Android Screen runs the ADB lock-screen removal flow;
  * Location Change is the remaining UI "Coming Soon" card.
  */
+// Fields surfaced by the continuous auto-read strip, in display order.
+const HW_FIELDS: Array<{ key: keyof DeviceInfoSnapshot; label: string }> = [
+  { key: "model", label: "Model" },
+  { key: "serial", label: "Serial" },
+  { key: "port", label: "Port" },
+  { key: "chipset", label: "Chipset" },
+];
+
+/**
+ * Live "Auto-Read Hardware" strip. Mirrors professional GSM-tool behavior: the
+ * main process pushes a snapshot on `device:info-updated` the instant a phone is
+ * attached (ADB session or raw USB transport), so Model / Serial / Port /
+ * Chipset populate themselves with no manual "Read Info" click.
+ */
+function AutoReadPanel({ info }: { info: DeviceInfoSnapshot | null }) {
+  const connected = Boolean(info?.connected);
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
+        <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+          <span
+            className={
+              connected
+                ? "h-2 w-2 rounded-full bg-emerald-500"
+                : "h-2 w-2 rounded-full bg-slate-300"
+            }
+          />
+          Auto-Read Hardware
+        </span>
+        <span className="text-[11px] text-slate-400">
+          {info
+            ? `${info.mode ?? (connected ? "Connected" : "Disconnected")} · ${new Date(
+                info.lastScanAt
+              ).toLocaleTimeString()}`
+            : "scanning…"}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4">
+        {HW_FIELDS.map(({ key, label }) => {
+          const value = info ? (info[key] as string | null) : null;
+          return (
+            <div key={key} className="bg-white px-4 py-3">
+              <div className="text-[10px] font-medium uppercase tracking-wide text-slate-400">
+                {label}
+              </div>
+              <div className="mt-0.5 truncate text-sm font-medium text-slate-800">
+                {value ? value : "—"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 interface FRPToolsScreenProps {
   status: DeviceStatus | null;
   onRefresh: () => void | Promise<void>;
@@ -92,6 +149,9 @@ export default function FRPToolsScreen({
 
   // F. "Coming soon" modal
   const [comingSoon, setComingSoon] = useState<ComingSoonKind>(null);
+
+  // Continuous auto-read hardware snapshot (`device:info-updated`).
+  const [hwInfo, setHwInfo] = useState<DeviceInfoSnapshot | null>(null);
 
   // Refs avoid stale closures inside the long-lived operation-event subscription.
   const runningOpRef = useRef<OperationKind | null>(null);
@@ -184,6 +244,20 @@ export default function FRPToolsScreen({
       window.frpb.device.setLogSink(false);
     };
   }, [appendLog, showToast]);
+
+  // Auto-read hardware: subscribe to the main-process push, and seed the current
+  // state immediately on mount via requestInfo() so the strip is populated
+  // before the first 2s poll tick.
+  useEffect(() => {
+    const unsubscribe = window.frpb.device.onInfoUpdated((info: DeviceInfoSnapshot) => {
+      setHwInfo(info);
+    });
+    window.frpb.device
+      .requestInfo()
+      .then((info: DeviceInfoSnapshot) => setHwInfo(info))
+      .catch(() => {});
+    return unsubscribe;
+  }, []);
 
   // Release the toast timer on unmount so it never fires into a dead tree.
   useEffect(() => {
@@ -384,6 +458,9 @@ export default function FRPToolsScreen({
 
   return (
     <div className="flex flex-col gap-5">
+      {/* Continuous auto-read hardware strip — populated by device:info-updated. */}
+      <AutoReadPanel info={hwInfo} />
+
       {screen === "home" && (
         <HomeScreen
           status={status}
