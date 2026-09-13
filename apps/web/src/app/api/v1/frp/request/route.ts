@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { sha256 } from "@/lib/crypto/sha256";
 import { rateLimit } from "@/lib/rate-limit";
 import { preflight, withCorsResponse } from "@/lib/cors";
+import { FRP_ENGINE_DURATION_MS } from "@/lib/frp/lifecycle";
 import { z } from "zod";
 
 // CORS preflight for cross-origin (desktop) callers.
@@ -77,6 +78,10 @@ async function handleRequest(req: NextRequest) {
       userId = license.userId;
     }
 
+    // Accept the request and hand it straight to the bypass engine. The engine
+    // window is modelled by the lifecycle module; the client polls the status
+    // route until the request reaches a terminal state.
+    const startedAt = new Date();
     const request = await prisma.frpUnlockRequest.create({
       data: {
         brand: data.brand,
@@ -86,18 +91,17 @@ async function handleRequest(req: NextRequest) {
         method: data.method,
         ipAddress: ip,
         userId,
-        status: "PENDING",
-        requestedAt: new Date(),
+        status: "PROCESSING",
+        statusMessage: "Bypass engine is processing your request…",
+        requestedAt: startedAt,
+        startedAt,
       },
     });
 
-    // Trigger bypass engine asynchronously (simulated here)
-    await prisma.frpUnlockRequest.update({
-      where: { id: request.id },
-      data: { status: "PROCESSING", startedAt: new Date() },
-    });
+    // In production: queue a background job here (e.g. queue.ts / Redis job).
+    // The status route advances the request to COMPLETED/FAILED when polled.
 
-    // In production: queue a background job here (e.g. queue.ts / Redis job)
+    const retryAfterSeconds = Math.ceil(FRP_ENGINE_DURATION_MS / 1000);
 
     return NextResponse.json(
       {
@@ -106,7 +110,7 @@ async function handleRequest(req: NextRequest) {
         status: "processing",
         message: "Your FRP unlock request has been received. Poll /api/v1/frp/status/{requestId} for updates.",
       },
-      { status: 202 }
+      { status: 202, headers: { "Retry-After": String(retryAfterSeconds) } }
     );
   } catch (err) {
     console.error("[frp/request] error:", err);

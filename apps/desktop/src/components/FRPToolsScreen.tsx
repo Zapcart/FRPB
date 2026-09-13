@@ -184,7 +184,9 @@ export default function FRPToolsScreen({
       const res: OperationResult =
         op === "flash-reset"
           ? await window.frpb.device.flashReset(options)
-          : await window.frpb.device.frpBypass(options);
+          : op === "unlock-screen"
+            ? await window.frpb.device.unlockScreen(options)
+            : await window.frpb.device.frpBypass(options);
       setResult(res);
       appendLog(res.message);
       if (res.detail) appendLog(res.detail);
@@ -267,6 +269,16 @@ export default function FRPToolsScreen({
     }
   }
 
+  function handleUnlockScreen() {
+    if (busy) return;
+    // Unlock screen requires ADB authorization — show consent modal for legal disclaimer
+    if (!consent?.unlockScreen) {
+      openDisclaimer("unlock-screen");
+    } else {
+      void runOperation("unlock-screen");
+    }
+  }
+
   // Derived state
   const isConnected = Boolean(status?.connected) || status?.state === "CONNECTED";
   const needsAuth = isConnected && status?.authorized === false;
@@ -295,6 +307,7 @@ export default function FRPToolsScreen({
           onTabChange={setTab}
           onRefresh={handleManualRefresh}
           onOpenFrp={handleOpenFrp}
+          onUnlockScreen={handleUnlockScreen}
           onComingSoon={(kind) => setComingSoon(kind)}
           busy={busy}
         />

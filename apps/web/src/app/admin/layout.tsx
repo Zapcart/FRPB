@@ -1,7 +1,8 @@
 // FRPB — Admin layout (auth guard + page shell)
 // Server component: requires Supabase auth. Redirects to /auth if unauthenticated.
-// The admin page (children) fetches analytics server-side via a Server Component wrapper
-// that calls /api/v1/admin/analytics with the ADMIN_LICENSE_KEY — never exposed to the client.
+// The admin page (children) loads analytics server-side via a Server Component
+// that calls the shared Prisma query layer directly — the ADMIN_LICENSE_KEY and
+// all other secrets stay on the server and are never exposed to the client.
 
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";

@@ -59,7 +59,7 @@ const bridge: FrpbBridge = {
     checkConsent: (): Promise<ConsentState> =>
       ipcRenderer.invoke("device:checkConsent"),
     acceptConsent: (operation: OperationKind): Promise<AcceptConsentResult> => {
-      if (operation !== "flash-reset" && operation !== "frp-bypass") {
+      if (operation !== "flash-reset" && operation !== "frp-bypass" && operation !== "unlock-screen") {
         return Promise.resolve({
           ok: false,
           error: `Unknown operation: ${String(operation)}`,
@@ -71,6 +71,10 @@ const bridge: FrpbBridge = {
       ipcRenderer.invoke("device:flashReset", options),
     frpBypass: (options?: OperationOptions): Promise<OperationResult> =>
       ipcRenderer.invoke("device:frpBypass", options),
+    unlockScreen: (options?: OperationOptions): Promise<OperationResult> =>
+      ipcRenderer.invoke("device:unlockScreen", options),
+    unlockScreen: (options?: OperationOptions): Promise<OperationResult> =>
+      ipcRenderer.invoke("device:unlockScreen", options),
     onOperationEvent: (cb: (event: OperationEvent) => void): (() => void) =>
       onChannel<OperationEvent>("device:operation:event", cb),
     onOperationStatus: (cb: (state: OperationRunState) => void): (() => void) =>

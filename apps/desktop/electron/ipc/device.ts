@@ -20,6 +20,7 @@
 //   device:operation:status (push) → { running, op, logs } (global cross-tab run-state)
 //   device:flashReset (handle)     → { success, message, detail? }
 //   device:frpBypass (handle)      → { success, message, detail? }
+//   device:unlockScreen (handle)   → { success, message }
 
 import { ipcMain, BrowserWindow } from "electron";
 import { log } from "../utils/logger";
@@ -29,6 +30,7 @@ import {
   adbGetProp,
   adbReboot,
   adbWipeData,
+  adbShell,
   isPlatformToolsBundled,
   sleep,
 } from "../utils/adb";
@@ -141,7 +143,7 @@ const MODE_PROFILES: Record<OperationMode, ModeProfile> = {
 let pollTimer: NodeJS.Timeout | null = null;
 
 // ─── Consent gate (in-memory; resets on app restart by design) ───────────────
-const CONSENT_OPS = ["flash-reset", "frp-bypass"] as const;
+const CONSENT_OPS = ["flash-reset", "frp-bypass", "unlock-screen"] as const;
 type ConsentOp = (typeof CONSENT_OPS)[number];
 const consentGrantedFor = new Set<ConsentOp>();
 
@@ -453,6 +455,7 @@ export function registerDeviceHandlers(): void {
   ipcMain.handle("device:checkConsent", () => ({
     flashReset: consentGrantedFor.has("flash-reset"),
     frpBypass: consentGrantedFor.has("frp-bypass"),
+    unlockScreen: consentGrantedFor.has("unlock-screen"),
   }));
 
   ipcMain.handle("device:acceptConsent", (_event, operation: unknown) => {
@@ -466,6 +469,7 @@ export function registerDeviceHandlers(): void {
       ok: true,
       flashReset: consentGrantedFor.has("flash-reset"),
       frpBypass: consentGrantedFor.has("frp-bypass"),
+      unlockScreen: consentGrantedFor.has("unlock-screen"),
     };
   });
 
@@ -566,6 +570,55 @@ export function registerDeviceHandlers(): void {
     }
   });
 
+  // device:unlockScreen — remove lock screen via ADB settings, no data wipe.
+  ipcMain.handle("device:unlockScreen", async (event, options: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) activeWindow = win;
+    const opts = sanitizeOperationOptions(options);
+    beginOperation("unlock-screen");
+    pushOperationLog("START", `Starting screen unlock${opts.brand ? ` (${opts.brand})` : ""}…`, 0);
+    try {
+      const adb = await probeAdb();
+      if (!adb.connected || !adb.serial) {
+        const message = "No ADB device connected — enable USB debugging and reconnect.";
+        pushOperationLog("ERROR", message, null, "error");
+        return { success: false, message };
+      }
+      if (!adb.authorized) {
+        const message = "Device not authorized — accept the ADB prompt on your phone.";
+        pushOperationLog("ERROR", message, null, "error");
+        return { success: false, message };
+      }
+      pushOperationLog("DISABLE", "Disabling lock screen settings…", 30);
+      const cmds = [
+        "settings put secure lock_screen_disabled 1",
+        "settings put global device_provisioned 1",
+        "settings delete secure lock_pattern_and_password",
+        "settings delete secure gatekeeper.password",
+        "settings delete secure gatekeeper.pattern",
+        "pm clear com.android.phone",
+      ];
+      for (let i = 0; i < cmds.length; i++) {
+        try {
+          await adbShell(adb.serial, cmds[i]);
+          pushOperationLog("STEP", `Disabled: ${cmds[i]} (${i + 1}/${cmds.length})`, Math.round((i + 1) * 100 / cmds.length));
+        } catch (err) {
+          pushOperationLog("WARN", `Skipped: ${cmds[i]} — ${(err as Error).message}`, Math.round((i + 1) * 100 / cmds.length));
+        }
+      }
+      pushOperationLog("REBOOT", "Rebooting device to apply unlock…", 90);
+      await adbReboot(adb.serial);
+      const message = "Screen unlock complete — device should reboot unlocked.";
+      pushOperationLog("DONE", message, 100, "ok");
+      return { success: true, message };
+    } catch (err) {
+      const msg = err instanceof Error && err.message ? err.message : "Screen unlock failed.";
+      pushOperationLog("ERROR", msg, null, "error");
+      return { success: false, message: msg };
+    } finally {
+      endOperation();
+    }
+  });
 }
 
 /** Coerce an untrusted renderer payload into a safe OperationOptions. */

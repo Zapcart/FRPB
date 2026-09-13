@@ -509,6 +509,24 @@ export async function adbWipeData(serial: string): Promise<{ ok: boolean; detail
   return { ok: false, detail: lastDetail };
 }
 
+/**
+ * Run an arbitrary `adb shell <command>` on a specific device, returning stdout.
+ * Throws on timeout / missing binary; returns stdout trimmed.
+ */
+export async function adbShell(serial: string, command: string): Promise<string> {
+  const result = await runPlatformTool(
+    "adb",
+    ["-s", serial, "shell", command],
+    ADB_TIMEOUT_MS
+  );
+  if (!result) throw new Error("ADB tools not installed");
+  if (result.exitCode !== 0) {
+    const stderr = result.stderr.trim();
+    throw new Error(stderr || `adb shell exit ${result.exitCode}`);
+  }
+  return result.stdout.trim();
+}
+
 /** Simple blocking wait (promise) without event-loop starvation. */
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

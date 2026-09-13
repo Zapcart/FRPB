@@ -158,6 +158,7 @@ export interface DeviceModelsResult {
 export interface ConsentState {
   flashReset: boolean;
   frpBypass: boolean;
+  unlockScreen: boolean;
 }
 
 export interface AcceptConsentResult {
@@ -173,7 +174,7 @@ export interface OperationResult {
   detail?: string;
 }
 
-export type OperationKind = "flash-reset" | "frp-bypass";
+export type OperationKind = "flash-reset" | "frp-bypass" | "unlock-screen";
 
 /**
  * Transport mode the user has been guided into for a locked device (selected
@@ -276,6 +277,7 @@ export interface FrpbBridge {
     acceptConsent: (operation: OperationKind) => Promise<AcceptConsentResult>;
     flashReset: (options?: OperationOptions) => Promise<OperationResult>;
     frpBypass: (options?: OperationOptions) => Promise<OperationResult>;
+    unlockScreen: (options?: OperationOptions) => Promise<OperationResult>;
     onOperationEvent: (cb: (event: OperationEvent) => void) => () => void;
     onOperationStatus: (cb: (state: OperationRunState) => void) => () => void;
   };
