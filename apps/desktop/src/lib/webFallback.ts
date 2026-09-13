@@ -28,6 +28,7 @@ import type {
   OperationOptions,
   OperationResult,
   OperationRunState,
+  RebootMode,
   ResetResult,
   VerifyResponse,
 } from "./ipc";
@@ -45,7 +46,7 @@ function createWebBridge(): FrpbBridge {
   // Local state shared by the operation mocks.
   const operationListeners = new Set<(event: OperationEvent) => void>();
   const runStateListeners = new Set<(state: OperationRunState) => void>();
-  let consent: ConsentState = { flashReset: false, frpBypass: false };
+  let consent: ConsentState = { flashReset: false, frpBypass: false, unlockScreen: false };
 
   function emitOperation(event: OperationEvent): void {
     operationListeners.forEach((cb) => cb(event));
@@ -65,6 +66,14 @@ function createWebBridge(): FrpbBridge {
     "test-mode": "Samsung Test Mode (MTP)",
     brom: "MediaTek BROM / Preloader (VCOM)",
     "fastboot-recovery": "Fastboot / Recovery",
+  };
+
+  // Mirrors REBOOT_LABELS in electron/ipc/device.ts for the Quick Boot Switcher.
+  const REBOOT_SIM_LABEL: Record<RebootMode, string> = {
+    bootloader: "Fastboot / Bootloader",
+    recovery: "Recovery",
+    edl: "EDL (Emergency Download)",
+    system: "System (normal boot)",
   };
 
   const MAX_SIM_LOGS = 500;
@@ -108,6 +117,33 @@ function createWebBridge(): FrpbBridge {
         message: `Simulated in web preview mode (${label}).`,
         detail:
           "Web preview mode — no real device was touched. Connect the FRPB desktop app to run the actual operation.",
+      };
+    } finally {
+      emitRunState({ running: false, op: null });
+    }
+  }
+
+  // Mock of the one-click boot-mode switcher. Streams the same shape of run-state
+  // + operation events as the real handler so the Quick Boot Switcher buttons
+  // exercise their disabled / spinner / console paths in browser preview mode.
+  async function simulateReboot(mode: RebootMode): Promise<OperationResult> {
+    const label = REBOOT_SIM_LABEL[mode];
+    const stages: Array<[string, string, number]> = [
+      ["checking", "Checking device…", 10],
+      ["sending", `Sending: adb reboot${mode === "system" ? "" : ` ${mode}`}`, 55],
+      ["requested", `Reboot to ${label} requested.`, 100],
+    ];
+    emitRunState({ running: true, op: "reboot-mode", logs: [] });
+    try {
+      for (const [stage, message, pct] of stages) {
+        emitOperation({ op: "reboot-mode", stage, message, pct });
+        pushSimLog(stage.toUpperCase(), message, pct);
+        await new Promise((resolve) => setTimeout(resolve, 400));
+      }
+      return {
+        success: true,
+        message: `Reboot to ${label} requested (web preview mode).`,
+        detail: "Web preview mode — no real device was rebooted.",
       };
     } finally {
       emitRunState({ running: false, op: null });
@@ -187,17 +223,22 @@ function createWebBridge(): FrpbBridge {
         consent = {
           flashReset: consent.flashReset || operation === "flash-reset",
           frpBypass: consent.frpBypass || operation === "frp-bypass",
+          unlockScreen: consent.unlockScreen || operation === "unlock-screen",
         };
         return {
           ok: true,
           flashReset: consent.flashReset,
           frpBypass: consent.frpBypass,
+          unlockScreen: consent.unlockScreen,
         };
       },
       flashReset: (options?: OperationOptions): Promise<OperationResult> =>
         simulateOperation("flash-reset", options),
       frpBypass: (options?: OperationOptions): Promise<OperationResult> =>
         simulateOperation("frp-bypass", options),
+      unlockScreen: (options?: OperationOptions): Promise<OperationResult> =>
+        simulateOperation("unlock-screen", options),
+      rebootMode: (mode: RebootMode): Promise<OperationResult> => simulateReboot(mode),
       onOperationEvent: (cb: (event: OperationEvent) => void): (() => void) => {
         operationListeners.add(cb);
         // Synthetic "simulated" event so the UI can be explored on subscribe.

@@ -6,6 +6,7 @@ import type {
   OperationEvent,
   OperationKind,
   OperationResult,
+  RebootMode,
 } from "../lib/ipc";
 import HomeScreen from "./frp/HomeScreen";
 import BrandScreen from "./frp/BrandScreen";
@@ -15,7 +16,7 @@ import ComingSoonModal from "./frp/ComingSoonModal";
 import { connectionGuideFor, methodsForBrand } from "./frp/shared";
 
 type Screen = "home" | "brand" | "method";
-type ComingSoonKind = "wireless" | "unlock" | "location" | null;
+type ComingSoonKind = "wireless" | "location" | null;
 
 interface LogEntry {
   time: string;
@@ -32,7 +33,8 @@ const MAX_LOG_ENTRIES = 200;
  *
  * All operations are ADB-driven from the main process via `window.frpb.device`.
  * Detection is brand-agnostic; brand selection only tunes which methods are
- * offered. Unlock Android Screen + Location Change are UI "Coming Soon" cards.
+ * offered. Unlock Android Screen runs the ADB lock-screen removal flow;
+ * Location Change is the remaining UI "Coming Soon" card.
  */
 interface FRPToolsScreenProps {
   status: DeviceStatus | null;
@@ -78,6 +80,8 @@ export default function FRPToolsScreen({
   } | null>(null);
   const [opLog, setOpLog] = useState<LogEntry[]>([]);
   const [result, setResult] = useState<OperationResult | null>(null);
+  // Which Quick Boot Switcher target is currently being requested (spinner).
+  const [rebootingMode, setRebootingMode] = useState<RebootMode | null>(null);
 
   // F. "Coming soon" modal
   const [comingSoon, setComingSoon] = useState<ComingSoonKind>(null);
@@ -220,6 +224,7 @@ export default function FRPToolsScreen({
         setConsent((prev) => ({
           flashReset: op === "flash-reset" ? true : prev?.flashReset ?? false,
           frpBypass: op === "frp-bypass" ? true : prev?.frpBypass ?? false,
+          unlockScreen: op === "unlock-screen" ? true : prev?.unlockScreen ?? false,
         }));
         setDisclaimerOp(null);
         setChecked(false);
@@ -279,6 +284,26 @@ export default function FRPToolsScreen({
     }
   }
 
+  // One-click boot-mode switcher. Non-destructive (no wipe) so no legal disclaimer
+  // is required — the main process still enforces ADB authorization. Progress is
+  // streamed to the shared console; the per-button spinner is driven locally.
+  async function handleRebootMode(mode: RebootMode) {
+    if (busy || !isConnected) return;
+    setRebootingMode(mode);
+    appendLog(`Requesting reboot → ${mode}…`);
+    try {
+      const res = await window.frpb.device.rebootMode(mode);
+      appendLog(res.message);
+      if (res.detail) appendLog(res.detail);
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message ? err.message : "Reboot request failed.";
+      appendLog(message);
+    } finally {
+      setRebootingMode(null);
+    }
+  }
+
   // Derived state
   const isConnected = Boolean(status?.connected) || status?.state === "CONNECTED";
   const needsAuth = isConnected && status?.authorized === false;
@@ -309,6 +334,8 @@ export default function FRPToolsScreen({
           onOpenFrp={handleOpenFrp}
           onUnlockScreen={handleUnlockScreen}
           onComingSoon={(kind) => setComingSoon(kind)}
+          onRebootMode={handleRebootMode}
+          rebootingMode={rebootingMode}
           busy={busy}
         />
       )}

@@ -165,6 +165,7 @@ export interface AcceptConsentResult {
   ok: boolean;
   flashReset?: boolean;
   frpBypass?: boolean;
+  unlockScreen?: boolean;
   error?: string;
 }
 
@@ -174,7 +175,14 @@ export interface OperationResult {
   detail?: string;
 }
 
-export type OperationKind = "flash-reset" | "frp-bypass" | "unlock-screen";
+export type OperationKind = "flash-reset" | "frp-bypass" | "unlock-screen" | "reboot-mode";
+
+/**
+ * Reboot targets offered by the Home screen "Quick Boot Switcher" panel. Mapped
+ * 1:1 by the main process to `adb reboot bootloader|recovery|edl` — `system`
+ * sends a plain `adb reboot` (normal boot).
+ */
+export type RebootMode = "bootloader" | "recovery" | "edl" | "system";
 
 /**
  * Transport mode the user has been guided into for a locked device (selected
@@ -278,6 +286,12 @@ export interface FrpbBridge {
     flashReset: (options?: OperationOptions) => Promise<OperationResult>;
     frpBypass: (options?: OperationOptions) => Promise<OperationResult>;
     unlockScreen: (options?: OperationOptions) => Promise<OperationResult>;
+    /**
+     * One-click boot-mode switcher — reboots an authorized ADB device into the
+     * requested mode (no data wipe). Progress is streamed on the operation event
+     * channel so the Quick Boot Switcher buttons show live spinners + console logs.
+     */
+    rebootMode: (mode: RebootMode) => Promise<OperationResult>;
     onOperationEvent: (cb: (event: OperationEvent) => void) => () => void;
     onOperationStatus: (cb: (state: OperationRunState) => void) => () => void;
   };

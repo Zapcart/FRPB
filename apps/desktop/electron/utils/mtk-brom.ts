@@ -4,7 +4,12 @@
 // isme low-level USB commands ke through device access possible hai.
 
 import { log } from "./logger";
-import usb, { Device, LibUSBException, OutEndpoint, InEndpoint, Interface, ConfigDescriptor } from "usb";
+// node-usb@2.x sets `__esModule: true`, so a default import compiles to
+// `__importDefault(require("usb")).default` which is `undefined` under
+// esModuleInterop. Use a namespace import for the runtime value, and a
+// separate type-only import for the named types.
+import * as usb from "usb";
+import type { Device, LibUSBException, OutEndpoint, InEndpoint, Interface, ConfigDescriptor } from "usb";
 import { promisify } from "node:util";
 
 // ─── Constants ────────────────────────────────────────────────────────────────

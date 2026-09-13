@@ -527,6 +527,77 @@ export async function adbShell(serial: string, command: string): Promise<string>
   return result.stdout.trim();
 }
 
+// ─── Fastboot command helpers ────────────────────────────────────────────────
+
+/**
+ * List devices currently sitting in fastboot/bootloader mode. `fastboot devices`
+ * prints "<serial>\tfastboot" per line. Returns null when the fastboot binary is
+ * unavailable (caller must distinguish "no fastboot" from "no device").
+ */
+export async function fastbootDevices(): Promise<string[] | null> {
+  const result = await runPlatformTool("fastboot", ["devices"], 15_000);
+  if (!result) return null;
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.split(/\s+/)[0])
+    .filter((serial): serial is string => Boolean(serial));
+}
+
+/**
+ * Wipe the userdata partition on a fastboot device. Fastboot is the fallback
+ * transport when the phone is in bootloader mode and exposes no ADB shell:
+ *   1. `fastboot -w`                 (erase userdata + metadata + reformat)
+ *   2. `fastboot erase userdata`     (explicit erase on stricter bootloaders)
+ *   3. `fastboot erase metadata`     (best-effort metadata cleanup)
+ * Returns the first command that exits 0; a non-zero exit that is NOT an
+ * "unsupported command" error is treated as a hard failure (the bootloader
+ * exists but refused the wipe) so we never report a false success.
+ */
+export async function fastbootWipeUserData(
+  serial: string
+): Promise<{ ok: boolean; detail?: string }> {
+  const attempts: Array<{ label: string; args: string[] }> = [
+    { label: "fastboot -w", args: ["-s", serial, "-w"] },
+    { label: "fastboot erase userdata", args: ["-s", serial, "erase", "userdata"] },
+    { label: "fastboot erase metadata", args: ["-s", serial, "erase", "metadata"] },
+  ];
+
+  let lastDetail: string | undefined;
+  for (const attempt of attempts) {
+    const result = await runPlatformTool("fastboot", attempt.args, ADB_TIMEOUT_MS);
+    if (!result) {
+      return { ok: false, detail: "Fastboot tools not installed" };
+    }
+    if (result.exitCode === 0) {
+      return { ok: true, detail: attempt.label };
+    }
+    lastDetail = `${attempt.label} failed (exit ${result.exitCode})${result.lastErrorLine ? `: ${result.lastErrorLine}` : ""}`;
+    log.warn(
+      `[fastboot] wipe attempt ${attempt.label} → exit ${result.exitCode}: ${result.lastErrorLine}`
+    );
+    const errText = `${result.stdout} ${result.stderr}`.toLowerCase();
+    const unsupported =
+      /unknown|not (supported|found)|no such|invalid|command not|isn't a/i.test(errText);
+    if (!unsupported) {
+      // The bootloader understood the command but rejected it — stop retrying.
+      return { ok: false, detail: lastDetail };
+    }
+  }
+
+  return { ok: false, detail: lastDetail };
+}
+
+/** Reboot a fastboot device back into Android (or an explicit target). */
+export async function fastbootReboot(
+  serial: string,
+  target?: string
+): Promise<ToolResult | null> {
+  const args = target ? ["-s", serial, "reboot", target] : ["-s", serial, "reboot"];
+  return runPlatformTool("fastboot", args, 30_000);
+}
+
 /** Simple blocking wait (promise) without event-loop starvation. */
 export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

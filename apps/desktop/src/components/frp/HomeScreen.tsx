@@ -1,15 +1,21 @@
-import type { DeviceStatus } from "../../lib/ipc";
+import type { DeviceStatus, RebootMode } from "../../lib/ipc";
 import {
+  type LucideIcon,
   AlertTriangle,
   CheckCircle2,
   KeyRound,
+  Loader2,
   Lock,
   MapPin,
+  Power,
   RefreshCw,
+  RotateCcw,
   Smartphone,
+  Terminal,
   Usb,
   Wifi,
   XCircle,
+  Zap,
 } from "lucide-react";
 
 interface HomeScreenProps {
@@ -24,14 +30,30 @@ interface HomeScreenProps {
   onOpenFrp: () => void;
   onUnlockScreen: () => void;
   onComingSoon: (kind: "wireless" | "location") => void;
+  /** One-click reboot into a target boot mode (no data wipe). */
+  onRebootMode: (mode: RebootMode) => void;
+  /** The mode currently being requested — drives the per-button spinner. */
+  rebootingMode: RebootMode | null;
   busy: boolean;
 }
 
 /**
+ * Quick Boot Switcher targets. Each maps to an `adb reboot <mode>` handled in the
+ * main process (`device:rebootMode`) with live progress streamed to the console.
+ */
+const REBOOT_ACTIONS: Array<{ mode: RebootMode; label: string; hint: string; icon: LucideIcon }> = [
+  { mode: "bootloader", label: "Reboot Fastboot", hint: "adb reboot bootloader", icon: Terminal },
+  { mode: "recovery", label: "Reboot Recovery", hint: "adb reboot recovery", icon: RotateCcw },
+  { mode: "edl", label: "Reboot EDL", hint: "adb reboot edl", icon: Zap },
+  { mode: "system", label: "Reboot System", hint: "adb reboot", icon: Power },
+];
+
+/**
  * Screen 1 — USB Connection home.
  * Heading, connection graphic, status pill, and the three feature cards.
- * Only "Remove Google FRP Lock" is actionable (FRP wizard); Unlock Screen +
- * Location Change are "Coming Soon" placeholders for future engine ops.
+ * "Remove Google FRP Lock" (FRP wizard) and "Unlock Android Screen" (ADB
+ * lock-screen removal) are both actionable; only Location Change remains a
+ * "Coming Soon" placeholder for a future engine op.
  */
 export default function HomeScreen({
   status,
@@ -43,7 +65,10 @@ export default function HomeScreen({
   onTabChange,
   onRefresh,
   onOpenFrp,
+  onUnlockScreen,
   onComingSoon,
+  onRebootMode,
+  rebootingMode,
   busy,
 }: HomeScreenProps) {
   return (
@@ -209,6 +234,51 @@ export default function HomeScreen({
             Coming Soon
           </span>
         </button>
+      </div>
+
+      {/* Quick Boot Switcher — one-click reboot into a target mode (no wipe) */}
+      <div className="mt-6 rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <RotateCcw className="h-4 w-4 text-brand-600" />
+            <h3 className="text-sm font-bold text-slate-900">Quick Boot Switcher</h3>
+          </div>
+          {!isConnected && (
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+              No device
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          Reboot your device into a target boot mode without wiping data. Requires an authorized ADB
+          connection.
+        </p>
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {REBOOT_ACTIONS.map(({ mode, label, hint, icon: Icon }) => {
+            const spinning = rebootingMode === mode;
+            const disabled = !isConnected || busy;
+            return (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => onRebootMode(mode)}
+                disabled={disabled}
+                title={!isConnected ? "Connect a device to enable" : hint}
+                className="flex flex-col items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-3 text-center transition hover:border-brand-300 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                  {spinning ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-brand-600" />
+                  ) : (
+                    <Icon className="h-4 w-4" />
+                  )}
+                </span>
+                <span className="text-xs font-semibold text-slate-800">{label}</span>
+                <span className="font-mono text-[10px] text-slate-400">{hint}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

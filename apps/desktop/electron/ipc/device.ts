@@ -21,6 +21,7 @@
 //   device:flashReset (handle)     → { success, message, detail? }
 //   device:frpBypass (handle)      → { success, message, detail? }
 //   device:unlockScreen (handle)   → { success, message }
+//   device:rebootMode (handle)     → { success, message }  (bootloader|recovery|edl|system)
 
 import { ipcMain, BrowserWindow } from "electron";
 import { log } from "../utils/logger";
@@ -31,6 +32,9 @@ import {
   adbReboot,
   adbWipeData,
   adbShell,
+  fastbootDevices,
+  fastbootReboot,
+  fastbootWipeUserData,
   isPlatformToolsBundled,
   sleep,
 } from "../utils/adb";
@@ -143,9 +147,31 @@ const MODE_PROFILES: Record<OperationMode, ModeProfile> = {
 let pollTimer: NodeJS.Timeout | null = null;
 
 // ─── Consent gate (in-memory; resets on app restart by design) ───────────────
-const CONSENT_OPS = ["flash-reset", "frp-bypass", "unlock-screen"] as const;
+const CONSENT_OPS = ["flash-reset", "frp-bypass", "unlock-screen", "reboot-mode"] as const;
 type ConsentOp = (typeof CONSENT_OPS)[number];
 const consentGrantedFor = new Set<ConsentOp>();
+
+// ─── One-click boot-mode switcher ────────────────────────────────────────────
+// Supported reboot targets surfaced by the Home screen "Quick Boot Switcher"
+// panel. Mirrors the `RebootMode` union in ../src/lib/ipc.d.ts (the main process
+// is the authority on what the engine accepts).
+type RebootMode = "bootloader" | "recovery" | "edl" | "system";
+
+/** `adb reboot` argument per target (`system` omits it → plain `adb reboot`). */
+const REBOOT_ADB_MODE: Record<RebootMode, string | undefined> = {
+  bootloader: "bootloader",
+  recovery: "recovery",
+  edl: "edl",
+  system: undefined,
+};
+
+/** Human label streamed to the operation console. */
+const REBOOT_LABELS: Record<RebootMode, string> = {
+  bootloader: "Fastboot / Bootloader",
+  recovery: "Recovery",
+  edl: "EDL (Emergency Download)",
+  system: "System (normal boot)",
+};
 
 // ─── Global operation run-state (cross-tab console + control locking) ────────
 // A single authoritative source for "is an operation running" plus a rolling
@@ -542,27 +568,63 @@ export function registerDeviceHandlers(): void {
     beginOperation("flash-reset");
     pushOperationLog("START", `Starting flash reset${opts.brand ? ` (${opts.brand})` : ""}…`, 0);
     try {
+      // ── Preferred transport: ADB (device booted / recovery with debugging) ──
       const adb = await probeAdb();
-      if (!adb.connected || !adb.serial) {
-        const message = "No ADB device connected. Boot the phone into Recovery/Fastboot and retry.";
+      if (adb.connected && adb.serial && adb.authorized) {
+        pushOperationLog("WIPE", "ADB device ready — wiping user data…", 40);
+        const wipe = await adbWipeData(adb.serial);
+        if (!wipe.ok) {
+          const message = wipe.detail
+            ? `Flash reset failed: ${wipe.detail}`
+            : "Flash reset failed.";
+          pushOperationLog("ERROR", message, null, "error");
+          return { success: false, message };
+        }
+        pushOperationLog("REBOOT", "Data wiped — rebooting device…", 85);
+        await adbReboot(adb.serial);
+        const message = "Flash reset complete.";
+        pushOperationLog("DONE", message, 100, "ok");
+        return { success: true, message, detail: wipe.detail };
+      }
+
+      // ── Fallback transport: Fastboot (bootloader mode, no ADB shell) ───────
+      // A locked phone is often only reachable in bootloader/fastboot mode, so
+      // the ADB-only path above would dead-end. Probe fastboot before failing.
+      pushOperationLog(
+        "MODE",
+        adb.connected
+          ? "ADB device unauthorized — trying Fastboot…"
+          : "No ADB device — trying Fastboot…",
+        20
+      );
+      const devices = await fastbootDevices();
+      if (devices === null) {
+        const message = adb.connected
+          ? "Device not authorized — enable USB debugging or use a supported recovery mode."
+          : "No ADB or Fastboot device connected. Boot the phone into Fastboot/Recovery and retry.";
         pushOperationLog("ERROR", message, null, "error");
         return { success: false, message };
       }
-      if (!adb.authorized) {
-        const message = "Device not authorized — enable USB debugging or use a supported recovery mode.";
+      const serial = devices[0];
+      if (!serial) {
+        const message =
+          "No Fastboot device detected. Boot the phone into Fastboot mode (Vol Down + Power) and retry.";
         pushOperationLog("ERROR", message, null, "error");
         return { success: false, message };
       }
-      pushOperationLog("WIPE", "Wiping user data…", 40);
-      const wipe = await adbWipeData(adb.serial);
+
+      pushOperationLog("WIPE", `Fastboot device ${serial} — wiping userdata…`, 45);
+      const wipe = await fastbootWipeUserData(serial);
       if (!wipe.ok) {
-        const message = wipe.detail ? `Flash reset failed: ${wipe.detail}` : "Flash reset failed.";
+        const message = wipe.detail
+          ? `Fastboot reset failed: ${wipe.detail}`
+          : "Fastboot reset failed.";
         pushOperationLog("ERROR", message, null, "error");
         return { success: false, message };
       }
-      pushOperationLog("REBOOT", "Data wiped — rebooting device…", 85);
-      await adbReboot(adb.serial);
-      const message = "Flash reset complete.";
+      pushOperationLog("REBOOT", "Userdata wiped — rebooting device…", 85);
+      await fastbootReboot(serial);
+      const message = "Flash reset complete (Fastboot).";
       pushOperationLog("DONE", message, 100, "ok");
       return { success: true, message, detail: wipe.detail };
     } finally {
@@ -599,11 +661,13 @@ export function registerDeviceHandlers(): void {
         "pm clear com.android.phone",
       ];
       for (let i = 0; i < cmds.length; i++) {
+        const cmd = cmds[i];
+        if (!cmd) continue;
         try {
-          await adbShell(adb.serial, cmds[i]);
-          pushOperationLog("STEP", `Disabled: ${cmds[i]} (${i + 1}/${cmds.length})`, Math.round((i + 1) * 100 / cmds.length));
+          await adbShell(adb.serial, cmd);
+          pushOperationLog("STEP", `Disabled: ${cmd} (${i + 1}/${cmds.length})`, Math.round((i + 1) * 100 / cmds.length));
         } catch (err) {
-          pushOperationLog("WARN", `Skipped: ${cmds[i]} — ${(err as Error).message}`, Math.round((i + 1) * 100 / cmds.length));
+          pushOperationLog("WARN", `Skipped: ${cmd} — ${(err as Error).message}`, Math.round((i + 1) * 100 / cmds.length));
         }
       }
       pushOperationLog("REBOOT", "Rebooting device to apply unlock…", 90);
@@ -619,6 +683,68 @@ export function registerDeviceHandlers(): void {
       endOperation();
     }
   });
+
+  // device:rebootMode — one-click boot-mode switcher. Reboots an authorized ADB
+  // device straight into Fastboot (bootloader) / Recovery / EDL / System with NO
+  // data wipe. Every adb stage is streamed to the shared operation console so the
+  // Quick Boot Switcher buttons show live progress. Failures are reported as a
+  // typed { success: false } result (never thrown), so the app cannot crash on a
+  // disconnected / unauthorized device.
+  ipcMain.handle("device:rebootMode", async (event, mode: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) activeWindow = win;
+    const target = sanitizeRebootMode(mode);
+    if (!target) {
+      return { success: false, message: `Unsupported reboot mode: ${String(mode)}` };
+    }
+    const label = REBOOT_LABELS[target];
+    beginOperation("reboot-mode");
+    pushOperationLog("START", `Rebooting into ${label}…`, 0);
+    try {
+      const adb = await probeAdb();
+      if (!adb.connected || !adb.serial) {
+        const message = "No ADB device connected — enable USB debugging and reconnect.";
+        pushOperationLog("ERROR", message, null, "error");
+        return { success: false, message };
+      }
+      if (!adb.authorized) {
+        const message = "Device not authorized — accept the ADB prompt on your phone.";
+        pushOperationLog("ERROR", message, null, "error");
+        return { success: false, message };
+      }
+      const adbMode = REBOOT_ADB_MODE[target];
+      const cmdLabel = `adb reboot${adbMode ? ` ${adbMode}` : ""}`;
+      pushOperationLog("SEND", `${cmdLabel} → ${label}`, 50);
+      const result = await adbReboot(adb.serial, adbMode);
+      if (!result) {
+        const message = "ADB tools not installed — cannot send reboot command.";
+        pushOperationLog("ERROR", message, null, "error");
+        return { success: false, message };
+      }
+      // Surface captured stdout/stderr straight to the UI operation terminal.
+      const output = `${result.stdout} ${result.stderr}`.trim();
+      if (output) pushOperationLog("OUT", output, 80);
+      // The adb transport routinely drops as the device leaves Android for
+      // bootloader/edl/recovery, so a non-zero exit is expected — report the
+      // captured detail but treat the reboot as successfully *requested*.
+      if (result.exitCode !== 0 && result.exitCode !== null) {
+        const detail = result.lastErrorLine || output || `adb exited ${result.exitCode}`;
+        const message = `Reboot to ${label} requested. ${detail}`;
+        pushOperationLog("WARN", message, 100, "warn");
+        return { success: true, message };
+      }
+      const message = `Reboot to ${label} requested.`;
+      pushOperationLog("DONE", message, 100, "ok");
+      return { success: true, message };
+    } catch (err) {
+      const msg = err instanceof Error && err.message ? err.message : "Reboot failed.";
+      pushOperationLog("ERROR", msg, null, "error");
+      return { success: false, message: msg };
+    } finally {
+      // Always release the global run-state lock, even on an unexpected throw.
+      endOperation();
+    }
+  });
 }
 
 /** Coerce an untrusted renderer payload into a safe OperationOptions. */
@@ -627,6 +753,13 @@ function sanitizeOperationOptions(raw: unknown): OperationOptions {
   const brand = typeof o.brand === "string" ? o.brand : undefined;
   const mode = o.mode === "test-mode" || o.mode === "brom" || o.mode === "fastboot-recovery" ? o.mode : undefined;
   return { brand, mode };
+}
+
+/** Coerce an untrusted renderer payload into a supported RebootMode (or null). */
+function sanitizeRebootMode(raw: unknown): RebootMode | null {
+  return raw === "bootloader" || raw === "recovery" || raw === "edl" || raw === "system"
+    ? raw
+    : null;
 }
 
 /** Coerce an untrusted renderer payload into a safe FRP bypass options.

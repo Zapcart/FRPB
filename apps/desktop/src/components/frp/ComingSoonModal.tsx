@@ -1,7 +1,7 @@
 import { ArrowLeft, Clock } from "lucide-react";
 
 interface ComingSoonModalProps {
-  kind: "wireless" | "unlock" | "location";
+  kind: "wireless" | "location";
   onClose: () => void;
 }
 
@@ -9,10 +9,6 @@ const COPY: Record<ComingSoonModalProps["kind"], { title: string; desc: string }
   wireless: {
     title: "Wireless Connection",
     desc: "ADB over Wi-Fi is coming soon. For now, connect your device with a USB cable and enable USB debugging.",
-  },
-  unlock: {
-    title: "Unlock Android Screen",
-    desc: "Forgot your PIN, pattern, or password? The unlock tool is being prepared and will be available in a future update.",
   },
   location: {
     title: "Location Change",
@@ -22,7 +18,7 @@ const COPY: Record<ComingSoonModalProps["kind"], { title: string; desc: string }
 
 /**
  * "Coming soon" modal for features whose engine operations are not implemented
- * yet (Wireless, Unlock Android Screen, Location Change). Pure UI placeholder.
+ * yet (Wireless, Location Change). Pure UI placeholder.
  */
 export default function ComingSoonModal({ kind, onClose }: ComingSoonModalProps) {
   const copy = COPY[kind];

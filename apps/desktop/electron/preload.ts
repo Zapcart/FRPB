@@ -15,6 +15,7 @@ import type {
   OperationOptions,
   OperationResult,
   OperationRunState,
+  RebootMode,
   ResetResult,
   UpdaterStatus,
   VerifyResponse,
@@ -73,8 +74,8 @@ const bridge: FrpbBridge = {
       ipcRenderer.invoke("device:frpBypass", options),
     unlockScreen: (options?: OperationOptions): Promise<OperationResult> =>
       ipcRenderer.invoke("device:unlockScreen", options),
-    unlockScreen: (options?: OperationOptions): Promise<OperationResult> =>
-      ipcRenderer.invoke("device:unlockScreen", options),
+    rebootMode: (mode: RebootMode): Promise<OperationResult> =>
+      ipcRenderer.invoke("device:rebootMode", mode),
     onOperationEvent: (cb: (event: OperationEvent) => void): (() => void) =>
       onChannel<OperationEvent>("device:operation:event", cb),
     onOperationStatus: (cb: (state: OperationRunState) => void): (() => void) =>
