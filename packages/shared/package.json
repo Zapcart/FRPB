@@ -3,13 +3,26 @@
   "version": "0.1.0",
   "private": true,
   "description": "FRPB shared types, constants and zod validation schemas (web + desktop)",
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./analytics": "./src/analytics.ts"
+    ".": {
+      "types": "./src/index.ts",
+      "node": "./dist/index.js",
+      "require": "./dist/index.js",
+      "import": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./analytics": {
+      "types": "./src/analytics.ts",
+      "node": "./dist/analytics.js",
+      "require": "./dist/analytics.js",
+      "import": "./src/analytics.ts",
+      "default": "./dist/analytics.js"
+    }
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -14,7 +14,7 @@
     "dev:reset": "cross-env FRPB_RESET_ON_START=1 npm run dev:electron",
     "setup:platform-tools": "node scripts/setup-platform-tools.js",
     "build:renderer": "vite build",
-    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:electron": "pnpm --filter @frpb/shared build && tsc -p tsconfig.electron.json",
     "build": "npm run build:electron && npm run build:renderer",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "dist": "npm run setup:platform-tools && npm run build && electron-builder",
