@@ -249,3 +249,188 @@ export interface FrpBypassState {
   message: string;
   result?: FrpBypassResult;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Auto-detection engine (shared contract for `device:auto-detected`)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Connection transport the device was discovered through. */
+export type DeviceConnectionState =
+  | "disconnected"
+  | "adb"
+  | "fastboot"
+  | "mtp"
+  | "brom"
+  | "edl"
+  | "com";
+
+/** Chipset family buckets — drive which model/exploit profile is applicable. */
+export type ChipsetFamily =
+  | "MediaTek"
+  | "Qualcomm"
+  | "Samsung Exynos"
+  | "Unknown";
+
+/** The only two user-facing operations in the simplified 2-click workflow. */
+export type PrimaryAction = "flash-reset" | "frp-bypass";
+
+/** Payload pushed on the `device:auto-detected` channel whenever the background
+ *  USB/ADB poller observes a device plug in or change state. Drives the header
+ *  status badge and automatically sets the brand context in the renderer. */
+export interface DeviceAutoDetected {
+  /** True when a usable Android device is currently attached. */
+  detected: boolean;
+  brand: string | null;
+  model: string | null;
+  serial: string | null;
+  /** COM / tty port label when a serial interface is present. */
+  port: string | null;
+  chipset: ChipsetFamily;
+  connection: DeviceConnectionState;
+  vid: number | null;
+  pid: number | null;
+  driverInstalled: boolean;
+  /** True when this model strictly needs a hardware key combination first. */
+  requiresManualMode: boolean;
+  lastScanAt: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Searchable model catalog (brand + chipset aware)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** A single searchable model entry enriched with brand + chipset metadata. */
+export interface ModelCatalogEntry {
+  model: string;
+  brand: string;
+  chipset: ChipsetFamily;
+  /** True when the device must first be put into a special mode via key combo. */
+  manualMode: boolean;
+  /** Human-readable key combination for the manual-mode popup. */
+  keyCombo?: string;
+}
+
+/** Filter a model catalog by detected brand and/or chipset family. */
+export function filterModelCatalog(
+  catalog: readonly ModelCatalogEntry[],
+  opts: { brand?: string | null; chipset?: ChipsetFamily | null; query?: string | null } = {},
+): ModelCatalogEntry[] {
+  const brand = opts.brand?.trim().toLowerCase();
+  const query = opts.query?.trim().toLowerCase();
+  return catalog.filter((entry) => {
+    if (
+      brand &&
+      !entry.brand.toLowerCase().includes(brand) &&
+      !entry.model.toLowerCase().includes(brand)
+    ) {
+      return false;
+    }
+    if (opts.chipset && opts.chipset !== "Unknown" && entry.chipset !== opts.chipset) {
+      return false;
+    }
+    if (query && !entry.model.toLowerCase().includes(query)) {
+      return false;
+    }
+    return true;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dual progress (Overall + Current Task) + streamed stages
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Dual-progress model: an overall bar (whole operation) and a current-task bar
+ *  (the active step). Both are 0-100 and reach 100 when the operation completes. */
+export interface DualProgress {
+  overall: number;
+  current: number;
+}
+
+/** A bracketed stage streamed to the progress console while an operation runs,
+ *  e.g. [Device Connected] -> [Chipset Matched] -> [Exploit Sent] -> [100% DONE]. */
+export interface OperationStage {
+  /** Stable machine key, e.g. "CONNECT" | "CHIPSET" | "EXPLOIT" | "DONE". */
+  id: string;
+  /** Bracketed display label, e.g. "[Device Connected]". */
+  label: string;
+  detail: string;
+  /** Progress contribution for this stage (0-100). */
+  progress: number;
+  done: boolean;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Manual key-combination fallback guidance
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Step-by-step manual-mode guidance shown in the popup before a reset that
+ *  strictly requires a hardware key combination (e.g. BROM / EDL entry). */
+export interface ManualModeGuide {
+  brand: string;
+  model: string;
+  chipset: ChipsetFamily;
+  /** Exact button combination, e.g. "Volume Down + Power". */
+  keyCombo: string;
+  steps: string[];
+  note?: string;
+}
+
+/** Key-combination table used by the manual-mode fallback popup. */
+const MANUAL_KEY_COMBOS: Record<ChipsetFamily, { keyCombo: string; steps: string[]; note?: string }> = {
+  MediaTek: {
+    keyCombo: "Volume Down + Power (or Volume Up + Power)",
+    steps: [
+      "Power the device completely off.",
+      "Hold Volume Down + Power together for ~10 seconds.",
+      "If that fails, hold Volume Up + Power instead.",
+      "Connect the USB cable while holding the buttons.",
+      "Release the buttons once the tool reports [Chipset Matched].",
+    ],
+    note: "Some MediaTek models require the battery/back cover to be disconnected first.",
+  },
+  Qualcomm: {
+    keyCombo: "Volume Up + Volume Down + Power",
+    steps: [
+      "Power the device completely off.",
+      "Press and hold Volume Up + Volume Down + Power together.",
+      "Connect the USB cable while holding the buttons.",
+      "Hold until the screen stays black (EDL mode) — do not release early.",
+      "Wait for the tool to report [Device Connected] in EDL mode.",
+    ],
+    note: "An EDL cable or deep-flash adapter may be required for some Snapdragon models.",
+  },
+  "Samsung Exynos": {
+    keyCombo: "Volume Down + Power",
+    steps: [
+      "Power the device completely off.",
+      "Hold Volume Down + Power to enter Download mode.",
+      "Press Volume Up to confirm when the warning screen appears.",
+      "Connect the USB cable once Download mode is shown.",
+    ],
+  },
+  Unknown: {
+    keyCombo: "Volume Down + Power",
+    steps: [
+      "Power the device completely off.",
+      "Hold Volume Down + Power for ~10 seconds.",
+      "Connect the USB cable while holding the buttons.",
+    ],
+  },
+};
+
+/** Build the manual key-combination guide for a detected device. */
+export function manualModeGuideFor(
+  brand: string | null,
+  model: string | null,
+  chipset: ChipsetFamily,
+): ManualModeGuide {
+  const combo = MANUAL_KEY_COMBOS[chipset] ?? MANUAL_KEY_COMBOS.Unknown;
+  return {
+    brand: brand ?? "Unknown",
+    model: model ?? "Unknown model",
+    chipset,
+    keyCombo: combo.keyCombo,
+    steps: combo.steps,
+    note: combo.note,
+  };
+}

@@ -13,6 +13,7 @@
 //   device:getStatus (handle)      → DeviceStatus (same unified scan)
 //   device:startPolling / stopPolling (handle)
 //   device:listModels (handle)     → { models: string[], detectedModel?: string }
+//   device:searchModels (handle)   → ModelCatalogEntry[] (brand/chipset filtered)
 //   device:getDeviceInfo (handle)  → DeviceInfo (throws when no authorized ADB device)
 //   device:checkConsent (handle)   → { flashReset: boolean, frpBypass: boolean }
 //   device:acceptConsent (handle)  → { ok: boolean; flashReset?: boolean; frpBypass?: boolean; error?: string }
@@ -20,6 +21,7 @@
 //   device:operation:status (push) → { running, op, logs } (global cross-tab run-state)
 //   device:log (push)              → { op, stream, text, ts } (live child_process stdout/stderr)
 //   device:info-updated (push)     → DeviceInfoSnapshot (continuous USB/ADB auto-read)
+//   device:auto-detected (push)    → DeviceAutoDetected (brand/serial/port/chipset auto-context)
 //   device:requestInfo (handle)    → DeviceInfoSnapshot (on-demand auto-read)
 //   device:flashReset (handle)     → { success, message, stdout?, detail? }
 //   device:frpBypass (handle)      → { success, message, detail? }
@@ -48,6 +50,12 @@ import {
 } from "../utils/adb";
 import { runFrpBypass } from "../utils/frp-engine";
 import { detectChipsetFromModel } from "../utils/mtk-brom";
+import { searchModels } from "@frpb/shared";
+import type {
+  ChipsetFamily as SharedChipsetFamily,
+  DeviceAutoDetected,
+  DeviceConnectionState,
+} from "@frpb/shared";
 
 // Hard ceiling for a streamed reboot/wipe/erase command. `adb reboot` returns
 // almost instantly; the longer bound only covers a stalled USB transport.
@@ -707,8 +715,13 @@ export function registerDeviceHandlers(): void {
 
   // On-demand auto-read snapshot (same shape as the pushed event). The renderer
   // calls this on mount so the terminal fields populate immediately instead of
-  // waiting for the first 2s poll tick.
-  ipcMain.handle("device:requestInfo", async () => buildInfoSnapshot());
+  // waiting for the first 2s poll tick. Also emits the derived auto-detected
+  // event so the header badge + brand context sync without a poll round-trip.
+  ipcMain.handle("device:requestInfo", async (event) => {
+    const snapshot = await buildInfoSnapshot();
+    emitAutoDetected(BrowserWindow.fromWebContents(event.sender), snapshot);
+    return snapshot;
+  });
 
   ipcMain.handle("device:listModels", async () => {
     const devices = await adbDevices();
@@ -718,6 +731,29 @@ export function registerDeviceHandlers(): void {
     const detectedModel = devices[0]?.model;
     return { models: listKnownModels(), detectedModel };
   });
+
+  // Brand/chipset-filtered typed model catalog for the simplified Step 2
+  // dropdown/search. Backed by the strongly-typed catalog in @frpb/shared.
+  ipcMain.handle(
+    "device:searchModels",
+    async (
+      _event,
+      opts?: { query?: string | null; brand?: string | null; chipset?: string | null },
+    ) => {
+      const chipset =
+        opts?.chipset === "MediaTek" ||
+        opts?.chipset === "Qualcomm" ||
+        opts?.chipset === "Samsung Exynos" ||
+        opts?.chipset === "Unknown"
+          ? opts.chipset
+          : null;
+      return searchModels({
+        query: opts?.query ?? null,
+        brand: opts?.brand ?? null,
+        chipset,
+      });
+    },
+  );
 
   ipcMain.handle("device:getDeviceInfo", async () => {
     const adb = await probeAdb();
@@ -1507,6 +1543,81 @@ function broadcastInfoChanged(win: BrowserWindow, snapshot: DeviceInfoSnapshot):
   }
 }
 
+// ─── Auto-detection engine (`device:auto-detected`) ──────────────────────────
+// Derives the simplified, 2-click workflow payload from the unified snapshot:
+// brand / serial / port / chipset + a normalized connection state + whether the
+// device strictly requires a manual key combination (MediaTek BROM / Qualcomm
+// EDL). Pushed only when a user-visible field changes, so the 2s poll is quiet.
+
+function chipsetFamilyFrom(chipset: string | null): SharedChipsetFamily {
+  if (chipset === "MediaTek" || chipset === "Qualcomm" || chipset === "Samsung Exynos") {
+    return chipset;
+  }
+  return "Unknown";
+}
+
+function connectionStateFrom(snapshot: DeviceInfoSnapshot): DeviceConnectionState {
+  if (!snapshot.connected) return "disconnected";
+  const mode = `${snapshot.mode ?? ""} ${snapshot.mtp ?? ""}`.toLowerCase();
+  if (/fastboot|bootloader/.test(mode)) return "fastboot";
+  if (snapshot.source === "adb") return "adb";
+  if (/brom|vcom|preloader/.test(mode)) return "brom";
+  if (/edl|9008/.test(mode)) return "edl";
+  if (snapshot.port) return "com";
+  if (/mtp/.test(mode)) return "mtp";
+  return snapshot.source === "usb" ? "mtp" : "disconnected";
+}
+
+function buildAutoDetected(snapshot: DeviceInfoSnapshot): DeviceAutoDetected {
+  const chipset = chipsetFamilyFrom(snapshot.chipset);
+  return {
+    detected: snapshot.connected,
+    brand: snapshot.brand,
+    model: snapshot.model,
+    serial: snapshot.serial,
+    port: snapshot.port,
+    chipset,
+    connection: connectionStateFrom(snapshot),
+    vid: snapshot.vid ? parseInt(snapshot.vid, 16) : null,
+    pid: snapshot.pid ? parseInt(snapshot.pid, 16) : null,
+    driverInstalled: snapshot.driverInstalled,
+    // MediaTek BROM and Qualcomm EDL both require a hardware key combination.
+    requiresManualMode: chipset === "MediaTek" || chipset === "Qualcomm",
+    lastScanAt: snapshot.lastScanAt,
+  };
+}
+
+const AUTO_DIFF_KEYS: Array<keyof DeviceAutoDetected> = [
+  "detected",
+  "brand",
+  "model",
+  "serial",
+  "port",
+  "chipset",
+  "connection",
+  "vid",
+  "pid",
+  "driverInstalled",
+  "requiresManualMode",
+];
+
+let lastAutoDetected: DeviceAutoDetected | null = null;
+
+/** Push `device:auto-detected` only when a user-visible field changed. */
+function emitAutoDetected(win: BrowserWindow | null, snapshot: DeviceInfoSnapshot): void {
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return;
+  const next = buildAutoDetected(snapshot);
+  const prev = lastAutoDetected;
+  const changed = !prev || AUTO_DIFF_KEYS.some((k) => prev[k] !== next[k]);
+  if (!changed) return;
+  lastAutoDetected = next;
+  try {
+    win.webContents.send("device:auto-detected", next);
+  } catch (err) {
+    log.warn("[device] auto-detected send failed:", err);
+  }
+}
+
 // ─── USB polling (pre-existing behavior, preserved) ──────────────────────────
 
 function startPolling(win: BrowserWindow): void {
@@ -1533,7 +1644,10 @@ function startPolling(win: BrowserWindow): void {
   };
   const pushInfo = () => {
     void buildInfoSnapshot()
-      .then((snapshot) => broadcastInfoChanged(win, snapshot))
+      .then((snapshot) => {
+        broadcastInfoChanged(win, snapshot);
+        emitAutoDetected(win, snapshot);
+      })
       .catch((err) => log.error("[device] info auto-read failed:", err));
   };
   // Push an immediate scan so the UI isn't stuck on "SEARCHING" for 2s.
@@ -1558,6 +1672,7 @@ function stopPolling(): void {
   activeWindow = null;
   // Force the next monitoring session to re-emit the first snapshot.
   lastInfoSnapshot = null;
+  lastAutoDetected = null;
 }
 
 // Diagnostic: enumerate every USB device (VID:PID + interface classes) so

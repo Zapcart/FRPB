@@ -14,9 +14,11 @@
 //   - external links open in a new tab,
 //   - the updater reports a clear "desktop only" message.
 
+import { searchModels as sharedSearchModels } from "@frpb/shared";
 import type {
   AcceptConsentResult,
   ConsentState,
+  DeviceAutoDetected,
   DeviceInfo,
   DeviceInfoSnapshot,
   DeviceLogPayload,
@@ -25,6 +27,7 @@ import type {
   FrpbBridge,
   LicenseProfile,
   LogEntry,
+  ModelCatalogEntry,
   OperationEvent,
   OperationKind,
   OperationOptions,
@@ -50,6 +53,7 @@ function createWebBridge(): FrpbBridge {
   const runStateListeners = new Set<(state: OperationRunState) => void>();
   const deviceLogListeners = new Set<(payload: DeviceLogPayload) => void>();
   const deviceInfoListeners = new Set<(info: DeviceInfoSnapshot) => void>();
+  const autoDetectedListeners = new Set<(info: DeviceAutoDetected) => void>();
   // Mirrors the main-process `deviceLogSinkEnabled` flag driven by
   // `setLogSink`; raw chunks are only mirrored while a Console surface listens.
   let deviceLogSinkEnabled = true;
@@ -317,6 +321,32 @@ function createWebBridge(): FrpbBridge {
         source: null,
         lastScanAt: new Date().toISOString(),
       }),
+      // Browser preview has no hardware — subscribe but never fabricate a
+      // device, mirroring the honest disconnected snapshot above.
+      onAutoDetected: (cb: (info: DeviceAutoDetected) => void): (() => void) => {
+        autoDetectedListeners.add(cb);
+        return () => {
+          autoDetectedListeners.delete(cb);
+        };
+      },
+      searchModels: async (opts?: {
+        query?: string | null;
+        brand?: string | null;
+        chipset?: string | null;
+      }): Promise<ModelCatalogEntry[]> => {
+        const chipset =
+          opts?.chipset === "MediaTek" ||
+          opts?.chipset === "Qualcomm" ||
+          opts?.chipset === "Samsung Exynos" ||
+          opts?.chipset === "Unknown"
+            ? opts.chipset
+            : null;
+        return sharedSearchModels({
+          query: opts?.query ?? null,
+          brand: opts?.brand ?? null,
+          chipset,
+        });
+      },
     },
     links: {
       openExternal: async (url: string): Promise<void> => {

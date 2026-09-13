@@ -2,7 +2,13 @@
 // Single source of truth for the `window.frpb` bridge surface, imported by
 // both preload.ts (implementation) and React components (usage).
 
-import type { VerifyStatus } from "@frpb/shared";
+import type {
+  DeviceAutoDetected,
+  ModelCatalogEntry,
+  VerifyStatus,
+} from "@frpb/shared";
+
+export type { DeviceAutoDetected, ModelCatalogEntry };
 
 export interface LicenseProfile {
   key: string;
@@ -267,6 +273,15 @@ export interface DeviceInfoSnapshot {
 }
 
 /**
+ * Subscribe to the auto-detection engine event ("device:auto-detected"). Fires
+ * whenever the background USB/ADB poller observes a device plug in or change
+ * state, carrying the brand/serial/port/chipset context used to auto-set the
+ * header status badge and the brand-scoped model dropdown. Returns an
+ * unsubscribe function.
+ */
+export type DeviceAutoDetectedEvent = DeviceAutoDetected;
+
+/**
  * Global operation run-state pushed on "device:operation:status" by the main
  * process. Unlike the per-component `OperationEvent` stream, this carries the
  * authoritative `running` flag plus the rolling log buffer so the Console Log
@@ -368,8 +383,24 @@ export interface FrpbBridge {
      * unsubscribe function.
      */
     onInfoUpdated: (cb: (info: DeviceInfoSnapshot) => void) => () => void;
+    /**
+     * Subscribe to the auto-detection engine ("device:auto-detected"). The
+     * payload carries the detected brand/serial/port/chipset + connection state
+     * so the header badge and brand context update the instant a phone is
+     * plugged in — no manual "Read Info" click. Returns an unsubscribe function.
+     */
+    onAutoDetected: (cb: (info: DeviceAutoDetected) => void) => () => void;
     /** On-demand hardware snapshot (same shape as the pushed event). */
     requestInfo: () => Promise<DeviceInfoSnapshot>;
+    /**
+     * Brand/chipset-filtered model catalog for the simplified Step 2 dropdown.
+     * Backed by the strongly-typed catalog in `@frpb/shared`.
+     */
+    searchModels: (opts?: {
+      query?: string | null;
+      brand?: string | null;
+      chipset?: string | null;
+    }) => Promise<ModelCatalogEntry[]>;
   };
   links: { openExternal: (url: string) => Promise<void> };
   updater: {

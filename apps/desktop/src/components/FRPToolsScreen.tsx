@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Power, RotateCcw, Terminal, Zap } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import type {
+  ChipsetFamily,
+  DeviceAutoDetected,
+  ManualModeGuide,
+  PrimaryAction,
+} from "@frpb/shared";
+import { manualModeGuideFor } from "@frpb/shared";
 import type {
   ConsentState,
   DeviceInfoSnapshot,
@@ -11,15 +19,10 @@ import type {
   OperationResult,
   RebootMode,
 } from "../lib/ipc";
-import HomeScreen from "./frp/HomeScreen";
-import BrandScreen from "./frp/BrandScreen";
-import MethodScreen from "./frp/MethodScreen";
+import ActionScreen, { type ActionProgress } from "./frp/ActionScreen";
 import DisclaimerModal from "./frp/DisclaimerModal";
-import ComingSoonModal from "./frp/ComingSoonModal";
-import { connectionGuideFor, methodsForBrand } from "./frp/shared";
-
-type Screen = "home" | "brand" | "method";
-type ComingSoonKind = "wireless" | "location" | null;
+import ManualModeModal from "./frp/ManualModeModal";
+import type { ConnectionGuideKey } from "./frp/shared";
 
 interface LogEntry {
   time: string;
@@ -28,17 +31,34 @@ interface LogEntry {
 
 const MAX_LOG_ENTRIES = 200;
 
-/**
- * FRP Tools — 3-screen wizard:
- *   1. USB Connection home (connect + pick a feature)
- *   2. Brand selection (radio grid, 19 brands)
- *   3. Method selection → legal disclaimer modal → FRP bypass
- *
- * All operations are ADB-driven from the main process via `window.frpb.device`.
- * Detection is brand-agnostic; brand selection only tunes which methods are
- * offered. Unlock Android Screen runs the ADB lock-screen removal flow;
- * Location Change is the remaining UI "Coming Soon" card.
- */
+/** Brand → locked-device transport mode used by the engine handshake. */
+const MODE_BY_BRAND: Record<string, ConnectionGuideKey> = {
+  Samsung: "test-mode",
+  Xiaomi: "brom",
+  Redmi: "brom",
+  POCO: "brom",
+  Vivo: "brom",
+  OPPO: "brom",
+  Realme: "brom",
+  OnePlus: "brom",
+  TECNO: "brom",
+  Infinix: "brom",
+  itel: "brom",
+};
+
+/** Derive the engine transport mode for a brand (falls back to Fastboot). */
+function engineModeFor(brand: string | null): ConnectionGuideKey {
+  return (brand && MODE_BY_BRAND[brand]) || "fastboot-recovery";
+}
+
+/** Quick Boot Switcher targets → `adb reboot <mode>` (streamed to the log). */
+const REBOOT_ACTIONS: Array<{ mode: RebootMode; label: string; icon: LucideIcon }> = [
+  { mode: "bootloader", label: "Fastboot", icon: Terminal },
+  { mode: "recovery", label: "Recovery", icon: RotateCcw },
+  { mode: "edl", label: "EDL", icon: Zap },
+  { mode: "system", label: "System", icon: Power },
+];
+
 // Fields surfaced by the continuous auto-read strip, in display order.
 const HW_FIELDS: Array<{ key: keyof DeviceInfoSnapshot; label: string }> = [
   { key: "model", label: "Model" },
@@ -46,6 +66,34 @@ const HW_FIELDS: Array<{ key: keyof DeviceInfoSnapshot; label: string }> = [
   { key: "port", label: "Port" },
   { key: "chipset", label: "Chipset" },
 ];
+
+/**
+ * Overall-progress milestone table. The engine streams a stage key + a
+ * per-stage percentage (`OperationEvent.pct` → the "Current Task" bar); the
+ * overall bar advances on the stage *key* via this table so the whole pipeline
+ * stays monotonic and reaches 100% on `DONE`.
+ */
+const STAGE_MILESTONES: Record<string, number> = {
+  START: 5,
+  CONNECT: 15,
+  INFO: 20,
+  CHIPSET: 30,
+  MODE: 35,
+  EXPLOIT: 55,
+  WIPE: 65,
+  RESOLVE: 75,
+  WRITE: 85,
+  REBOOT: 92,
+  DONE: 100,
+};
+
+/** Overall completion for a stage + raw pct pair. */
+function overallFor(stage: string | null, pct: number, done: boolean): number {
+  if (done) return 100;
+  const key = (stage ?? "").toUpperCase();
+  const milestone = STAGE_MILESTONES[key] ?? 0;
+  return Math.max(milestone, Math.min(99, pct));
+}
 
 /**
  * Live "Auto-Read Hardware" strip. Mirrors professional GSM-tool behavior: the
@@ -111,17 +159,13 @@ export default function FRPToolsScreen({
   onRefresh,
   operationRunning,
 }: FRPToolsScreenProps) {
-  // Screen navigation
-  const [screen, setScreen] = useState<Screen>("home");
-  const [tab, setTab] = useState<"usb" | "wireless">("usb");
-
   // B. Model (auto-detected + manual entry)
   const [detectedModel, setDetectedModel] = useState<string | undefined>(undefined);
   const [modelInput, setModelInput] = useState("");
+  const [selectedModel, setSelectedModel] = useState("");
 
   // C. Brand + method selection
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
-  const [selectedMethod, setSelectedMethod] = useState<"general" | "mediatek">("general");
 
   // D. Legal disclaimer consent (modal, op-aware)
   const [consent, setConsent] = useState<ConsentState | null>(null);
@@ -132,11 +176,8 @@ export default function FRPToolsScreen({
 
   // E. Operation progress + log
   const [runningOp, setRunningOp] = useState<OperationKind | null>(null);
-  const [opProgress, setOpProgress] = useState<{
-    stage: string;
-    message: string;
-    pct: number;
-  } | null>(null);
+  const [opStage, setOpStage] = useState<string | null>(null);
+  const [opProgress, setOpProgress] = useState<ActionProgress | null>(null);
   const [opLog, setOpLog] = useState<LogEntry[]>([]);
   const [result, setResult] = useState<OperationResult | null>(null);
   // Which Quick Boot Switcher target is currently being requested (spinner).
@@ -147,8 +188,13 @@ export default function FRPToolsScreen({
   );
   const toastTimerRef = useRef<number | null>(null);
 
-  // F. "Coming soon" modal
-  const [comingSoon, setComingSoon] = useState<ComingSoonKind>(null);
+  // G. Auto-detection engine ("device:auto-detected") — drives the header badge
+  // and auto-sets the brand context the instant a phone is plugged in.
+  const [autoDetected, setAutoDetected] = useState<DeviceAutoDetected | null>(null);
+
+  // H. Manual key-combination fallback popup.
+  const [manualGuide, setManualGuide] = useState<ManualModeGuide | null>(null);
+  const manualContinueRef = useRef<(() => void) | null>(null);
 
   // Continuous auto-read hardware snapshot (`device:info-updated`).
   const [hwInfo, setHwInfo] = useState<DeviceInfoSnapshot | null>(null);
@@ -172,10 +218,6 @@ export default function FRPToolsScreen({
     if (toastTimerRef.current !== null) window.clearTimeout(toastTimerRef.current);
     toastTimerRef.current = window.setTimeout(() => setToast(null), 8000);
   }, []);
-
-  // Device status is managed by the shared useDevice() hook lifted to
-  // MainDashboard — Device Monitor and FRP Tools render the exact same state.
-  // Manual refresh flows through the onRefresh prop from useDevice().refresh().
 
   // B + D. Load detected model and consent state on mount.
   useEffect(() => {
@@ -205,15 +247,34 @@ export default function FRPToolsScreen({
     };
   }, []);
 
+  // G. Auto-detection engine. Seeds the brand context + badge immediately
+  // (requestInfo() also emits `device:auto-detected` server-side) and updates on
+  // every subsequent plug-in / transport change.
+  useEffect(() => {
+    const unsubscribe = window.frpb.device.onAutoDetected((info: DeviceAutoDetected) => {
+      setAutoDetected(info);
+      if (info.detected && info.brand) {
+        setSelectedBrand((prev) => prev ?? info.brand);
+        if (info.model) setModelInput((prev) => prev || info.model!);
+      }
+    });
+    window.frpb.device.requestInfo().catch(() => {});
+    return unsubscribe;
+  }, []);
+
   // E. Operation events → progress + log. Events for the wrong op (or stale
   // events while idle) are ignored. Unsubscribed on unmount.
   useEffect(() => {
     const unsubscribe = window.frpb.device.onOperationEvent((event: OperationEvent) => {
       if (!runningOpRef.current || event.op !== runningOpRef.current) return;
+      const pct = Math.max(0, Math.min(100, event.pct));
+      const done = event.stage.toUpperCase() === "DONE" || pct >= 100;
+      setOpStage(event.stage);
       setOpProgress({
         stage: event.stage,
-        message: event.message,
-        pct: Math.max(0, Math.min(100, event.pct)),
+        pct,
+        overall: overallFor(event.stage, pct, done),
+        current: pct,
       });
       appendLog(event.message);
     });
@@ -301,10 +362,15 @@ export default function FRPToolsScreen({
     setRunningOp(op);
     runningOpRef.current = op;
     setResult(null);
+    setOpStage(null);
     setOpProgress(null);
     setOpLog([]);
-    const guide = connectionGuideFor(selectedBrand, selectedMethod);
-    const options = { brand: selectedBrand, mode: guide.key, model: modelInput.trim() || undefined };
+    const model = (selectedModel || modelInput).trim();
+    const options = {
+      brand: selectedBrand,
+      mode: engineModeFor(selectedBrand),
+      model: model || undefined,
+    };
     try {
       const res: OperationResult =
         op === "flash-reset"
@@ -313,6 +379,12 @@ export default function FRPToolsScreen({
             ? await window.frpb.device.unlockScreen(options)
             : await window.frpb.device.frpBypass(options);
       setResult(res);
+      setOpProgress({
+        stage: res.success ? "DONE" : opStage ?? "ERROR",
+        pct: 100,
+        overall: 100,
+        current: 100,
+      });
       appendLog(res.message);
       if (res.detail) appendLog(res.detail);
       if (!res.success) showToast(res.message);
@@ -366,32 +438,46 @@ export default function FRPToolsScreen({
     }
   }
 
-  // Wizard navigation handlers
-  function handleOpenFrp() {
-    if (busy) return;
-    setScreen("brand");
+  // Part 3 — manual-mode fallback. When the selected model strictly requires a
+  // hardware key combination, present the step-by-step popup first; the actual
+  // operation only starts once the user confirms.
+  function beginManualMode(action: PrimaryAction) {
+    const guide = manualModeGuideFor(
+      selectedBrand,
+      (selectedModel || modelInput).trim() || null,
+      chipset
+    );
+    manualContinueRef.current = () => {
+      setManualGuide(null);
+      manualContinueRef.current = null;
+      if (action === "flash-reset") {
+        handleFlashReset(true);
+      } else {
+        handleFrpBypass(true);
+      }
+    };
+    setManualGuide(guide);
   }
 
-  function handleBrandStart() {
-    if (!selectedBrand || busy) return;
-    if (!modelInput.trim()) setModelInput(selectedBrand);
-    setSelectedMethod("general");
-    setScreen("method");
+  function handleManualContinue() {
+    const fn = manualContinueRef.current;
+    if (fn) fn();
   }
 
-  function handleStart() {
-    if (!selectedBrand || busy) return;
-    if (!frpConsented) {
-      openDisclaimer("frp-bypass");
-    } else {
-      void runOperation("frp-bypass");
-    }
+  function handleManualCancel() {
+    manualContinueRef.current = null;
+    setManualGuide(null);
   }
 
-  function handleFlashReset() {
+  // Step 3 — the two primary actions, with manual-mode fallback + consent gating.
+  function handleFlashReset(skipManual = false) {
     if (busy) return;
     if (needsAuth) {
       showToast("Device is not authorized — accept the USB debugging prompt on the phone.");
+      return;
+    }
+    if (!skipManual && requiresManualMode) {
+      beginManualMode("flash-reset");
       return;
     }
     if (!flashConsented) {
@@ -401,17 +487,20 @@ export default function FRPToolsScreen({
     }
   }
 
-  function handleUnlockScreen() {
+  function handleFrpBypass(skipManual = false) {
     if (busy) return;
-    // Unlock screen requires ADB authorization — show consent modal for legal disclaimer
     if (needsAuth) {
       showToast("Device is not authorized — accept the USB debugging prompt on the phone.");
       return;
     }
-    if (!consent?.unlockScreen) {
-      openDisclaimer("unlock-screen");
+    if (!skipManual && requiresManualMode) {
+      beginManualMode("frp-bypass");
+      return;
+    }
+    if (!frpConsented) {
+      openDisclaimer("frp-bypass");
     } else {
-      void runOperation("unlock-screen");
+      void runOperation("frp-bypass");
     }
   }
 
@@ -442,81 +531,85 @@ export default function FRPToolsScreen({
   }
 
   // Derived state
-  const isConnected = Boolean(status?.connected) || status?.state === "CONNECTED";
-  const needsAuth = isConnected && status?.authorized === false;
-  const deviceLabel = [status?.brand, status?.model, status?.serial]
-    .filter(Boolean)
-    .join(" · ");
-  const lastRefreshAt = status?.lastScanAt ?? null;
+  const isConnected =
+    Boolean(status?.connected) || status?.state === "CONNECTED" || Boolean(autoDetected?.detected);
+  const needsAuth = Boolean(status?.connected) && status?.authorized === false;
   const flashConsented = Boolean(consent?.flashReset);
   const frpConsented = Boolean(consent?.frpBypass);
   const busy = runningOp !== null || operationRunning;
-  const modelReady = modelInput.trim().length > 0;
-  const canStart = isConnected && modelReady && selectedBrand !== null;
-  const methods = methodsForBrand(selectedBrand);
-  const guide = connectionGuideFor(selectedBrand, selectedMethod);
+
+  // Step 1/2 context: prefer the auto-detected telemetry, fall back to the
+  // shared device status. `brand` drives the badge + model filtering.
+  const brand = autoDetected?.brand ?? status?.brand ?? null;
+  const model = autoDetected?.model ?? status?.model ?? null;
+  const serial = autoDetected?.serial ?? status?.serial ?? null;
+  const port = autoDetected?.port ?? null;
+  const chipset: ChipsetFamily = autoDetected?.chipset ?? "Unknown";
+  const connection = autoDetected?.connection ?? (isConnected ? "adb" : "disconnected");
+  const driverInstalled = Boolean(autoDetected?.driverInstalled);
+  const detected = Boolean(autoDetected?.detected) || isConnected;
+  const requiresManualMode = chipset === "MediaTek" || chipset === "Qualcomm";
 
   return (
     <div className="flex flex-col gap-5">
       {/* Continuous auto-read hardware strip — populated by device:info-updated. */}
       <AutoReadPanel info={hwInfo} />
 
-      {screen === "home" && (
-        <HomeScreen
-          status={status}
-          lastRefreshAt={lastRefreshAt}
-          isConnected={isConnected}
-          needsAuth={needsAuth}
-          deviceLabel={deviceLabel}
-          tab={tab}
-          onTabChange={setTab}
-          onRefresh={handleManualRefresh}
-          onOpenFrp={handleOpenFrp}
-          onUnlockScreen={handleUnlockScreen}
-          onComingSoon={(kind) => setComingSoon(kind)}
-          onRebootMode={handleRebootMode}
-          rebootingMode={rebootingMode}
-          busy={busy}
-        />
-      )}
+      {/* Steps 1-3 — the entire simplified 2-click workflow on a single screen. */}
+      <ActionScreen
+        detected={detected}
+        brand={brand}
+        model={model}
+        serial={serial}
+        port={port}
+        chipset={chipset}
+        connection={connection}
+        driverInstalled={driverInstalled}
+        selectedModel={(selectedModel || modelInput).trim()}
+        onSelectModel={setSelectedModel}
+        connected={isConnected && !needsAuth}
+        busy={busy}
+        runningOp={runningOp === "flash-reset" || runningOp === "frp-bypass" ? runningOp : null}
+        progress={opProgress}
+        result={result}
+        opLog={opLog}
+        logRef={logRef}
+        onRefresh={handleManualRefresh}
+        onFlashReset={handleFlashReset}
+        onFrpBypass={handleFrpBypass}
+      />
 
-      {screen === "brand" && (
-        <BrandScreen
-          selectedBrand={selectedBrand}
-          onSelectBrand={setSelectedBrand}
-          onBack={() => setScreen("home")}
-          onStart={handleBrandStart}
-          canStart={canStart}
-          busy={busy}
-          detectedBrand={status?.brand}
-          detectedModel={detectedModel}
-          modelInput={modelInput}
-          onModelChange={setModelInput}
-          isConnected={isConnected}
-        />
-      )}
-
-      {screen === "method" && (
-        <MethodScreen
-          brand={selectedBrand}
-          methods={methods}
-          guide={guide}
-          selectedMethod={selectedMethod}
-          onSelectMethod={setSelectedMethod}
-          onBack={() => setScreen("brand")}
-          onStart={handleStart}
-          onFlashReset={handleFlashReset}
-          canStart={canStart}
-          busy={busy}
-          frpConsented={frpConsented}
-          flashConsented={flashConsented}
-          runningOp={runningOp}
-          opProgress={opProgress}
-          result={result}
-          opLog={opLog}
-          logRef={logRef}
-        />
-      )}
+      {/* Quick Boot Switcher (non-destructive, ADB only). */}
+      <section className="frpb-card p-5">
+        <h2 className="text-sm font-bold text-slate-900">Quick Boot Switcher</h2>
+        <p className="mt-0.5 text-xs text-slate-500">
+          Reboot an authorized device into another mode — no data is touched.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {REBOOT_ACTIONS.map(({ mode, label, icon: Icon }) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => void handleRebootMode(mode)}
+              disabled={busy || !isConnected || needsAuth}
+              className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:border-brand-300 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {rebootingMode === mode ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+              ) : (
+                <Icon className="h-4 w-4" />
+              )}
+              {label}
+            </button>
+          ))}
+        </div>
+        {!isConnected && (
+          <p className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Connect a device to enable the quick boot switcher.
+          </p>
+        )}
+      </section>
 
       {/* Legal disclaimer modal */}
       {disclaimerOp && (
@@ -531,9 +624,13 @@ export default function FRPToolsScreen({
         />
       )}
 
-      {/* Coming soon modal */}
-      {comingSoon && (
-        <ComingSoonModal kind={comingSoon} onClose={() => setComingSoon(null)} />
+      {/* Part 3 — manual key-combination fallback popup */}
+      {manualGuide && (
+        <ManualModeModal
+          guide={manualGuide}
+          onContinue={handleManualContinue}
+          onCancel={handleManualCancel}
+        />
       )}
 
       {/* Explicit error toast — real non-zero exit codes / unauthorized ADB. */}

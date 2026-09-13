@@ -5,6 +5,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   AcceptConsentResult,
   ConsentState,
+  DeviceAutoDetected,
   DeviceInfo,
   DeviceInfoSnapshot,
   DeviceLogPayload,
@@ -12,6 +13,7 @@ import type {
   DeviceStatus,
   FrpbBridge,
   LicenseProfile,
+  ModelCatalogEntry,
   OperationEvent,
   OperationKind,
   OperationOptions,
@@ -92,8 +94,16 @@ const bridge: FrpbBridge = {
     },
     onInfoUpdated: (cb: (info: DeviceInfoSnapshot) => void): (() => void) =>
       onChannel<DeviceInfoSnapshot>("device:info-updated", cb),
+    onAutoDetected: (cb: (info: DeviceAutoDetected) => void): (() => void) =>
+      onChannel<DeviceAutoDetected>("device:auto-detected", cb),
     requestInfo: (): Promise<DeviceInfoSnapshot> =>
       ipcRenderer.invoke("device:requestInfo"),
+    searchModels: (opts?: {
+      query?: string | null;
+      brand?: string | null;
+      chipset?: string | null;
+    }): Promise<ModelCatalogEntry[]> =>
+      ipcRenderer.invoke("device:searchModels", opts),
   },
   links: {
     openExternal: (url: string): Promise<void> =>
