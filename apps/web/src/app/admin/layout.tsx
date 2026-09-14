@@ -4,14 +4,22 @@
 // that calls the shared Prisma query layer directly — the ADMIN_LICENSE_KEY and
 // all other secrets stay on the server and are never exposed to the client.
 
-import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { LayoutDashboard, BarChart3, ShieldCheck } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import SignOutButton from "@/components/dashboard/sign-out-button";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "Admin Dashboard | FRPB" };
+// Internal admin console — keep it out of the index entirely.
+export const metadata = {
+  ...pageMetadata({
+    title: "Admin",
+    description: "Internal FRPB admin console.",
+    path: "/admin",
+  }),
+  robots: { index: false, follow: false },
+};
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();

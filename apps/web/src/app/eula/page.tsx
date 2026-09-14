@@ -3,14 +3,14 @@
 // Not legal advice — have a qualified lawyer review before publishing if you
 // need a binding agreement in your jurisdiction.
 
-import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
   title: "End User License Agreement",
   description:
-    "End User License Agreement for FRPB — terms governing use of the FRPB desktop application",
-  openGraph: { title: "FRPB End User License Agreement" },
-};
+    "End User License Agreement for FRPB — the terms governing use of the FRPB desktop application, license scope and authorised device use.",
+  path: "/eula",
+});
 
 export default function EULAPage() {
   return (

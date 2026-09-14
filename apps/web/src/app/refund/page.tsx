@@ -2,14 +2,14 @@
 // Server component. Static legal page explaining our refund policy for
 // monthly, yearly and lifetime plans.
 
-import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
   title: "Refund Policy",
   description:
-    "FRPB refund policy — what is refundable, when, and how to request a refund",
-  openGraph: { title: "FRPB Refund Policy" },
-};
+    "FRPB refund policy — what is refundable, when, and how to request a refund for monthly, yearly and lifetime plans.",
+  path: "/refund",
+});
 
 export default function RefundPolicyPage() {
   return (

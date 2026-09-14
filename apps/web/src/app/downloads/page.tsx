@@ -8,12 +8,20 @@ import {
   Smartphone,
   Info,
 } from "lucide-react";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata = {
-  title: "Downloads — FRPB",
+export const metadata = pageMetadata({
+  title: "Download FRPB for Windows 10/11",
   description:
     "Download the FRPB desktop app for Windows 10/11. Fix boot loops, restore firmware, install OEM drivers and manage your Android & iOS devices.",
-};
+  path: "/downloads",
+  keywords: [
+    "frp bypass tool download",
+    "samsung frp tool",
+    "flash reset app",
+    "android device recovery software",
+  ],
+});
 
 const EXE_NAME = "FRPB-Setup.exe";
 

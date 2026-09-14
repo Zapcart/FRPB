@@ -2,14 +2,14 @@
 // Server component. Static legal page describing what data we collect, how we
 // use it, and how long we keep it, written for a lay customer in plain English.
 
-import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
   title: "Privacy Policy",
   description:
-    "How FRPB collects, uses and protects your personal data — our privacy policy",
-  openGraph: { title: "FRPB Privacy Policy" },
-};
+    "How FRPB collects, uses and protects your personal data — our privacy policy for the FRPB website and desktop application.",
+  path: "/privacy",
+});
 
 export default function PrivacyPolicyPage() {
   return (

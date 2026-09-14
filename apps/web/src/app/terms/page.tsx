@@ -3,14 +3,14 @@
 // payment terms, license terms, prohibited uses, liability limits and dispute
 // resolution for the FRPB website and desktop application.
 
-import type { Metadata } from "next";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
   title: "Terms of Service",
   description:
-    "Terms of Service for FRPB — account terms, payment terms, license terms and acceptable use",
-  openGraph: { title: "FRPB Terms of Service" },
-};
+    "Terms of Service for FRPB — account terms, payment terms, license terms, acceptable use and liability limits.",
+  path: "/terms",
+});
 
 export default function TermsOfServicePage() {
   return (

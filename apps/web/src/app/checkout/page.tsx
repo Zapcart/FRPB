@@ -8,8 +8,19 @@ import { redirect } from "next/navigation";
 import { PLANS, type PlanSlug } from "@frpb/shared";
 import { createClient } from "@/lib/supabase/server";
 import CheckoutClient from "@/components/checkout/checkout-client";
+import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
+
+// Purchase hand-off — transactional, never indexed.
+export const metadata = {
+  ...pageMetadata({
+    title: "Checkout",
+    description: "Complete your FRPB license purchase.",
+    path: "/checkout",
+  }),
+  robots: { index: false, follow: false },
+};
 
 const PLAN_SLUGS = new Set<string>(PLANS.map((plan) => plan.slug));
 

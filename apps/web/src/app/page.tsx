@@ -5,7 +5,9 @@
 // keep plain tiles instead for that one machine-read / main build variant so
 // the favicons stay crisp; browser builds keep the animated layout.
 
+import Image from "next/image";
 import Link from "next/link";
+import type { Metadata } from "next";
 import {
   ShieldCheck,
   Download,
@@ -31,12 +33,23 @@ import {
 } from "lucide-react";
 import { PLANS } from "@frpb/shared";
 import SmoothScrollLink from "@/components/smooth-scroll-link";
+import JsonLd from "@/components/seo/json-ld";
+import FaqSection from "@/components/faq-section";
+import {
+  PRIMARY_TITLE,
+  PRODUCT_DESCRIPTION,
+  PRIMARY_KEYWORDS,
+  pageMetadata,
+} from "@/lib/seo";
+import { softwareApplicationSchema, websiteSchema, faqPageSchema } from "@/lib/schema";
+import { HOME_FAQ } from "@/lib/faq";
 
 const NAV_LINKS = [
   { label: "Features", href: "#features" },
   { label: "Supported Brands", href: "#brands" },
   { label: "Pricing", href: "#pricing" },
   { label: "Guides", href: "#guides" },
+  { label: "FAQ", href: "#faq" },
   { label: "EULA", href: "#eula" },
 ];
 
@@ -91,20 +104,39 @@ const PRICING_NOTES: Record<string, string> = {
   LIFETIME: "one-time",
 };
 
+export const metadata: Metadata = {
+  ...pageMetadata({
+    title: PRIMARY_TITLE,
+    description: PRODUCT_DESCRIPTION,
+    path: "/",
+    keywords: PRIMARY_KEYWORDS,
+  }),
+  // Bypass the root template so the landing page keeps the exact brand title.
+  title: { absolute: PRIMARY_TITLE },
+};
+
 export default function HomePage() {
   const downloadUrl = process.env.NEXT_PUBLIC_DOWNLOAD_URL || "#download";
 
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden bg-white text-slate-900">
+      {/* Structured data: SoftwareApplication rich result + site/brand + FAQ graph. */}
+      <JsonLd id="ld-software-application" data={softwareApplicationSchema()} />
+      <JsonLd id="ld-website" data={websiteSchema()} />
+      <JsonLd id="ld-faq" data={faqPageSchema(HOME_FAQ)} />
+
       {/* ================= NAVBAR ================= */}
       <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/85 backdrop-blur-xl">
         <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:h-[72px]">
           {/* Crisp logo lockup */}
           <Link href="/" className="flex items-center gap-2.5">
-            <img
+            <Image
               src="/logo.png"
-              alt="FRPB"
-              className="h-9 w-9 shrink-0 rounded-xl shadow-sm ring-1 ring-slate-900/5"
+              alt="FRPB — FRP bypass and Android device recovery tool"
+              width={72}
+              height={72}
+              priority
+              className="h-9 w-9 shrink-0 rounded-xl object-cover shadow-sm ring-1 ring-slate-900/5"
             />
             <span className="flex flex-col leading-none">
               <span className="text-lg font-extrabold tracking-tight text-ink">FRPB</span>
@@ -581,16 +613,22 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ================= FAQ ================= */}
+      <FaqSection items={HOME_FAQ} />
+
       {/* ================= FOOTER ================= */}
       <footer id="eula" className="border-t border-slate-200 bg-slate-50/70">
         <div className="mx-auto max-w-7xl px-6 py-14">
           <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
             <div>
               <Link href="/" className="flex items-center gap-2.5">
-                <img
+                <Image
                   src="/logo.png"
-                  alt="FRPB"
-                  className="h-9 w-9 shrink-0 rounded-xl"
+                  alt="FRPB — FRP bypass and Android device recovery tool"
+                  width={72}
+                  height={72}
+                  loading="lazy"
+                  className="h-9 w-9 shrink-0 rounded-xl object-cover"
                 />
                 <span className="text-lg font-extrabold tracking-tight text-ink">FRPB</span>
               </Link>
@@ -630,6 +668,7 @@ export default function HomePage() {
               <ul className="mt-4 space-y-2.5 text-sm">
                 {[
                   { label: "Recovery Guides", href: "#guides" },
+                  { label: "Blog", href: "/blog" },
                   { label: "Driver Center", href: "#features" },
                   { label: "Sign in", href: "/auth" },
                   { label: "Dashboard", href: "/dashboard" },

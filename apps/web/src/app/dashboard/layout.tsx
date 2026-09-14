@@ -2,7 +2,7 @@
 // Server component: resolves the session + user's licenses, then renders the
 // dashboard shell with the license data passed down to client views.
 
-import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
@@ -11,8 +11,18 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import SignOutButton from "@/components/dashboard/sign-out-button";
 import type { Prisma } from "@prisma/client";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "Dashboard" };
+// Private, authenticated surface — never indexed by search engines.
+export const metadata = {
+  ...pageMetadata({
+    title: "Dashboard",
+    description:
+      "Manage your FRPB licenses, bound devices and activations from one dashboard.",
+    path: "/dashboard",
+  }),
+  robots: { index: false, follow: false },
+};
 
 // Session + DB work — never statically prerender the dashboard shell.
 export const dynamic = "force-dynamic";
@@ -75,10 +85,12 @@ export default async function DashboardLayout({
       {/* Sidebar */}
       <aside className="w-64 shrink-0 flex-col border-r border-slate-200 bg-white p-5 md:w-64">
         <Link href="/" className="mb-8 flex items-center gap-2">
-          <img
+          <Image
             src="/logo.png"
-            alt="FRPB"
-            className="h-8 w-8 shrink-0 rounded-lg"
+            alt="FRPB — FRP bypass and Android device recovery tool"
+            width={64}
+            height={64}
+            className="h-8 w-8 shrink-0 rounded-lg object-cover"
           />
           <span className="text-lg font-bold tracking-tight text-slate-900">FRPB</span>
         </Link>
