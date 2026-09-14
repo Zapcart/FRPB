@@ -34,7 +34,16 @@ function loadAutoUpdater(): AutoUpdater | null {
     if (!instance) {
       throw new Error("electron-updater did not export autoUpdater");
     }
-    instance.autoDownload = false; // explicit user consent via modal
+    // Update policy: DISCOVER automatically, DOWNLOAD on explicit consent.
+    // Requirement: "autoUpdater.autoDownload = true (or controlled via user
+    // trigger)". We deliberately choose the user-trigger variant: a silent
+    // launch check surfaces AVAILABLE (version + release notes) to the renderer,
+    // and the header badge / modal expose a "Download now" action that calls
+    // `downloadUpdate()`. This avoids pulling tens of MB on metered connections
+    // before the user has seen what the update contains. Once downloaded,
+    // `autoInstallOnAppQuit` applies the staged update on next quit even if the
+    // user dismisses the "Restart & install" prompt.
+    instance.autoDownload = false; // download triggered by user via modal/badge
     instance.autoInstallOnAppQuit = true;
     autoUpdater = instance;
     updaterLoadError = null;

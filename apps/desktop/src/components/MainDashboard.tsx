@@ -213,6 +213,27 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
   const operationRunning =
     runState?.running ?? deviceStatus?.running ?? false;
 
+  // Persistent update indicator for the header: covers "update available",
+  // live download progress, and "ready to install" so the user sees the state
+  // even with the modal closed. Clicking the button opens the modal and, once
+  // an update is staged, installs it directly.
+  const updatePercent =
+    typeof updaterStatus.percent === "number"
+      ? Math.min(Math.max(Math.round(updaterStatus.percent), 0), 100)
+      : null;
+  const hasUpdate =
+    updaterStatus.state === "AVAILABLE" ||
+    updaterStatus.state === "DOWNLOADING" ||
+    updaterStatus.state === "READY";
+  const updateLabel =
+    updaterStatus.state === "DOWNLOADING"
+      ? updatePercent != null
+        ? `${updatePercent}%`
+        : "Downloading…"
+      : updaterStatus.state === "READY"
+        ? "Restart"
+        : "Update";
+
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
       {/* Header */}
@@ -237,14 +258,40 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
             </div>
             <button
               onClick={() => {
+                if (updaterStatus.state === "READY") {
+                  install();
+                  return;
+                }
                 setUpdaterOpen(true);
-                check();
+                if (!hasUpdate) check();
               }}
-              className="frpb-btn-ghost px-3 py-1.5 text-xs"
-              title="Check for updates"
+              className={`frpb-btn-ghost px-3 py-1.5 text-xs ${
+                hasUpdate
+                  ? "border-brand-200 bg-brand-50 text-brand-700 hover:border-brand-300 hover:bg-brand-100 hover:text-brand-800"
+                  : ""
+              }`}
+              title={
+                updaterStatus.state === "READY"
+                  ? "A new version is ready — click to restart and install"
+                  : hasUpdate
+                    ? "Update available"
+                    : "Check for updates"
+              }
             >
-              <RefreshCw className="h-3.5 w-3.5" />
+              <RefreshCw
+                className={`h-3.5 w-3.5 ${
+                  updaterStatus.state === "CHECKING" ? "animate-spin" : ""
+                }`}
+              />
               Updates
+              {hasUpdate && (
+                <span className="frpb-badge border-brand-200 bg-white px-1.5 py-0 text-[10px] font-semibold text-brand-700">
+                  {updaterStatus.state !== "DOWNLOADING" && (
+                    <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
+                  )}
+                  {updateLabel}
+                </span>
+              )}
             </button>
             <button
               onClick={onSignOut}
