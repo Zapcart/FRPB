@@ -1,7 +1,7 @@
 // FRPB — Prisma seed: Plan rows + demo data + master test license.
 // Run with: pnpm prisma:seed (uses apps/web/prisma/seed.ts)
 
-import { PrismaClient, LicenseStatus } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { sha256 } from "../src/lib/crypto/sha256";
 
 const prisma = new PrismaClient();
@@ -99,7 +99,7 @@ async function main() {
   const license = await prisma.license.upsert({
     where: { key: TEST_KEY },
     update: {
-      status: LicenseStatus.ACTIVE,
+      status: "ACTIVE",
       deviceLimit: lifetimePlan.deviceLimit,
       expiresAt: null,
       lastVerifiedAt: new Date(),
@@ -109,7 +109,7 @@ async function main() {
       keySha256: sha256(normalizedKey),
       userId: user.id,
       planId: lifetimePlan.id,
-      status: LicenseStatus.ACTIVE,
+      status: "ACTIVE",
       deviceLimit: lifetimePlan.deviceLimit,
       maxActivations: 1,
       activatedAt: new Date(),

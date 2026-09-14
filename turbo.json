@@ -1,6 +1,18 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["**/.env.*local", "tsconfig.base.json"],
+  "globalEnv": [
+    "DATABASE_URL",
+    "DOWNLOAD_BASE_URL",
+    "SUPABASE_JWKS_URL",
+    "UPSTASH_REDIS_REST_URL",
+    "UPSTASH_REDIS_REST_TOKEN",
+    "POSTHOG_API_KEY",
+    "POSTHOG_HOST",
+    "ADMIN_LICENSE_KEY",
+    "RESEND_API_KEY",
+    "EMAIL_FROM"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
