@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import type { VerifyStatus } from "@frpb/shared";
 import type { LicenseProfile } from "../lib/ipc";
 import { MASTER_TEST_KEY, isWebPreviewMode } from "../lib/webFallback";
+import logoUrl from "../assets/logo.png";
 import {
-  ShieldCheck,
   KeyRound,
   Loader2,
   ExternalLink,
@@ -88,10 +88,12 @@ export default function ActivationScreen({ cached, onActivated }: ActivationScre
       <div className="w-full max-w-md">
         {/* Brand */}
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-accent-500 shadow-glow">
-            <ShieldCheck className="h-8 w-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          <img
+            src={logoUrl}
+            alt="FRPB"
+            className="mb-4 h-14 w-14 rounded-2xl object-cover shadow-glow ring-1 ring-slate-900/5"
+          />
+          <h1 className="text-2xl font-extrabold tracking-tight text-ink">
             FRPB Recovery
           </h1>
           <p className="mt-1 text-sm text-slate-500">

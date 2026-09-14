@@ -14,8 +14,8 @@ import FRPToolsScreen from "./FRPToolsScreen";
 import DeviceInfoScreen from "./DeviceInfoScreen";
 import ConsoleLog from "./ConsoleLog";
 import UpdateModal from "./UpdateModal";
+import logoUrl from "../assets/logo.png";
 import {
-  ShieldCheck,
   Smartphone,
   Wrench,
   LogOut,
@@ -216,14 +216,16 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
       {/* Header */}
-      <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-slate-200/70 bg-white/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-accent-500">
-              <ShieldCheck className="h-5 w-5 text-white" />
-            </div>
+          <div className="flex items-center gap-2.5">
+            <img
+              src={logoUrl}
+              alt="FRPB"
+              className="h-9 w-9 shrink-0 rounded-xl object-cover shadow-sm ring-1 ring-slate-900/5"
+            />
             <div>
-              <h1 className="text-sm font-bold text-slate-900">FRPB Recovery</h1>
+              <h1 className="text-sm font-extrabold tracking-tight text-ink">FRPB Recovery</h1>
               <p className="text-[11px] text-slate-500">{profile.planName}</p>
             </div>
           </div>
@@ -303,11 +305,11 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
         </div>
       )}
 
-      {/* Tab bar */}
-      <nav className="mx-auto flex w-full max-w-5xl gap-1 px-6 pt-5">
+      {/* Tab bar — pill-style navigation sized to match the web dashboard chrome. */}
+      <nav className="mx-auto flex w-full max-w-5xl flex-wrap gap-1 border-b border-slate-200 px-6 pt-5">
         <button
           onClick={() => setTab("monitor")}
-          className={`inline-flex items-center gap-2 rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition ${
+          className={`-mb-px inline-flex items-center gap-2 rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition ${
             tab === "monitor"
               ? "border-brand-500 text-brand-700"
               : "border-transparent text-slate-500 hover:text-slate-900"
@@ -318,7 +320,7 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
         </button>
         <button
           onClick={() => setTab("drivers")}
-          className={`inline-flex items-center gap-2 rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition ${
+          className={`-mb-px inline-flex items-center gap-2 rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition ${
             tab === "drivers"
               ? "border-brand-500 text-brand-700"
               : "border-transparent text-slate-500 hover:text-slate-900"
@@ -329,7 +331,7 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
         </button>
         <button
           onClick={() => setTab("frp")}
-          className={`inline-flex items-center gap-2 rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition ${
+          className={`-mb-px inline-flex items-center gap-2 rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition ${
             tab === "frp"
               ? "border-brand-500 text-brand-700"
               : "border-transparent text-slate-500 hover:text-slate-900"
@@ -340,7 +342,7 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
         </button>
         <button
           onClick={() => setTab("device-info")}
-          className={`inline-flex items-center gap-2 rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition ${
+          className={`-mb-px inline-flex items-center gap-2 rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition ${
             tab === "device-info"
               ? "border-brand-500 text-brand-700"
               : "border-transparent text-slate-500 hover:text-slate-900"
@@ -351,7 +353,7 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
         </button>
         <button
           onClick={() => setTab("console")}
-          className={`inline-flex items-center gap-2 rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition ${
+          className={`-mb-px inline-flex items-center gap-2 rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition ${
             tab === "console"
               ? "border-brand-500 text-brand-700"
               : "border-transparent text-slate-500 hover:text-slate-900"

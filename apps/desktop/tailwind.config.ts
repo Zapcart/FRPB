@@ -42,15 +42,17 @@ const config: Config = {
           "Segoe UI",
           "sans-serif",
         ],
-        mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
+        mono: ["JetBrains Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       boxShadow: {
         card: "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.06)",
         "card-hover": "0 2px 4px rgba(15,23,42,0.05), 0 20px 44px rgba(15,23,42,0.10)",
-        glow: "0 10px 40px -8px rgba(0,102,255,0.35)",
+        glow: "0 0 0 1px rgba(0,102,255,0.08), 0 8px 30px rgba(0,102,255,0.18)",
         "blue-glow": "0 18px 50px -12px rgba(0,102,255,0.45)",
       },
       backgroundImage: {
+        "grid-slate":
+          "linear-gradient(to right, rgba(15,23,42,0.045) 1px, transparent 1px), linear-gradient(to bottom, rgba(15,23,42,0.045) 1px, transparent 1px)",
         "hero-glow":
           "radial-gradient(58% 46% at 50% 0%, rgba(0,102,255,0.10) 0%, rgba(0,163,255,0.05) 42%, transparent 72%)",
       },
