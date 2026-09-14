@@ -73,7 +73,7 @@
       "**/node_modules/node-gyp-build/**/*",
       "bin/platform-tools/**"
     ],
-    "npmRebuild": true,
+    "npmRebuild": false,
     "extraResources": [
       {
         "from": "bin/platform-tools",

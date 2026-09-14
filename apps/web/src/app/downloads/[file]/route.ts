@@ -33,6 +33,19 @@ const PUBLIC_DIR = path.join(process.cwd(), "public", "downloads");
 
 const GITHUB_RELEASES_BASE = "https://github.com/Zapcart/FRPB/releases/latest/download";
 
+/**
+ * Friendly request name → actual asset name on the GitHub "latest release".
+ * electron-builder publishes the installer as
+ * `win.artifactName = "FRPB-Recovery-Setup-${version}.${ext}"`, while the site
+ * publicly advertises `FRPB-Setup.exe`. Without this translation the GitHub
+ * fallback (step 5) would 404 for the canonical name.
+ */
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION?.trim() || "1.0.1";
+
+const GITHUB_ASSET_ALIASES: Record<string, string> = {
+  "frpb-setup.exe": `FRPB-Recovery-Setup-${APP_VERSION}.exe`,
+};
+
 /** Installer assets we are willing to serve; anything else is a 404. */
 const ALLOWED_EXTENSIONS = [".exe", ".dmg"] as const;
 
@@ -123,9 +136,12 @@ export async function GET(
     );
   }
 
-  // ── 5. GitHub Releases fallback — same-named asset on the latest release. ─
+  // ── 5. GitHub Releases fallback — the latest release's asset. ────────────
+  // Translate the public alias (FRPB-Setup.exe) to the real electron-builder
+  // asset name (FRPB-Recovery-Setup-<version>.exe) before redirecting.
+  const assetName = GITHUB_ASSET_ALIASES[requested.toLowerCase()] ?? requested;
   return NextResponse.redirect(
-    `${GITHUB_RELEASES_BASE}/${encodeURIComponent(requested)}`,
+    `${GITHUB_RELEASES_BASE}/${encodeURIComponent(assetName)}`,
     307
   );
 }
