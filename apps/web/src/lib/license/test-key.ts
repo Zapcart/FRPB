@@ -2,7 +2,7 @@
 //
 // Usage:
 //   Desktop App → enter  FRPB-TEST-1234-5678  to unlock the full app
-//   (synthetic ACTIVE LIFETIME profile) without live Stripe/Razorpay
+//   (synthetic ACTIVE LIFETIME profile) without a live payment gateway
 //   payment webhooks or a DB-backed license row.
 //
 // The web route short-circuits BEFORE rate limiting / DB lookups, so no

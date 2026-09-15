@@ -10,8 +10,6 @@
 // internal detail persisted on the Payment row for reconciliation only.
 
 import type { PaymentGateway, PaymentProviderName } from "./gateway";
-import { StripeGateway } from "./stripe";
-import { RazorpayGateway } from "./razorpay";
 import { CashfreeGateway } from "./cashfree";
 import { PayGlocalGateway } from "./payglocal";
 
@@ -31,21 +29,6 @@ export class PaymentConfigError extends Error {
 
 export function getPaymentGateway(provider: PaymentProviderName): PaymentGateway {
   switch (provider) {
-    case "STRIPE": {
-      const secretKey = process.env.STRIPE_SECRET_KEY;
-      if (!secretKey) {
-        throw new PaymentConfigError(provider);
-      }
-      return new StripeGateway(secretKey);
-    }
-    case "RAZORPAY": {
-      const keyId = process.env.RAZORPAY_KEY_ID;
-      const keySecret = process.env.RAZORPAY_KEY_SECRET;
-      if (!keyId || !keySecret) {
-        throw new PaymentConfigError(provider);
-      }
-      return new RazorpayGateway(keyId, keySecret);
-    }
     case "CASHFREE": {
       const clientId = process.env.CASHFREE_CLIENT_ID;
       const clientSecret = process.env.CASHFREE_CLIENT_SECRET;

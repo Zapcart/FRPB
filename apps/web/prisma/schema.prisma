@@ -27,6 +27,10 @@ enum LicenseStatus {
 }
 
 enum PaymentProvider {
+  // DEPRECATED — Stripe and Razorpay are no longer supported. The values are
+  // retained so historical Payment rows still validate; they are not reachable
+  // from the code (see lib/payments/index.ts). Drop only after confirming no
+  // Payment rows reference them.
   STRIPE
   RAZORPAY
   CASHFREE // India / INR (UPI, NetBanking, domestic cards)
@@ -135,7 +139,7 @@ model Payment {
   licenseId        String?         @unique
   license          License?        @relation(fields: [licenseId], references: [id])
   provider         PaymentProvider
-  providerTxnId    String          @unique // Stripe session id / Razorpay order id / Cashfree order id
+  providerTxnId    String          @unique // Cashfree order id / PayGlocal order id
   providerEventId  String? // webhook event id for idempotency
   amountCents      Int
   currency         String          @default("USD")
@@ -152,7 +156,7 @@ model Payment {
 
 model WebhookEvent {
   id          String          @id @default(cuid())
-  provider    PaymentProvider // STRIPE | RAZORPAY | CASHFREE | PAYGLOCAL
+  provider    PaymentProvider // CASHFREE | PAYGLOCAL (STRIPE/RAZORPAY deprecated)
   eventId     String          @unique // provider event id (e.g., evt_..., event_...)
   eventType   String // payment_intent.succeeded / payment.captured
   payload     Json // raw provider payload for audit + replay

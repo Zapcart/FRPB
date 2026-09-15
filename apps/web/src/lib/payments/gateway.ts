@@ -1,6 +1,12 @@
 // FRPB — payment gateway interface.
-// Stripe, Razorpay and Cashfree adapters implement this so checkout + webhooks
+// The Cashfree and PayGlocal adapters implement this so checkout + webhooks
 // stay provider-agnostic at the call site.
+//
+// Only two rails are supported:
+//   CASHFREE  — INR / domestic India (UPI, NetBanking, domestic cards)
+//   PAYGLOCAL — USD / international (credit + debit cards)
+// Legacy Stripe and Razorpay adapters were removed; the PaymentProvider enum
+// retains those values only so historical Payment rows still type-check.
 
 export type PaymentProviderName = "STRIPE" | "RAZORPAY" | "CASHFREE" | "PAYGLOCAL";
 
