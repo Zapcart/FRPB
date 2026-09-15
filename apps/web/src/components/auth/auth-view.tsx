@@ -8,13 +8,22 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Mail, Lock, User, ShieldCheck, Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  clearPendingPlan,
+  checkoutUrlFor,
+  readPendingPlan,
+} from "@/lib/checkout/pending-plan";
 import posthog from "posthog-js";
 import { isPostHogEnabled } from "@/app/providers";
 
 interface AuthViewProps {
   initialMode: "signin" | "signup";
+  /** Server-sanitized post-auth destination (defaults to the dashboard). */
   returnTo: string;
 }
+
+/** Where to send the user after a successful authentication. */
+const DASHBOARD_PATH = "/dashboard";
 
 export default function AuthView({ initialMode, returnTo }: AuthViewProps) {
   const router = useRouter();
@@ -68,10 +77,26 @@ export default function AuthView({ initialMode, returnTo }: AuthViewProps) {
       posthog.capture("user_logged_in", { method: "email_password", mode });
     }
 
-    // Session is set — go to the destination the user was heading to.
-    // Use router.push instead of window.location.href so Next.js handles
-    // the transition cleanly without dropping session cookies.
-    router.push(returnTo);
+    // Session is set — decide the destination.
+    //
+    // Purchase funnel priority: if the visitor arrived from a pricing card,
+    // resume checkout with the EXACT plan/currency they picked. The intent is
+    // read from localStorage so it survives the email-confirmation round trip,
+    // where the URL query would otherwise have been lost.
+    //
+    // Otherwise fall back to the server-sanitized `returnTo`, and finally to
+    // the dashboard when there is nothing more specific to honour.
+    let destination = returnTo || DASHBOARD_PATH;
+    const pending = readPendingPlan();
+    if (pending) {
+      destination = checkoutUrlFor(pending);
+      // Consumed — clear it so a later sign-in is not hijacked by a stale plan.
+      clearPendingPlan();
+    }
+
+    // Use router.push (not window.location.href) so Next.js handles the
+    // transition without a full reload that could drop session cookies.
+    router.push(destination);
   }
 
   return (

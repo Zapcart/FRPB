@@ -33,6 +33,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import JsonLd from "@/components/seo/json-ld";
 import { faqPageSchema } from "@/lib/schema";
+import { savePendingPlan } from "@/lib/checkout/pending-plan";
 
 /**
  * Trust / conversion badges rendered under the pricing grid. Addresses the four
@@ -200,14 +201,19 @@ export default function PricingPage() {
       user = null;
     }
 
-    // Not logged in → send to the login entry with the plan, the chosen
-    // currency and the post-auth target so the purchase resumes unchanged.
+    // Not logged in → persist the purchase intent, then send the visitor to the
+    // auth entry. The intent is stored in localStorage (not just the query
+    // string) so it survives the email-confirmation round trip, and the auth
+    // view consumes it after sign-in to resume checkout automatically.
     if (!user) {
+      savePendingPlan(planSlug, currency);
       setLoadingPlan(null);
       router.push(
-        `/auth/login?plan=${encodeURIComponent(planSlug)}&currency=${encodeURIComponent(
+        `/auth?plan=${encodeURIComponent(planSlug)}&currency=${encodeURIComponent(
           currency
-        )}&redirectTo=${encodeURIComponent("/checkout")}`
+        )}&returnTo=${encodeURIComponent(
+          `/checkout?plan=${planSlug}&currency=${currency}`
+        )}`
       );
       return;
     }

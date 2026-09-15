@@ -29,6 +29,19 @@ interface LicenseWithDevices extends ListLicensesItem {
 
 export default function DashboardPage() {
   const router = useRouter();
+  // Set by the gateway success return: /dashboard?success=true.
+  // Read from window.location in an effect rather than useSearchParams() so the
+  // route does not require a Suspense boundary (which would otherwise force this
+  // page's client subtree out of the static pass).
+  const [checkoutSucceeded, setCheckoutSucceeded] = useState(false);
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("success") === "true") setCheckoutSucceeded(true);
+    } catch {
+      // No location available (SSR pass) — banner simply stays hidden.
+    }
+  }, []);
   const [licenses, setLicenses] = useState<LicenseWithDevices[]>([]);
   const [loading, setLoading] = useState(true);
   const [unbinding, setUnbinding] = useState<string | null>(null);
@@ -206,19 +219,39 @@ export default function DashboardPage() {
       <EmptyState
         icon={<KeyRound className="h-8 w-8 text-brand-500" />}
         title="No active licenses yet"
-        body="Buy a plan to receive your license key instantly and unlock the FRPB desktop app."
-        cta={{ href: "/#pricing", label: "Choose a plan" }}
+        body="No active licenses yet. Purchase a plan to get started."
+        cta={{ href: "/pricing", label: "Choose a plan" }}
       />
     );
   }
 
   return (
     <div className="space-y-8">
+      {/* Post-payment confirmation. The webhook has already granted the license
+          and fired the delivery email, so this is purely reassurance + a cue to
+          look at the card below. */}
+      {checkoutSucceeded && (
+        <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+          <div>
+            <p className="text-sm font-bold text-emerald-900">Payment successful 🎉</p>
+            <p className="mt-0.5 text-sm text-emerald-700">
+              Your license is active and has been emailed to you. It is listed below along with
+              your download link.
+            </p>
+          </div>
+        </div>
+      )}
+
       {message && (
         <div className="flex items-start gap-2 rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-sm text-brand-700">
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" /> {message}
         </div>
       )}
+
+      <h2 className="text-lg font-bold tracking-tight text-slate-900">
+        Your Active Licenses
+      </h2>
 
       {licenses.map((lic) => (
         <section

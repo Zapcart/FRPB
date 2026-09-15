@@ -69,7 +69,10 @@ async function handleCheckout(req: NextRequest) {
 
   const { planSlug, currency } = parsed.data;
   const plan = getPlanDefinition(planSlug);
-  const successUrl = parsed.data.successUrl ?? `${APP_URL}/dashboard?checkout=success`;
+  // Gateway success return → the dashboard, which renders the post-payment
+  // confirmation and the "Your Active Licenses" card (the webhook has already
+  // granted the license and triggered the delivery email by this point).
+  const successUrl = parsed.data.successUrl ?? `${APP_URL}/dashboard?success=true`;
   const cancelUrl = parsed.data.cancelUrl ?? `${APP_URL}/pricing?checkout=cancelled`;
 
   // 3. Upsert User (payments FK to User.id) — isolated so a DB outage
