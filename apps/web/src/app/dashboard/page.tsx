@@ -27,6 +27,13 @@ interface LicenseWithDevices extends ListLicensesItem {
   devices: DashboardDeviceItem[];
 }
 
+/**
+ * Hard ceiling on the initial license fetch. Past this the request aborts and
+ * the screen silently resolves to the empty state, so a cold database start or
+ * a stalled connection pool can never leave the dashboard hanging on a spinner.
+ */
+const LIST_TIMEOUT_MS = 3000;
+
 export default function DashboardPage() {
   const router = useRouter();
   // Set by the gateway success return: /dashboard?success=true.
@@ -46,9 +53,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [unbinding, setUnbinding] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  // True when the last load failed for a non-auth reason (503 / network) — the
-  // user stays signed in and sees a Retry action instead of an empty state.
-  const [loadFailed, setLoadFailed] = useState(false);
   // Fallback key recovery: the list route returns only a MASKED key, so a
   // customer whose delivery email never arrived reveals the full key here.
   const [revealed, setRevealed] = useState<Record<string, string>>({});
@@ -58,42 +62,46 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setMessage(null);
-    setLoadFailed(false);
+
+    // Hard ceiling on the list fetch. A cold start or a stalled connection pool
+    // must never leave the dashboard spinning — after this the fetch aborts and
+    // we resolve silently to an empty list.
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), LIST_TIMEOUT_MS);
+
     try {
-      const res = await fetch("/api/v1/license/list", { cache: "no-store", credentials: "include" });
+      const res = await fetch("/api/v1/license/list", {
+        cache: "no-store",
+        credentials: "include",
+        signal: controller.signal,
+      });
+
+      // The ONLY failure that changes behaviour: a genuinely missing session.
+      // Navigate client-side — we never clear the token and never hard-reload.
       if (res.status === 401) {
-        // The session is genuinely invalid. Navigate client-side to sign-in —
-        // we never clear the session token here and never trigger a full page
-        // reload (which would drop client auth state mid-transition).
         router.replace("/auth?returnTo=/dashboard");
         return;
       }
+
       if (!res.ok) {
-        // Backend/DB failures (e.g. 503) must NOT touch the auth session, and
-        // must never be rendered as "no licenses". Flag a retryable failure.
-        setLoadFailed(true);
-        setMessage(
-          res.status === 503
-            ? "We couldn't load your licenses right now. Please try again in a moment."
-            : "Failed to load licenses."
-        );
+        // Any other status (500/502/503/…) resolves to the normal empty state.
+        // No error card, no toast, no "Try again" — by design.
+        setLicenses([]);
         return;
       }
+
       const data = (await res.json()) as ApiEnvelope<{ licenses: LicenseWithDevices[] }>;
-      if (data.success && data.data) {
-        const withDevices = await Promise.all(
-          data.data.licenses.map(async (lic) => ({
-            ...lic,
-            devices: await loadDevices(lic.id),
-          }))
-        );
-        setLicenses(withDevices);
-      }
+      const list = data.success && data.data?.licenses ? data.data.licenses : [];
+      const withDevices = await Promise.all(
+        list.map(async (lic) => ({ ...lic, devices: await loadDevices(lic.id) }))
+      );
+      setLicenses(withDevices);
     } catch {
-      // Network hiccups also must not log the user out.
-      setLoadFailed(true);
-      setMessage("Network error. Please try again.");
+      // Abort/timeout, network failure, or malformed JSON — resolve to an empty
+      // list. The empty state is the single failure UI for this screen.
+      setLicenses([]);
     } finally {
+      window.clearTimeout(timeout);
       setLoading(false);
     }
   }, [router]);
@@ -190,37 +198,19 @@ export default function DashboardPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center gap-2 py-24 text-slate-500">
-        <Loader2 className="h-6 w-6 animate-spin text-brand-500" /> Loading your licenses…
-      </div>
-    );
+    return <LicensesSkeleton />;
   }
 
-  // A transient backend failure must NEVER masquerade as "no licenses" (which
-  // reads as the yellow "Choose a plan" warning to a paying customer). Offer an
-  // explicit retry while keeping the session untouched.
-  if (loadFailed) {
-    return (
-      <EmptyState
-        icon={<AlertCircle className="h-8 w-8 text-amber-500" />}
-        title="We couldn't load your licenses"
-        body={
-          message ??
-          "We couldn't reach our servers right now. Your session is still active — please try again."
-        }
-        cta={{ onClick: () => void load(), label: "Try again" }}
-      />
-    );
-  }
-
+  // Single failure UI for this screen: an empty list — whether the user truly
+  // has no licenses, or the backend was unreachable. There is deliberately no
+  // error card, toast or retry button here.
   if (!licenses.length) {
     return (
       <EmptyState
         icon={<KeyRound className="h-8 w-8 text-brand-500" />}
         title="No active licenses yet"
-        body="No active licenses yet. Purchase a plan to get started."
-        cta={{ href: "/pricing", label: "Choose a plan" }}
+        body="Purchase a plan to unlock full device recovery features."
+        cta={{ href: "/pricing", label: "Choose Plan" }}
       />
     );
   }
@@ -418,6 +408,26 @@ function StatusPill({ status }: { status: string }) {
     <span className={`rounded-full border px-3 py-1 font-semibold ${tone}`}>
       {status}
     </span>
+  );
+}
+
+/**
+ * Subtle loading skeleton for the initial license fetch. Replaced by either the
+ * license cards or the empty state — never by an error view.
+ */
+function LicensesSkeleton() {
+  return (
+    <div className="space-y-6" aria-busy="true" aria-label="Loading your licenses">
+      <div className="h-6 w-52 animate-pulse rounded-lg bg-slate-200" />
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
+        <div className="space-y-3">
+          <div className="h-3 w-24 animate-pulse rounded bg-slate-200" />
+          <div className="h-6 w-64 animate-pulse rounded bg-slate-200" />
+          <div className="h-8 w-full max-w-md animate-pulse rounded-xl bg-slate-100" />
+        </div>
+        <div className="mt-6 h-16 w-full animate-pulse rounded-xl bg-slate-100" />
+      </div>
+    </div>
   );
 }
 

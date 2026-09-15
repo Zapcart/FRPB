@@ -64,18 +64,23 @@ export default async function DashboardLayout({
   }
 
   // Keep the dashboard data fresh: the user's email is the join key.
+  //
   // Isolated in try/catch so a DB outage never crashes the shell — the shell
-  // still renders so the user can sign out or retry from the client views.
+  // still renders (sidebar, header, sign-out) and the client view resolves to
+  // its normal empty state.
+  //
+  // Deliberately NO error banner on failure: a cold start or connection-pool
+  // stall used to paint an amber "We couldn't load your license data" strip
+  // above the content. The dashboard now always renders its standard states.
   let user: UserWithLicenses | null = null;
-  let dbUnreachable = false;
   try {
     user = await prisma.user.findUnique({
       where: { email: authUser.email! },
       include: userLicensesInclude,
     });
   } catch (err) {
+    // Logged for diagnosis; the UI stays clean.
     console.error("[dashboard/layout] Failed to load user licenses from DB:", err);
-    dbUnreachable = true;
   }
 
   const email = authUser.email ?? "";
@@ -141,7 +146,7 @@ export default async function DashboardLayout({
             <h1 className="text-lg font-bold text-slate-900">Dashboard</h1>
             <div className="flex items-center gap-2">
               <Link
-                href="/#pricing"
+                href="/pricing"
                 className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
               >
                 <ArrowRight className="h-3.5 w-3.5" /> Choose Plan
@@ -153,15 +158,6 @@ export default async function DashboardLayout({
             </div>
           </div>
         </header>
-        {dbUnreachable ? (
-          <div
-            role="alert"
-            className="border-b border-amber-200 bg-amber-50 px-6 py-2.5 text-sm text-amber-800"
-          >
-            We couldn't load your license data right now. Please try again in a
-            moment — your licenses are safe.
-          </div>
-        ) : null}
         <main className="mx-auto max-w-5xl px-6 py-10">{children}</main>
       </div>
     </div>

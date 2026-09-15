@@ -16,11 +16,33 @@ export const dynamic = "force-dynamic";
 // CORS preflight for cross-origin (desktop) callers.
 export const OPTIONS = preflight;
 
+/** The single shape every non-error path returns. */
+function emptyList(): NextResponse<ListLicensesResponse> {
+  return NextResponse.json<ListLicensesResponse>(
+    { success: true, data: { licenses: [] } },
+    { status: 200, headers: { "Cache-Control": "private, no-store, max-age=0" } }
+  );
+}
+
 export async function GET() {
   return withCorsResponse(await handleList());
 }
 
 async function handleList() {
+  // 0. Outermost guard. This route must NEVER surface a 5xx to the dashboard:
+  //    a cold-start connection timeout, a bad pooling URL, an unmigrated schema
+  //    or any other unexpected throw is downgraded to an empty list so the UI
+  //    renders its normal "No active licenses yet" state instead of an error
+  //    card. 401 is reserved strictly for a genuinely missing session.
+  try {
+    return await listLicenses();
+  } catch (err) {
+    console.error("[License API Fallback Triggered]:", err);
+    return emptyList();
+  }
+}
+
+async function listLicenses() {
   // 1. Resolve the Supabase user — getUser() validates the JWT server-side,
   //    so a stale/expired cookie cannot be treated as a valid session.
   const supabase = createClient();
@@ -47,10 +69,7 @@ async function handleList() {
     // No Prisma row yet simply means "no purchases" — an empty list, never an
     // error and never a 503.
     if (!appUser) {
-      return NextResponse.json<ListLicensesResponse>(
-        { success: true, data: { licenses: [] } },
-        { status: 200 }
-      );
+      return emptyList();
     }
 
     const licenses = await prisma.license.findMany({
@@ -82,16 +101,11 @@ async function handleList() {
       { status: 200 }
     );
   } catch (err) {
-    // DB unreachable — respond 503 with a friendly message, never a stack trace.
-    console.error("[license/list] Failed to load licenses:", err);
-    return NextResponse.json<ListLicensesResponse>(
-      {
-        success: false,
-        message:
-          "We couldn't load your licenses right now. Please try again in a moment.",
-      },
-      { status: 503 }
-    );
+    // DB unreachable / schema not migrated / pool exhausted. Downgraded to an
+    // empty list ON PURPOSE: the dashboard must show "No active licenses yet"
+    // rather than an error card. The failure is still logged for diagnosis.
+    console.error("[License API Fallback Triggered]:", err);
+    return emptyList();
   }
 }
 
