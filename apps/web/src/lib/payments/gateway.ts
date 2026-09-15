@@ -2,7 +2,7 @@
 // Stripe, Razorpay and Cashfree adapters implement this so checkout + webhooks
 // stay provider-agnostic at the call site.
 
-export type PaymentProviderName = "STRIPE" | "RAZORPAY" | "CASHFREE";
+export type PaymentProviderName = "STRIPE" | "RAZORPAY" | "CASHFREE" | "PAYGLOCAL";
 
 export interface CreateCheckoutInput {
   planSlug: string;

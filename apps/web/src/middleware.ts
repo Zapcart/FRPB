@@ -65,9 +65,35 @@ export async function updateSession(request: NextRequest) {
   // IMPORTANT: Do not run any code between createServerClient and
   // supabase.auth.getUser(). A simple mistake could make it very hard to
   // debug issues with users being randomly logged out.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Distinguish three outcomes:
+  //   - an affirmative user            → authenticated
+  //   - an affirmative "no session"    → unauthenticated (bounce /dashboard)
+  //   - a TRANSIENT failure (network /   → unknown: never redirect, let the
+  //     5xx from the Supabase endpoint)     server component decide
+  //
+  // Collapsing the third case into "unauthenticated" is what turned a momentary
+  // Supabase blip into a spontaneous logout when the user clicked a nav link.
+  let user: { id: string } | null = null;
+  let verified = true;
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    if (error) {
+      // A missing/expired session is an AFFIRMATIVE answer, not a failure.
+      // Supabase returns AuthSessionMissingError with status 400/401 in that
+      // case; anything else (5xx, fetch failure) is transient → unverified.
+      const status = (error as { status?: number }).status ?? 0;
+      user = data?.user ?? null;
+      if (!user && status >= 500) verified = false;
+      if (!user && status === 0 && /fetch|network|timeout/i.test(error.message ?? "")) {
+        verified = false;
+      }
+    } else {
+      user = data.user ?? null;
+    }
+  } catch {
+    // Thrown fetch/network error → treat as unverified, never as "logged out".
+    verified = false;
+  }
 
   const { pathname } = request.nextUrl;
   const isDashboard = pathname.startsWith("/dashboard");
@@ -76,7 +102,10 @@ export async function updateSession(request: NextRequest) {
   // /pricing, /checkout, /auth and other public routes are left alone: a
   // transient 401 there must never turn into a forced logout, and a valid
   // session must never be interrupted.
-  if (isDashboard && !user) {
+  // Only bounce when we are CERTAIN the visitor is unauthenticated. A transient
+  // verification failure (`verified === false`) passes through so the dashboard
+  // layout — which re-checks server-side — makes the call with a fresh read.
+  if (isDashboard && !user && verified) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/auth";
     redirectUrl.searchParams.set("returnTo", pathname);

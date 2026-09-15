@@ -92,6 +92,12 @@ export default function CheckoutClient({ planSlug, currency = "USD" }: CheckoutC
                 "Taking you to secure payment."
               )}
             </p>
+            {/* White-label method hint — the acquirer is never named. */}
+            <p className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-500">
+              {currency === "INR"
+                ? "UPI / NetBanking / Cards (INR/India)"
+                : "Credit / Debit Card (USD/International)"}
+            </p>
             <div className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-slate-500">
               <Loader2 className="h-4 w-4 animate-spin text-brand-500" />
               Redirecting…

@@ -14,8 +14,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { CheckoutRequestSchema } from "@frpb/shared";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
-import { getPaymentGateway, PaymentConfigError } from "@/lib/payments";
+import { getGatewayForCurrency, providerForCurrency, PaymentConfigError } from "@/lib/payments";
 import { getPlanDefinition } from "@/lib/license/constants";
+import { upsertPrismaUser } from "@/lib/auth/user-identity";
 import { preflight, withCorsResponse } from "@/lib/cors";
 import type { CheckoutResponse } from "@frpb/shared";
 
@@ -72,13 +73,14 @@ async function handleCheckout(req: NextRequest) {
   const cancelUrl = parsed.data.cancelUrl ?? `${APP_URL}/pricing?checkout=cancelled`;
 
   // 3. Upsert User (payments FK to User.id) — isolated so a DB outage
-  //    surfaces as a 503 instead of a generic 500.
+  //    surfaces as a 503 instead of a generic 500. Uses the CANONICAL identity
+  //    (normalized email + supabaseId) so checkout and the webhook can never
+  //    create two rows for one Supabase account.
   let userRecord;
   try {
-    userRecord = await prisma.user.upsert({
-      where: { email: user.email },
-      update: { supabaseId: user.id },
-      create: { email: user.email, supabaseId: user.id },
+    userRecord = await upsertPrismaUser(prisma, {
+      id: user.id,
+      email: user.email,
     });
   } catch (err) {
     console.error("[checkout] DB unreachable while upserting user:", err);
@@ -88,18 +90,19 @@ async function handleCheckout(req: NextRequest) {
     );
   }
 
-  // 4. Create the gateway session/order — Cashfree is the default gateway.
-  //    If Cashfree is not configured, surface as 502.
+  // 4. White-label dual-rail routing — the currency silently selects the
+  //    acquirer: INR → Cashfree (UPI/NetBanking/domestic cards), USD →
+  //    PayGlocal (international cards). The customer never sees a provider
+  //    name. A missing config for the selected rail surfaces as 502.
+  const provider = providerForCurrency(currency);
   let checkoutResult;
   try {
-    const gateway = getPaymentGateway("CASHFREE");
+    const gateway = getGatewayForCurrency(currency);
     checkoutResult = await gateway.createCheckout({
       planSlug,
       customerEmail: userRecord.email,
       successUrl,
       cancelUrl,
-      // Charge in the currency the customer selected (Cashfree settles INR
-      // natively; the adapter picks the matching USD-cents / INR-paise amount).
       currency,
     });
   } catch (err) {
@@ -121,7 +124,9 @@ async function handleCheckout(req: NextRequest) {
     await prisma.payment.create({
       data: {
         userId: userRecord.id,
-        provider: "CASHFREE",
+        // Persist the ACTUAL rail that handled this order (CASHFREE or
+        // PAYGLOCAL) for reconciliation, refunds and reporting.
+        provider,
         providerTxnId: checkoutResult.providerTxnId,
         amountCents: currency === "INR" ? plan.priceInr : plan.priceCents,
         currency: currency,

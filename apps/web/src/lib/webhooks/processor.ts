@@ -9,12 +9,13 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 // Prisma generates the PaymentProvider enum but does not export it as a value;
 // use the string literal union matching the schema enum for runtime comparisons.
-type PaymentProviderName = "STRIPE" | "RAZORPAY" | "CASHFREE";
+type PaymentProviderName = "STRIPE" | "RAZORPAY" | "CASHFREE" | "PAYGLOCAL";
 import { prisma } from "@/lib/prisma";
 import { sha256 } from "@/lib/crypto/sha256";
 import { generateLicenseKey } from "@/lib/license/generate";
 import { getPlanDefinition } from "@/lib/license/constants";
 import { sendLicenseEmail } from "@/lib/email/resend";
+import { normalizeEmail } from "@/lib/auth/user-identity";
 import type { PlanSlug } from "@frpb/shared";
 
 export interface WebhookProcessInput {
@@ -109,11 +110,14 @@ export async function processWebhook(
       throw new Error(`Plan row missing for slug ${input.planSlug} — run prisma db seed`);
     }
 
-    // Upsert the User by email (webhook is the source of truth for the purchase).
+    // Upsert the User by CANONICAL email (webhook is the source of truth for
+    // the purchase). Uses the same normalization as checkout so both paths
+    // resolve to a single Prisma row per Supabase account.
+    const email = normalizeEmail(input.customerEmail);
     const user = await client.user.upsert({
-      where: { email: input.customerEmail.toLowerCase() },
+      where: { email },
       update: {},
-      create: { email: input.customerEmail.toLowerCase() },
+      create: { email },
     });
 
     // ── 4. Generate license key (raw shown once, SHA-256 stored) ───────

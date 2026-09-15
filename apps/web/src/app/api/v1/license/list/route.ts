@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { resolvePrismaUser } from "@/lib/auth/user-identity";
 import type { ListLicensesItem, ListLicensesResponse } from "@frpb/shared";
 import { preflight, withCorsResponse } from "@/lib/cors";
 
@@ -34,10 +35,26 @@ async function handleList() {
     );
   }
 
-  // 2. Load licenses for this user (include active device count)
+  // 2. Resolve the canonical Prisma user (supabaseId first, normalized email
+  //    fallback). Matching on raw email alone previously missed licenses that
+  //    were granted to a lowercased row — the "no licenses" false negative.
   try {
+    const appUser = await resolvePrismaUser(prisma, {
+      id: user.id,
+      email: user.email,
+    });
+
+    // No Prisma row yet simply means "no purchases" — an empty list, never an
+    // error and never a 503.
+    if (!appUser) {
+      return NextResponse.json<ListLicensesResponse>(
+        { success: true, data: { licenses: [] } },
+        { status: 200 }
+      );
+    }
+
     const licenses = await prisma.license.findMany({
-      where: { user: { email: user.email } },
+      where: { userId: appUser.id },
       include: {
         plan: true,
         _count: { select: { devices: { where: { status: { not: "UNBOUND" } } } } },

@@ -1,9 +1,19 @@
 // FRPB — payment gateway factory (provider-agnostic checkout).
+//
+// WHITE-LABEL DUAL-RAIL ROUTING
+// -----------------------------
+// The customer never sees, and never chooses, a provider. Currency alone
+// decides the rail:
+//   INR (India)          → CASHFREE   (UPI / NetBanking / domestic cards)
+//   USD (international)  → PAYGLOCAL  (credit + debit cards)
+// Callers use `getGatewayForCurrency(currency)`; the provider name is an
+// internal detail persisted on the Payment row for reconciliation only.
 
 import type { PaymentGateway, PaymentProviderName } from "./gateway";
 import { StripeGateway } from "./stripe";
 import { RazorpayGateway } from "./razorpay";
 import { CashfreeGateway } from "./cashfree";
+import { PayGlocalGateway } from "./payglocal";
 
 /**
  * Raised when a gateway cannot be constructed because the required
@@ -44,7 +54,33 @@ export function getPaymentGateway(provider: PaymentProviderName): PaymentGateway
       }
       return new CashfreeGateway(clientId, clientSecret);
     }
+    case "PAYGLOCAL": {
+      const merchantId = process.env.PAYGLOCAL_MERCHANT_ID;
+      const merchantKey = process.env.PAYGLOCAL_MERCHANT_KEY;
+      if (!merchantId || !merchantKey) {
+        throw new PaymentConfigError(provider);
+      }
+      return new PayGlocalGateway(
+        merchantId,
+        merchantKey,
+        process.env.PAYGLOCAL_MERCHANT_SECRET
+      );
+    }
     default:
       throw new Error(`Unsupported payment provider: ${provider}`);
   }
+}
+
+/**
+ * The provider backing a currency — the single source of truth for the
+ * dual-rail split. INR settles through Cashfree (India), USD through PayGlocal
+ * (international cards).
+ */
+export function providerForCurrency(currency: "USD" | "INR"): PaymentProviderName {
+  return currency === "INR" ? "CASHFREE" : "PAYGLOCAL";
+}
+
+/** Resolve the fully-constructed gateway for a currency. */
+export function getGatewayForCurrency(currency: "USD" | "INR"): PaymentGateway {
+  return getPaymentGateway(providerForCurrency(currency));
 }

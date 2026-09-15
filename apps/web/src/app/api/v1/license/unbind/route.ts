@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { UnbindRequestSchema } from "@frpb/shared";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { resolvePrismaUser } from "@/lib/auth/user-identity";
 import { preflight, withCorsResponse } from "@/lib/cors";
 import type { UnbindResponse } from "@frpb/shared";
 
@@ -53,13 +54,16 @@ async function handleUnbind(req: NextRequest) {
   }
 
   try {
-    // 3. Find the device; ensure it belongs to this user's license
+    // 3. Find the device; ensure it belongs to this user's license.
+    //    Ownership is decided by the canonical Prisma user id (supabaseId →
+    //    normalized email), not a raw email string comparison.
+    const appUser = await resolvePrismaUser(prisma, { id: user.id, email: user.email });
     const device = await prisma.licenseDevice.findUnique({
       where: { id: parsed.data.deviceId },
       include: { license: { include: { user: true } } },
     });
 
-    if (!device || device.license.user.email !== user.email) {
+    if (!appUser || !device || device.license.userId !== appUser.id) {
       return NextResponse.json<UnbindResponse>(
         { success: false, message: "Device not found" },
         { status: 404 }

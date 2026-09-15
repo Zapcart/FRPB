@@ -33,10 +33,14 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [unbinding, setUnbinding] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  // True when the last load failed for a non-auth reason (503 / network) — the
+  // user stays signed in and sees a Retry action instead of an empty state.
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setMessage(null);
+    setLoadFailed(false);
     try {
       const res = await fetch("/api/v1/license/list", { cache: "no-store", credentials: "include" });
       if (res.status === 401) {
@@ -47,8 +51,9 @@ export default function DashboardPage() {
         return;
       }
       if (!res.ok) {
-        // Backend/DB failures (e.g. 503) must NOT touch the auth session.
-        // Surface a non-destructive message and keep the user signed in.
+        // Backend/DB failures (e.g. 503) must NOT touch the auth session, and
+        // must never be rendered as "no licenses". Flag a retryable failure.
+        setLoadFailed(true);
         setMessage(
           res.status === 503
             ? "We couldn't load your licenses right now. Please try again in a moment."
@@ -68,6 +73,7 @@ export default function DashboardPage() {
       }
     } catch {
       // Network hiccups also must not log the user out.
+      setLoadFailed(true);
       setMessage("Network error. Please try again.");
     } finally {
       setLoading(false);
@@ -120,6 +126,23 @@ export default function DashboardPage() {
       <div className="flex items-center justify-center gap-2 py-24 text-slate-500">
         <Loader2 className="h-6 w-6 animate-spin text-brand-500" /> Loading your licenses…
       </div>
+    );
+  }
+
+  // A transient backend failure must NEVER masquerade as "no licenses" (which
+  // reads as the yellow "Choose a plan" warning to a paying customer). Offer an
+  // explicit retry while keeping the session untouched.
+  if (loadFailed) {
+    return (
+      <EmptyState
+        icon={<AlertCircle className="h-8 w-8 text-amber-500" />}
+        title="We couldn't load your licenses"
+        body={
+          message ??
+          "We couldn't reach our servers right now. Your session is still active — please try again."
+        }
+        cta={{ onClick: () => void load(), label: "Try again" }}
+      />
     );
   }
 
@@ -281,16 +304,24 @@ function EmptyState({
   icon: React.ReactNode;
   title: string;
   body: string;
-  cta: { href: string; label: string };
+  /** Either a link target (href) or an in-place action (onClick). */
+  cta: { href?: string; onClick?: () => void; label: string };
 }) {
+  const ctaClass = "btn-accent mt-6 px-6 py-2.5 text-sm font-bold text-white";
   return (
     <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white py-20 text-center">
       {icon}
       <h2 className="mt-4 text-xl font-bold text-slate-900">{title}</h2>
       <p className="mt-2 max-w-md text-sm text-slate-500">{body}</p>
-      <Link href={cta.href} className="btn-accent mt-6 px-6 py-2.5 text-sm font-bold text-white">
-        {cta.label}
-      </Link>
+      {cta.onClick ? (
+        <button type="button" onClick={cta.onClick} className={ctaClass}>
+          {cta.label}
+        </button>
+      ) : (
+        <Link href={cta.href ?? "/"} className={ctaClass}>
+          {cta.label}
+        </Link>
+      )}
     </div>
   );
 }

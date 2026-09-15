@@ -29,7 +29,8 @@ enum LicenseStatus {
 enum PaymentProvider {
   STRIPE
   RAZORPAY
-  CASHFREE
+  CASHFREE // India / INR (UPI, NetBanking, domestic cards)
+  PAYGLOCAL // International / USD (credit + debit cards)
 }
 
 enum PaymentStatus {
@@ -151,7 +152,7 @@ model Payment {
 
 model WebhookEvent {
   id          String          @id @default(cuid())
-  provider    PaymentProvider // STRIPE | RAZORPAY | CASHFREE
+  provider    PaymentProvider // STRIPE | RAZORPAY | CASHFREE | PAYGLOCAL
   eventId     String          @unique // provider event id (e.g., evt_..., event_...)
   eventType   String // payment_intent.succeeded / payment.captured
   payload     Json // raw provider payload for audit + replay

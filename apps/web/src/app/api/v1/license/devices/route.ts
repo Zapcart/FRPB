@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { resolvePrismaUser } from "@/lib/auth/user-identity";
 import type { DashboardDeviceItem, ApiEnvelope } from "@frpb/shared";
 import { preflight, withCorsResponse } from "@/lib/cors";
 
@@ -42,9 +43,19 @@ async function handleDevices(req: NextRequest) {
   }
 
   try {
+    // Resolve the canonical user (supabaseId → normalized email) so ownership
+    // is consistent with the list route and never fails on a case mismatch.
+    const appUser = await resolvePrismaUser(prisma, { id: user.id, email: user.email });
+    if (!appUser) {
+      return NextResponse.json<ApiEnvelope>(
+        { success: false, message: "License not found" },
+        { status: 404 }
+      );
+    }
+
     // Ownership guard: device rows belong to a license whose user is the caller
     const license = await prisma.license.findFirst({
-      where: { id: licenseId, user: { email: user.email } },
+      where: { id: licenseId, userId: appUser.id },
       select: { id: true },
     });
     if (!license) {
