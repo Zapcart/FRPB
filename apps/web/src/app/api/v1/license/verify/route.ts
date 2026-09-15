@@ -27,10 +27,15 @@ const WINDOW_SECONDS = 60;
 const MAX_FAILURES = 5;
 const LOCKOUT_SECONDS = 60 * 60;
 
-// ─── Master test key (development only) ────────────────────────────────
+// ─── Master test key (DEVELOPMENT ONLY) ────────────────────────────────
 // Returns a synthetic ACTIVE LIFETIME profile so the desktop app can run
 // through the full activate → dashboard flow locally without live payment
-// webhooks or a DB-backed license row. Hard-disabled in production.
+// webhooks or a DB-backed license row.
+//
+// The `FRPB-TEST-*` key is PUBLISHED in this repository, so accepting it in
+// production would let anyone activate for free. `isMasterTestKey` is
+// therefore fail-closed: it returns false in production unless
+// ALLOW_DEV_TEST_KEYS=true was set deliberately.
 function masterTestProfile(key: string) {
   return {
     success: true,

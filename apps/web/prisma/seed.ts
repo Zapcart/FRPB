@@ -3,6 +3,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import { sha256 } from "../src/lib/crypto/sha256";
+import { devTestKeysAllowed } from "../src/lib/license/test-key";
 
 const prisma = new PrismaClient();
 
@@ -69,11 +70,20 @@ const plans: Array<{
 ];
 
 // Master test key — the same value the desktop activation screen accepts.
-// Seeded ACTIVE + LIFETIME (expiresAt = null) so /api/v1/license/verify can
-// resolve it through the real Supabase lookup (keySha256) and full device
-// binding flow, not just the dev-only synthetic bypass.
+//
+// ⚠️ This key is PUBLISHED in the repository, so it is NOT a secret. Seeding it
+// into a real database would hand a free lifetime licence to anyone who can read
+// the source. The user + licence rows below are therefore written ONLY when
+// dev/test mode is enabled (see devTestKeysAllowed in src/lib/license/test-key):
+//
+//   NODE_ENV !== "production"                          → seeded
+//   NODE_ENV === "production" && ALLOW_DEV_TEST_KEYS=true → seeded
+//   otherwise                                          → skipped
+//
+// Plans are ALWAYS seeded — they are required in every environment.
 const TEST_KEY = "FRPB-TEST-1234-5678";
 const TEST_USER_EMAIL = "test@frpb.local";
+const seedTestLicense = devTestKeysAllowed();
 
 async function main() {
   console.log("🌱 Seeding plans…");
@@ -84,6 +94,19 @@ async function main() {
       create: plan,
     });
     console.log(`  ✓ ${plan.name} (${plan.priceCents}¢, ${plan.deviceLimit} devices)`);
+  }
+
+  // ── Test user + master licence: DEV/TEST ONLY ───────────────────────────
+  // Skipped in production unless ALLOW_DEV_TEST_KEYS=true was set on purpose.
+  if (!seedTestLicense) {
+    console.log(
+      "⏭  Skipping master test licence — the FRPB-TEST-* key is declined in production."
+    );
+    console.log(
+      "   (Set ALLOW_DEV_TEST_KEYS=true only in a throwaway environment if you need it.)"
+    );
+    console.log("Seed complete.");
+    return;
   }
 
   console.log("👤 Seeding test user…");
