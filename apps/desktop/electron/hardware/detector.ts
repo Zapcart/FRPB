@@ -1,13 +1,20 @@
 // FRPB — Raw USB / COM hardware detection engine (main process).
 //
-// Replaces ADB-first readiness checks with a pure hardware poll: it enumerates
-// raw node-usb devices (VID/PID + interface classes) and parses the Windows
-// Device Instance IDs / COM ports via the PnP device tree, so a locked handset
-// in MediaTek BROM, Qualcomm EDL (9008), Fastboot, or a bare serial (COMx)
-// endpoint is detected and classified WITHOUT any ADB session or USB debugging.
+// Replaces ADB-first readiness checks with a pure hardware poll using THREE
+// independent native sources, so a locked handset is detected WITHOUT any ADB
+// session or USB debugging:
+//
+//   1. node-usb            — raw VID/PID + interface classes (authoritative
+//                            for BROM 0x0e8d and Qualcomm EDL 05c6:9008)
+//   2. serialport          — real COM/tty enumeration (authoritative for the
+//                            MediaTek Preloader / VCOM port, which node-usb
+//                            cannot open because the driver is a modem-class
+//                            serial port rather than a WinUSB endpoint)
+//   3. Windows PnP         — Device Instance ID (`VID_xxxx&PID_xxxx`) + the
+//                            friendly name that carries the "(COMx)" suffix
 //
 // Exports:
-//   pollHardware()            → HardwareSnapshot   (synchronous, cached probes)
+//   pollHardware()            → HardwareSnapshot   (cached, non-blocking probes)
 //   waitForHardware()         → Promise<HardwareSnapshot | null>  (live listen)
 //   describeHardware()        → string[]  (console log lines)
 //   isTargetMode()            → boolean
@@ -154,13 +161,107 @@ function splitCsvLine(line: string): string[] {
   return out;
 }
 
-/** Best COM port from the PnP tree or the SERIALCOMM device map. */
-function readComPort(pnp: PnpDevice[]): string | null {
-  for (const d of pnp) {
-    const m = /\((COM\d+)\)/i.exec(d.friendlyName) ?? /\b(COM\d+)\b/i.exec(d.friendlyName);
-    if (m && m[1]) return m[1].toUpperCase();
+// ─── serialport-backed COM enumeration ───────────────────────────────────────
+//
+// `SerialPort.list()` is async and touches the driver layer, so it is polled at
+// most once per COM_TTL_MS and cached. The synchronous `pollHardware()` reads
+// the cache, keeping the listen loop responsive.
+interface SerialPortInfo {
+  path?: string;
+  manufacturer?: string;
+  friendlyName?: string;
+  pnpId?: string;
+  vendorId?: string;
+  productId?: string;
+}
+
+let serialPortCache: { at: number; ports: SerialPortInfo[] } | null = null;
+const COM_TTL_MS = 2_000;
+let serialPollInFlight = false;
+
+function loadSerialPort(): { SerialPort: { list: () => Promise<SerialPortInfo[]> } } | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require("serialport");
+  } catch (err) {
+    log.warn(`[hw] serialport unavailable (${err}); COM enumeration falls back to PnP`);
+    return null;
   }
-  if (process.platform !== "win32") return null;
+}
+
+/** Kick an async serialport enumeration (never throws, never re-entrant). */
+function refreshSerialPorts(): void {
+  if (serialPollInFlight) return;
+  const now = Date.now();
+  if (serialPortCache && now - serialPortCache.at < COM_TTL_MS) return;
+  const sp = loadSerialPort();
+  if (!sp) return;
+  serialPollInFlight = true;
+  sp.SerialPort.list()
+    .then((ports) => {
+      serialPortCache = { at: Date.now(), ports: Array.isArray(ports) ? ports : [] };
+    })
+    .catch((err) => {
+      log.warn(`[hw] SerialPort.list failed: ${(err as Error).message}`);
+    })
+    .finally(() => {
+      serialPollInFlight = false;
+    });
+}
+
+/** Cached serialport enumeration (may be empty on the very first tick). */
+function serialPorts(): SerialPortInfo[] {
+  refreshSerialPorts();
+  return serialPortCache?.ports ?? [];
+}
+
+/** True when a serial endpoint's metadata points at a MediaTek/Qualcomm port. */
+function serialHint(port: SerialPortInfo): ChipsetFamily {
+  const hay = `${port.manufacturer ?? ""} ${port.friendlyName ?? ""}`.toLowerCase();
+  if (hay.includes("mediatek") || hay.includes("mtk") || hay.includes("preloader")) {
+    return "MediaTek";
+  }
+  if (hay.includes("qualcomm") || hay.includes("hs-usb") || hay.includes("qcom")) {
+    return "Qualcomm";
+  }
+  if (hay.includes("samsung")) return "Samsung Exynos";
+  return "Unknown";
+}
+
+/**
+ * Best COM port. Preference order:
+ *   1. serialport entry whose metadata names a mobile SoC vendor (the true
+ *      MediaTek Preloader / Qualcomm VCOM port)
+ *   2. the VID/PID-matched PnP friendly name
+ *   3. any serialport entry
+ *   4. the Windows SERIALCOMM registry map
+ */
+function readComPort(
+  pnp: PnpDevice[],
+  preferVid?: number | null
+): { port: string | null; entry: SerialPortInfo | null } {
+  const ports = serialPorts();
+
+  // 1. Vendor-hinted serialport entry.
+  const hinted = ports.find((p) => serialHint(p) !== "Unknown");
+  if (hinted?.path) return { port: hinted.path.toUpperCase(), entry: hinted };
+
+  // 2. PnP row for the exact VID/PID (its friendly name carries "(COMx)").
+  if (preferVid != null) {
+    const row = findPnpByVendorHint(preferVid, pnp);
+    const m = row && /\((COM\d+)\)/i.exec(row.friendlyName);
+    if (m?.[1]) return { port: m[1].toUpperCase(), entry: null };
+  }
+  for (const d of pnp) {
+    const m = /\((COM\d+)\)/i.exec(d.friendlyName);
+    if (m?.[1]) return { port: m[1].toUpperCase(), entry: null };
+  }
+
+  // 3. Any serialport entry.
+  if (ports[0]?.path) return { port: ports[0].path.toUpperCase(), entry: ports[0] };
+
+  // 4. Windows SERIALCOMM registry map.
+  if (process.platform !== "win32") return { port: null, entry: null };
   try {
     const out = execSync("reg query HKLM\\HARDWARE\\DEVICEMAP\\SERIALCOMM", {
       encoding: "utf8",
@@ -168,9 +269,9 @@ function readComPort(pnp: PnpDevice[]): string | null {
       windowsHide: true,
     });
     const m = /(COM\d+)/i.exec(out);
-    return m && m[1] ? m[1].toUpperCase() : null;
+    return { port: m && m[1] ? m[1].toUpperCase() : null, entry: null };
   } catch {
-    return null;
+    return { port: null, entry: null };
   }
 }
 
@@ -238,7 +339,9 @@ function emptySnapshot(): HardwareSnapshot {
 export function pollHardware(): HardwareSnapshot {
   const lastScanAt = new Date().toISOString();
   const pnp = readPnpDevices();
-  const port = readComPort(pnp);
+  // Eagerly kick the async serialport enumeration so the cache is warm for the
+  // synchronous path below and for the vendor-hinted preloader branch.
+  refreshSerialPorts();
   const usb = loadUsb();
 
   let best: HardwareSnapshot | null = null;
@@ -255,8 +358,10 @@ export function pollHardware(): HardwareSnapshot {
         // devices share the bus (e.g. a hub plus the phone).
         if (best && isLowLevel(best.mode) && !isLowLevel(transport.mode)) continue;
         const pnpRow = findPnpFor(vid, pid, pnp) ?? findPnpByVendorHint(vid, pnp);
+        const com = readComPort(pnp, vid);
         const rowPort =
-          (pnpRow && /\((COM\d+)\)/i.exec(pnpRow.friendlyName)?.[1]?.toUpperCase()) || port;
+          (pnpRow && /\((COM\d+)\)/i.exec(pnpRow.friendlyName)?.[1]?.toUpperCase()) ??
+          com.port;
         best = {
           mode: transport.mode,
           label: transport.label,
@@ -284,28 +389,50 @@ export function pollHardware(): HardwareSnapshot {
     }
   }
 
-  // No USB match, but a bare serial endpoint is present (e.g. a VCOM port that
-  // node-usb cannot open because the driver is a modem-class port).
-  if (!best && port) {
-    const pnpRow = pnp.find((d) => d.friendlyName.toUpperCase().includes(port));
-    const chipset = inferChipsetFromName(pnpRow?.friendlyName ?? "");
-    best = {
-      mode: "serial",
-      label: `${MODE_LABELS.serial} (${port})`,
-      connected: true,
-      vid: null,
-      pid: null,
-      vidHex: null,
-      pidHex: null,
-      port,
-      chipset,
-      deviceInstanceId: pnpRow?.instanceId ?? null,
-      deviceName: pnpRow?.friendlyName ?? null,
-      listenerActive,
-      requiresKeyCombo: false,
-      lowLevel: false,
-      lastScanAt,
-    };
+  // No node-usb match — fall back to the serial transport. This is the path
+  // that catches the MediaTek Preloader / VCOM port, which enumerates as a
+  // modem-class COM port that libusb cannot open. A vendor-hinted serialport
+  // entry (MediaTek/Qualcomm in its metadata) is classified as BROM/preloader
+  // rather than a generic serial port, so the wizard recognises it as a
+  // low-level interface and auto-advances.
+  if (!best) {
+    const com = readComPort(pnp, null);
+    if (com.port) {
+      const chipset =
+        (com.entry ? serialHint(com.entry) : "Unknown") !== "Unknown"
+          ? serialHint(com.entry!)
+          : inferChipsetFromName(
+              pnp.find((d) => d.friendlyName.toUpperCase().includes(com.port!))?.friendlyName ?? ""
+            );
+      const isMtk = chipset === "MediaTek";
+      const isQcom = chipset === "Qualcomm";
+      const mode: HardwareMode = isMtk ? "preloader" : isQcom ? "edl" : "serial";
+      const pnpRow = pnp.find((d) => d.friendlyName.toUpperCase().includes(com.port!));
+      best = {
+        mode,
+        label:
+          mode === "serial"
+            ? `${MODE_LABELS.serial} (${com.port})`
+            : `${MODE_LABELS[mode]} (${com.port})`,
+        connected: true,
+        vid: null,
+        pid: null,
+        vidHex: null,
+        pidHex: null,
+        port: com.port,
+        chipset,
+        deviceInstanceId: pnpRow?.instanceId ?? null,
+        deviceName:
+          com.entry?.friendlyName ??
+          pnpRow?.friendlyName ??
+          com.entry?.manufacturer ??
+          null,
+        listenerActive,
+        requiresKeyCombo: isMtk || isQcom,
+        lowLevel: isLowLevel(mode),
+        lastScanAt,
+      };
+    }
   }
 
   return best ?? emptySnapshot();
