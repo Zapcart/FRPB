@@ -36,6 +36,11 @@ export default function DashboardPage() {
   // True when the last load failed for a non-auth reason (503 / network) — the
   // user stays signed in and sees a Retry action instead of an empty state.
   const [loadFailed, setLoadFailed] = useState(false);
+  // Fallback key recovery: the list route returns only a MASKED key, so a
+  // customer whose delivery email never arrived reveals the full key here.
+  const [revealed, setRevealed] = useState<Record<string, string>>({});
+  const [revealing, setRevealing] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -97,6 +102,56 @@ export default function DashboardPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * Reveal the full license key for a license the caller owns. This is the
+   * customer-facing fallback when the delivery email failed or was lost — the
+   * dashboard list only exposes a masked key for safety.
+   */
+  async function handleReveal(licenseId: string) {
+    if (revealing) return;
+    // Already revealed in this session → collapse it.
+    if (revealed[licenseId]) {
+      setRevealed((prev) => {
+        const next = { ...prev };
+        delete next[licenseId];
+        return next;
+      });
+      return;
+    }
+    setRevealing(licenseId);
+    setMessage(null);
+    try {
+      const res = await fetch(
+        `/api/v1/license/reveal?licenseId=${encodeURIComponent(licenseId)}`,
+        { cache: "no-store", credentials: "include" }
+      );
+      const data = (await res.json()) as {
+        success?: boolean;
+        data?: { key?: string };
+        message?: string;
+      };
+      if (res.ok && data.success && data.data?.key) {
+        setRevealed((prev) => ({ ...prev, [licenseId]: data.data!.key! }));
+      } else {
+        setMessage(data.message ?? "Could not reveal the key. Please try again.");
+      }
+    } catch {
+      setMessage("Network error. Please try again.");
+    } finally {
+      setRevealing(null);
+    }
+  }
+
+  async function handleCopy(licenseId: string, key: string) {
+    try {
+      await navigator.clipboard.writeText(key);
+      setCopied(licenseId);
+      window.setTimeout(() => setCopied(null), 2000);
+    } catch {
+      setMessage("Copy failed — select the key and copy it manually.");
+    }
+  }
 
   async function handleUnbind(deviceId: string) {
     setUnbinding(deviceId);
@@ -176,9 +231,47 @@ export default function DashboardPage() {
               <p className="text-xs font-semibold uppercase tracking-wider text-brand-600">
                 {lic.planName}
               </p>
-              <h2 className="mt-1 font-mono text-lg font-bold tracking-wide text-slate-900">
-                {lic.key}
-              </h2>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h2 className="font-mono text-lg font-bold tracking-wide text-slate-900">
+                  {revealed[lic.id] ?? lic.key}
+                </h2>
+                {revealed[lic.id] ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleCopy(lic.id, revealed[lic.id]!)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                  >
+                    {copied === lic.id ? (
+                      <>
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Copied
+                      </>
+                    ) : (
+                      <>
+                        <KeyRound className="h-3.5 w-3.5" /> Copy key
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleReveal(lic.id)}
+                    disabled={revealing === lic.id}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:border-brand-300 hover:text-brand-600 disabled:opacity-50"
+                  >
+                    {revealing === lic.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <KeyRound className="h-3.5 w-3.5" />
+                    )}
+                    Reveal key
+                  </button>
+                )}
+              </div>
+              {revealed[lic.id] && (
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Keep this key private — anyone with it can activate your license.
+                </p>
+              )}
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
                 <StatusPill status={lic.status} />
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-500">

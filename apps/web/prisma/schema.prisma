@@ -179,9 +179,14 @@ model EmailLog {
   error         String?
   sentAt        DateTime?
   createdAt     DateTime  @default(now())
+  // Delivery attempts, incremented by the retry pass. Bounded so a permanently
+  // bad address is never hammered (see retryFailedEmails in lib/email/resend.ts).
+  attempts      Int       @default(0)
 
   @@index([to])
   @@index([licenseId])
+  // Supports the retry backlog query: status IN (QUEUED, FAILED) + createdAt.
+  @@index([status, createdAt])
 }
 
 // ─── FRP Unlock Requests ───────────────────────────────────
