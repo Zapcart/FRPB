@@ -13,6 +13,7 @@ const plans: Array<{
   slug: PlanSlug;
   name: string;
   priceCents: number;
+  priceInr: number;
   currency: string;
   durationDays: number | null;
   deviceLimit: number;
@@ -22,6 +23,7 @@ const plans: Array<{
     slug: "MONTH_1",
     name: "1-Month Plan",
     priceCents: 1999,
+    priceInr: 190000,
     currency: "USD",
     durationDays: 30,
     deviceLimit: 1,
@@ -36,6 +38,7 @@ const plans: Array<{
     slug: "YEAR_1",
     name: "1-Year Plan",
     priceCents: 4999,
+    priceInr: 490000,
     currency: "USD",
     durationDays: 365,
     deviceLimit: 3,
@@ -51,6 +54,7 @@ const plans: Array<{
     slug: "LIFETIME",
     name: "Lifetime Plan",
     priceCents: 9999,
+    priceInr: 999900,
     currency: "USD",
     durationDays: null,
     deviceLimit: 5,

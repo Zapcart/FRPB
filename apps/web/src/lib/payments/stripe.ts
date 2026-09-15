@@ -7,6 +7,7 @@ import type {
   PaymentGateway,
 } from "./gateway";
 import { getPlanDefinition } from "@/lib/license/constants";
+import { currencyFor, priceFor } from "@frpb/shared";
 
 export class StripeGateway implements PaymentGateway {
   readonly provider = "STRIPE" as const;
@@ -19,6 +20,8 @@ export class StripeGateway implements PaymentGateway {
 
   async createCheckout(input: CreateCheckoutInput): Promise<CreateCheckoutResult> {
     const plan = getPlanDefinition(input.planSlug as never);
+    const currency = currencyFor(input.currency ?? "USD");
+    const amount = priceFor(plan, input.currency ?? "USD");
 
     const session = await this.stripe.checkout.sessions.create({
       mode: "payment",
@@ -26,9 +29,9 @@ export class StripeGateway implements PaymentGateway {
       line_items: [
         {
           price_data: {
-            currency: plan.currency.toLowerCase(),
+            currency: currency.toLowerCase(),
             product_data: { name: plan.name },
-            unit_amount: plan.priceCents,
+            unit_amount: amount,
           },
           quantity: 1,
         },
@@ -36,6 +39,7 @@ export class StripeGateway implements PaymentGateway {
       metadata: {
         planSlug: input.planSlug,
         customerEmail: input.customerEmail,
+        currency,
       },
       success_url: input.successUrl,
       cancel_url: input.cancelUrl,

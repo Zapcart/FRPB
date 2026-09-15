@@ -13,9 +13,11 @@ import { PLANS, type PlanSlug } from "@frpb/shared";
 
 interface CheckoutClientProps {
   planSlug: PlanSlug;
+  /** Currency the customer chose on the pricing page (defaults to USD). */
+  currency?: "USD" | "INR";
 }
 
-export default function CheckoutClient({ planSlug }: CheckoutClientProps) {
+export default function CheckoutClient({ planSlug, currency = "USD" }: CheckoutClientProps) {
   const runOnce = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,7 +30,7 @@ export default function CheckoutClient({ planSlug }: CheckoutClientProps) {
         const res = await fetch("/api/v1/checkout", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ planSlug }),
+          body: JSON.stringify({ planSlug, currency }),
           credentials: "include",
         });
 
@@ -48,7 +50,7 @@ export default function CheckoutClient({ planSlug }: CheckoutClientProps) {
         setError("Checkout failed. Please try again.");
       }
     })();
-  }, [planSlug]);
+  }, [planSlug, currency]);
 
   const plan = PLANS.find((p) => p.slug === planSlug);
 

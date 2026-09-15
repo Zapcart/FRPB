@@ -1,51 +1,100 @@
 // FRPB — pricing page
-// Light-mode SaaS layout. Renders the three plans from @frpb/shared
-// and starts checkout for authenticated users.
+// Renders the three plans from @frpb/shared with a USD / INR currency switcher.
+// Amounts come straight from the plan definition (priceCents / priceInr) so the
+// displayed price always matches the amount the gateway actually charges —
+// never a derived FX conversion. The selected currency is forwarded to
+// /api/v1/checkout (Cashfree settles INR natively) and preserved across the
+// auth hop via /checkout?currency=…
 // Currency display only — no payment provider branding on the frontend.
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, ArrowRight, ShieldCheck, Globe } from "lucide-react";
-import { PLANS, type PlanSlug } from "@frpb/shared";
+import {
+  PLANS,
+  formatMoney,
+  priceFor,
+  type Currency,
+  type PlanSlug,
+} from "@frpb/shared";
 import { createClient } from "@/lib/supabase/client";
-
-type Currency = "USD" | "INR";
-
-const CURRENCY_INFO: Record<
-  Currency,
-  { symbol: string; label: string; rate: number; locale: string }
-> = {
-  USD: { symbol: "$", label: "USD", rate: 1, locale: "en-US" },
-  INR: { symbol: "₹", label: "INR", rate: 83.5, locale: "en-IN" },
-};
 
 // Billing interval suffix, keyed by plan slug + display currency.
 // Lifetime plans render a one-time label only — never a recurring interval.
 const BILLING_SUFFIX: Record<PlanSlug, Record<Currency, string>> = {
-  MONTH_1: { USD: "/ month", INR: "prati mahine" },
-  YEAR_1: { USD: "/ year", INR: "prati saal" },
-  LIFETIME: { USD: "one-time", INR: "ek baar" },
+  MONTH_1: { USD: "/ month", INR: "/ महीना" },
+  YEAR_1: { USD: "/ year", INR: "/ साल" },
+  LIFETIME: { USD: "one-time", INR: "एक बार" },
 };
+
+/** Currency the user last picked, so a return visit keeps their choice. */
+const CURRENCY_STORAGE_KEY = "frpb:currency";
+
+/**
+ * Best-effort region detection with NO network call and no PII: an
+ * Asia/Kolkata (or *_IN) locale is treated as India → INR. Anything else
+ * defaults to USD. The user can always override with the toggle.
+ */
+function detectCurrency(): Currency | null {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
+    if (/kolkata|calcutta/i.test(tz)) return "INR";
+    const lang = navigator.language ?? "";
+    if (/-in$/i.test(lang)) return "INR";
+  } catch {
+    // Intl/locale unavailable — fall through to the default.
+  }
+  return null;
+}
 
 export default function PricingPage() {
   const router = useRouter();
   const [loadingPlan, setLoadingPlan] = useState<PlanSlug | null>(null);
   const [currency, setCurrency] = useState<Currency>("USD");
+  // True when the initial currency came from region detection (not the user).
+  const [autoDetected, setAutoDetected] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function formatPrice(cents: number, cur: Currency): string {
-    const info = CURRENCY_INFO[cur];
-    const amount = (cents * info.rate) / 100; // cents/paise -> major units
-    // USD keeps 2 decimals; INR is rounded to whole rupees.
-    const fractionDigits = cur === "USD" ? 2 : 0;
-    const formatted = new Intl.NumberFormat(info.locale, {
-      minimumFractionDigits: fractionDigits,
-      maximumFractionDigits: fractionDigits,
-    }).format(amount);
-    return `${info.symbol}${formatted}`;
+  // Initialise the currency from a stored preference, else region detection.
+  // Runs once on mount, so it never fights an explicit user toggle.
+  useEffect(() => {
+    let initial: Currency | null = null;
+    try {
+      const stored = window.localStorage.getItem(CURRENCY_STORAGE_KEY);
+      if (stored === "USD" || stored === "INR") initial = stored;
+    } catch {
+      // Storage unavailable (strict privacy mode) — fall back to detection.
+    }
+    if (initial) {
+      setCurrency(initial);
+      return;
+    }
+    const detected = detectCurrency();
+    if (detected) {
+      setCurrency(detected);
+      setAutoDetected(true);
+    }
+  }, []);
+
+  function chooseCurrency(next: Currency) {
+    setCurrency(next);
+    setAutoDetected(false);
+    try {
+      window.localStorage.setItem(CURRENCY_STORAGE_KEY, next);
+    } catch {
+      // Non-fatal: the choice simply is not persisted.
+    }
+  }
+
+  /** The other currency's price, shown as a secondary "(~$…)" hint. */
+  function alternatePrice(planSlug: PlanSlug): string | null {
+    const plan = PLANS.find((p) => p.slug === planSlug);
+    if (!plan) return null;
+    const other: Currency = currency === "USD" ? "INR" : "USD";
+    return formatMoney(priceFor(plan, other), other);
   }
 
   async function handlePurchase(planSlug: PlanSlug) {
@@ -71,13 +120,14 @@ export default function PricingPage() {
       user = null;
     }
 
-    // Not logged in → send to the login entry with the plan + post-auth target.
+    // Not logged in → send to the login entry with the plan, the chosen
+    // currency and the post-auth target so the purchase resumes unchanged.
     if (!user) {
       setLoadingPlan(null);
       router.push(
-        `/auth/login?plan=${encodeURIComponent(planSlug)}&redirectTo=${encodeURIComponent(
-          "/checkout"
-        )}`
+        `/auth/login?plan=${encodeURIComponent(planSlug)}&currency=${encodeURIComponent(
+          currency
+        )}&redirectTo=${encodeURIComponent("/checkout")}`
       );
       return;
     }
@@ -87,7 +137,7 @@ export default function PricingPage() {
       const res = await fetch("/api/v1/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planSlug }),
+        body: JSON.stringify({ planSlug, currency }),
         credentials: "include",
       });
 
@@ -153,25 +203,34 @@ export default function PricingPage() {
           </p>
         </div>
 
-        {/* Currency switcher — display only, no provider branding */}
-        <div className="mt-6 flex items-center justify-center gap-3">
-          <Globe className="h-4 w-4 text-slate-400" />
-          <span className="text-xs font-medium text-slate-500">Show prices in:</span>
-          <div className="flex rounded-xl border border-slate-200 overflow-hidden">
-            {(["USD", "INR"] as const).map((cur) => (
-              <button
-                key={cur}
-                onClick={() => setCurrency(cur)}
-                className={`px-4 py-1.5 text-sm font-semibold transition ${
-                  currency === cur
-                    ? "bg-brand-500 text-white shadow-sm"
-                    : "bg-white text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {CURRENCY_INFO[cur].label}
-              </button>
-            ))}
+        {/* Currency switcher — display + charge currency, no provider branding */}
+        <div className="mt-6 flex flex-col items-center justify-center gap-2">
+          <div className="flex items-center gap-3">
+            <Globe className="h-4 w-4 text-slate-400" />
+            <span className="text-xs font-medium text-slate-500">Show prices in:</span>
+            <div className="flex overflow-hidden rounded-xl border border-slate-200">
+              {(["USD", "INR"] as const).map((cur) => (
+                <button
+                  key={cur}
+                  type="button"
+                  onClick={() => chooseCurrency(cur)}
+                  className={`px-4 py-1.5 text-sm font-semibold transition ${
+                    currency === cur
+                      ? "bg-brand-500 text-white shadow-sm"
+                      : "bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                  aria-pressed={currency === cur}
+                >
+                  {cur === "USD" ? "USD ($)" : "INR (₹)"}
+                </button>
+              ))}
+            </div>
           </div>
+          {autoDetected && (
+            <span className="text-[11px] font-medium text-slate-400">
+              Auto-detected your region — you can switch anytime.
+            </span>
+          )}
         </div>
 
         {error && (
@@ -181,6 +240,7 @@ export default function PricingPage() {
         <div className="mt-12 grid gap-6 md:grid-cols-3">
           {PLANS.map((plan) => {
             const popular = plan.slug === "YEAR_1";
+            const alt = alternatePrice(plan.slug);
             return (
               <div
                 key={plan.slug}
@@ -198,12 +258,16 @@ export default function PricingPage() {
                 <h2 className="text-xl font-bold text-slate-900">{plan.name}</h2>
                 <div className="mt-4 flex items-baseline gap-1.5">
                   <span className="text-4xl font-black tracking-tight text-ink">
-                    {formatPrice(plan.priceCents, currency)}
+                    {formatMoney(priceFor(plan, currency), currency)}
                   </span>
                   <span className="text-sm font-medium text-slate-400">
                     {BILLING_SUFFIX[plan.slug][currency]}
                   </span>
                 </div>
+                {/* Dual-currency hint — the amount the other currency charges */}
+                {alt && (
+                  <p className="mt-1 text-xs font-medium text-slate-400">(~{alt})</p>
+                )}
                 <p className="mt-1 text-xs text-slate-400">
                   {plan.deviceLimit} device{plan.deviceLimit === 1 ? "" : "s"} ·{" "}
                   {plan.durationDays ? `${plan.durationDays} days` : "Lifetime access"}
@@ -223,6 +287,7 @@ export default function PricingPage() {
                   ))}
                 </ul>
                 <button
+                  type="button"
                   onClick={() => handlePurchase(plan.slug)}
                   disabled={loadingPlan !== null}
                   className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-bold transition disabled:opacity-60 ${

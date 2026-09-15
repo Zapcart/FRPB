@@ -8,6 +8,7 @@ import type {
   PaymentGateway,
 } from "./gateway";
 import { getPlanDefinition } from "@/lib/license/constants";
+import { currencyFor, priceFor } from "@frpb/shared";
 
 interface RazorpayOrderResponse {
   id: string;
@@ -27,6 +28,9 @@ export class RazorpayGateway implements PaymentGateway {
 
   async createCheckout(input: CreateCheckoutInput): Promise<CreateCheckoutResult> {
     const plan = getPlanDefinition(input.planSlug as never);
+    // Razorpay is an India-first gateway: it settles in INR natively.
+    const currency = currencyFor(input.currency ?? "INR");
+    const amount = priceFor(plan, input.currency ?? "INR");
 
     // Create an order server-side (amount in paise for INR)
     const res = await fetch("https://api.razorpay.com/v1/orders", {
@@ -38,8 +42,8 @@ export class RazorpayGateway implements PaymentGateway {
           Buffer.from(`${this.keyId}:${this.keySecret}`).toString("base64"),
       },
       body: JSON.stringify({
-        amount: plan.priceCents, // cents -> minor units
-        currency: plan.currency,
+        amount, // minor units (paise for INR, cents for USD)
+        currency,
         receipt: `frpb_${Date.now()}`,
         notes: {
           planSlug: input.planSlug,

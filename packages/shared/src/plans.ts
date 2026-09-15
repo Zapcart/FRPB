@@ -6,16 +6,50 @@
 export const PLAN_TYPE_VALUES = ["MONTH_1", "YEAR_1", "LIFETIME"] as const;
 export type PlanSlug = (typeof PLAN_TYPE_VALUES)[number];
 
+/** Supported display/charge currencies. */
+export const CURRENCY_VALUES = ["USD", "INR"] as const;
+export type Currency = (typeof CURRENCY_VALUES)[number];
+
 export interface PlanDefinition {
   slug: PlanSlug;
   name: string;
   priceCents: number;          // USD in cents ($19.99 = 1999)
   currency: string;            // "USD"
-  priceInr: number;            // INR in paise (₹1,670 = 167000)
+  priceInr: number;            // INR in paise (₹1,900 = 190000)
   /** null = lifetime */
   durationDays: number | null;
   deviceLimit: number;
   features: string[];
+}
+
+/** Minor-unit amount for a plan in the requested currency. */
+export function priceFor(plan: PlanDefinition, currency: Currency): number {
+  return currency === "INR" ? plan.priceInr : plan.priceCents;
+}
+
+/** ISO-4217 code for a plan's charged currency. */
+export function currencyFor(currency: Currency): string {
+  return currency === "INR" ? "INR" : "USD";
+}
+
+/**
+ * Format a minor-unit amount for display. USD keeps 2 decimals; INR is grouped
+ * with Indian digit grouping and rendered as whole rupees.
+ */
+export function formatMoney(
+  minorUnits: number,
+  currency: Currency
+): string {
+  const major = minorUnits / 100;
+  if (currency === "INR") {
+    return `₹${new Intl.NumberFormat("en-IN", {
+      maximumFractionDigits: 0,
+    }).format(Math.round(major))}`;
+  }
+  return `$${new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(major)}`;
 }
 
 export const PLANS: readonly PlanDefinition[] = [
@@ -24,7 +58,7 @@ export const PLANS: readonly PlanDefinition[] = [
     name: "1-Month Plan",
     priceCents: 1999,
     currency: "USD",
-    priceInr: 167000,   // ₹1,670
+    priceInr: 190000,   // ₹1,900
     durationDays: 30,
     deviceLimit: 1,
     features: [
@@ -39,7 +73,7 @@ export const PLANS: readonly PlanDefinition[] = [
     name: "1-Year Plan",
     priceCents: 4999,
     currency: "USD",
-    priceInr: 417500,   // ₹4,175
+    priceInr: 490000,   // ₹4,900
     durationDays: 365,
     deviceLimit: 3,
     features: [
@@ -55,7 +89,7 @@ export const PLANS: readonly PlanDefinition[] = [
     name: "Lifetime Plan",
     priceCents: 9999,
     currency: "USD",
-    priceInr: 835000,   // ₹8,350
+    priceInr: 999900,   // ₹9,999
     durationDays: null,
     deviceLimit: 5,
     features: [

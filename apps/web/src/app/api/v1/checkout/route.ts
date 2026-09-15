@@ -98,6 +98,9 @@ async function handleCheckout(req: NextRequest) {
       customerEmail: userRecord.email,
       successUrl,
       cancelUrl,
+      // Charge in the currency the customer selected (Cashfree settles INR
+      // natively; the adapter picks the matching USD-cents / INR-paise amount).
+      currency,
     });
   } catch (err) {
     console.error("[checkout] payment gateway failed:", err);

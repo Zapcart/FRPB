@@ -23,6 +23,22 @@ export async function updateSession(request: NextRequest) {
     request: { headers: requestHeaders },
   });
 
+  /** Ensure the refreshed auth cookies are bound to the outbound response. */
+  const withRefreshedCookies = (response: NextResponse): NextResponse => {
+    // Carry every cookie the Supabase client rotated onto the response so a
+    // renewed session is never dropped on the way back to the browser. Skip
+    // names already present to avoid clobbering a redirect's own cookies.
+    const existing = new Set(response.cookies.getAll().map((c) => c.name));
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      if (!existing.has(cookie.name)) response.cookies.set(cookie);
+    });
+    // Auth-dependent payloads must never be served from a shared cache: a
+    // stale authenticated/unauth RSC response desyncs the UI from the cookie
+    // jar and looks exactly like a spontaneous logout.
+    response.headers.set("Cache-Control", "private, no-store, max-age=0");
+    return response;
+  };
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -67,13 +83,10 @@ export async function updateSession(request: NextRequest) {
     const redirectResponse = NextResponse.redirect(redirectUrl);
     // Carry any refreshed session cookies onto the redirect so the login hop
     // does not clobber a still-valid (just-renewed) session.
-    supabaseResponse.cookies.getAll().forEach((cookie) =>
-      redirectResponse.cookies.set(cookie)
-    );
-    return redirectResponse;
+    return withRefreshedCookies(redirectResponse);
   }
 
-  return supabaseResponse;
+  return withRefreshedCookies(supabaseResponse);
 }
 
 export async function middleware(request: NextRequest) {

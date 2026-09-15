@@ -9,6 +9,7 @@ import type {
   PaymentGateway,
 } from "./gateway";
 import { getPlanDefinition } from "@/lib/license/constants";
+import { currencyFor, priceFor } from "@frpb/shared";
 
 interface CashfreeOrderResponse {
   cf_order_id?: string | number;
@@ -38,6 +39,11 @@ export class CashfreeGateway implements PaymentGateway {
   async createCheckout(input: CreateCheckoutInput): Promise<CreateCheckoutResult> {
     const plan = getPlanDefinition(input.planSlug as never);
 
+    // Cashfree India settles natively in INR; charge the plan's INR amount
+    // (paise) when the customer selected INR, otherwise the USD amount (cents).
+    const currency = currencyFor(input.currency ?? "USD");
+    const amount = priceFor(plan, input.currency ?? "USD");
+
     // Cashfree requires us to supply order_id; it is unique and doubles as the
     // Payment.providerTxnId that the webhook later reconciles.
     const orderId = `frpb_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -60,8 +66,8 @@ export class CashfreeGateway implements PaymentGateway {
       body: JSON.stringify({
         order_id: orderId,
         // Cashfree expects the amount in the currency's minor unit (paise/cents).
-        order_amount: plan.priceCents,
-        order_currency: plan.currency,
+        order_amount: amount,
+        order_currency: currency,
         customer_details: {
           customer_id: orderId,
           customer_email: input.customerEmail,
@@ -72,7 +78,7 @@ export class CashfreeGateway implements PaymentGateway {
             ? { notify_url: process.env.CASHFREE_NOTIFY_URL }
             : {}),
         },
-        order_tags: { planSlug: input.planSlug },
+        order_tags: { planSlug: input.planSlug, currency },
         order_note: `FRPB ${plan.name}`,
       }),
     });
