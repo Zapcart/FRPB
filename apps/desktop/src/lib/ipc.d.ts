@@ -3,6 +3,7 @@
 // both preload.ts (implementation) and React components (usage).
 
 import type {
+  ChipsetFamily,
   DeviceAutoDetected,
   ModelCatalogEntry,
   VerifyStatus,
@@ -270,6 +271,55 @@ export interface DeviceInfoSnapshot {
   driverInstalled: boolean;
   source: "adb" | "usb" | null;
   lastScanAt: string;
+  // ── Low-level hardware transport (raw USB VID/PID + COM; ADB-independent) ──
+  /** Classified transport: brom | preloader | edl | fastboot | download | mtp | serial | adb | none. */
+  hardwareMode: HardwareMode;
+  /** Human label for AUTO-READ HARDWARE, e.g. "MediaTek BROM Mode (0x0003)". */
+  hardwareLabel: string;
+  /** Windows Device Instance ID, e.g. "USB\\VID_0E8D&PID_0003\\…". */
+  deviceInstanceId: string | null;
+  /** True when this transport needs a hardware key combination (BROM/EDL). */
+  requiresKeyCombo: boolean;
+  /** True while a guided hardware listen loop is running. */
+  listening: boolean;
+}
+
+/**
+ * Low-level hardware transport classified from the raw USB VID/PID + interface
+ * classes / COM port. Never depends on an ADB session — the whole point is a
+ * locked device that cannot enable USB debugging.
+ */
+export type HardwareMode =
+  | "brom"
+  | "preloader"
+  | "edl"
+  | "fastboot"
+  | "download"
+  | "mtp"
+  | "serial"
+  | "adb"
+  | "none";
+
+/** A raw snapshot of the physical hardware transport currently attached. */
+export interface HardwareSnapshot {
+  mode: HardwareMode;
+  label: string;
+  connected: boolean;
+  vid: number | null;
+  pid: number | null;
+  vidHex: string | null;
+  pidHex: string | null;
+  /** Windows COM port exposed by the device (e.g. "COM3"), null when none. */
+  port: string | null;
+  chipset: ChipsetFamily;
+  /** Windows Device Instance ID, e.g. "USB\\VID_0E8D&PID_0003\\6&1F2A…". */
+  deviceInstanceId: string | null;
+  /** Friendly PnP name, e.g. "MediaTek USB Port (COM3)". */
+  deviceName: string | null;
+  listenerActive: boolean;
+  requiresKeyCombo: boolean;
+  lowLevel: boolean;
+  lastScanAt: string;
 }
 
 /**
@@ -392,6 +442,29 @@ export interface FrpbBridge {
     onAutoDetected: (cb: (info: DeviceAutoDetected) => void) => () => void;
     /** On-demand hardware snapshot (same shape as the pushed event). */
     requestInfo: () => Promise<DeviceInfoSnapshot>;
+    /**
+     * Raw hardware poll with NO ADB dependency — classifies the attached USB/COM
+     * transport (MediaTek BROM / Preloader, Qualcomm EDL 9008, Fastboot, Odin
+     * download, MTP, serial) from VID/PID + interface classes + Device Instance
+     * IDs. Never requires USB debugging.
+     */
+    hardwareStatus: () => Promise<HardwareSnapshot>;
+    /**
+     * Actively LISTEN for a low-level transport for up to `timeoutMs`, resolving
+     * the moment the target interface appears (or null on timeout). Streams
+     * console lines + `device:hardware` snapshots so the Connection Wizard can
+     * auto-advance from "Listening…" to "Executing…".
+     */
+    waitForHardware: (opts?: {
+      mode?: OperationMode;
+      brand?: string | null;
+      timeoutMs?: number;
+    }) => Promise<HardwareSnapshot | null>;
+    /**
+     * Subscribe to raw hardware snapshots emitted while a listen loop is active.
+     * Returns an unsubscribe function.
+     */
+    onHardware: (cb: (snapshot: HardwareSnapshot) => void) => () => void;
     /**
      * Brand/chipset-filtered model catalog for the simplified Step 2 dropdown.
      * Backed by the strongly-typed catalog in `@frpb/shared`.

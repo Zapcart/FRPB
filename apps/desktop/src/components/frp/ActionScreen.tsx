@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Cpu,
+  Info,
   KeyRound,
   Loader2,
   Lock,
@@ -239,12 +240,11 @@ export default function ActionScreen({
           </button>
         </div>
 
-        {!connected && (
-          <p className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            Connect your device to enable these actions.
-          </p>
-        )}
+        <p className="mt-3 inline-flex items-start gap-1.5 rounded-md bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          No USB debugging needed — choosing an action opens a guided connection wizard
+          (BROM / EDL / Fastboot key combination).
+        </p>
 
         {/* Current target + connection guide while running */}
         {busy && (
@@ -255,22 +255,15 @@ export default function ActionScreen({
                 Running {runningOp ? opLabel(runningOp) : "operation"}…
               </h3>
             </div>
-            <p className="mt-1 text-xs text-slate-500">{guide.title}</p>
-            <ol className="mt-3 space-y-2">
-              {guide.steps.map((step, i) => (
-                <li key={i} className="flex gap-2.5 text-sm text-slate-700">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-100 text-[11px] font-bold text-brand-700">
-                    {i + 1}
-                  </span>
-                  <span>
-                    {step.title}
-                    {step.detail && (
-                      <span className="mt-0.5 block text-xs text-slate-400">{step.detail}</span>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ol>
+            <p className="mt-1 text-xs text-slate-500">
+              {guide.title} · {guide.listeningLabel}
+            </p>
+            <div className="mt-2 rounded-lg border border-brand-200 bg-white px-3 py-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-brand-700">
+                Hold
+              </span>
+              <span className="ml-2 text-sm font-bold text-slate-900">{guide.keyCombo}</span>
+            </div>
           </div>
         )}
       </section>

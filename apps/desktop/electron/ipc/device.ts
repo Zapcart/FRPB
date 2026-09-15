@@ -50,6 +50,12 @@ import {
 } from "../utils/adb";
 import { runFrpBypass } from "../utils/frp-engine";
 import { detectChipsetFromModel } from "../utils/mtk-brom";
+import {
+  describeHardware,
+  pollHardware,
+  waitForHardware,
+} from "../hardware/detector";
+import { targetModesFor } from "../hardware/modes";
 import { searchModels } from "@frpb/shared";
 import type {
   ChipsetFamily as SharedChipsetFamily,
@@ -706,6 +712,50 @@ export function registerDeviceHandlers(): void {
     return undefined;
   });
 
+  // device:hardware:status — raw USB/COM hardware poll with NO ADB dependency.
+  // Returns the classified low-level transport (BROM / Preloader / EDL 9008 /
+  // Fastboot / Download / MTP / serial) plus the Device Instance ID and COM port.
+  ipcMain.handle("device:hardware:status", () => pollHardware());
+
+  // device:hardware:wait — actively LISTEN for a low-level transport for up to
+  // `timeoutMs`, streaming console lines on every transition and the snapshot on
+  // `device:hardware` so the Connection Wizard can auto-advance from "Listening…"
+  // to "Executing…". Deliberately ADB-free: the whole point is a locked phone
+  // that cannot enable USB debugging.
+  ipcMain.handle(
+    "device:hardware:wait",
+    async (
+      event,
+      opts?: { mode?: "test-mode" | "brom" | "fastboot-recovery"; brand?: string | null; timeoutMs?: number },
+    ) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) activeWindow = win;
+      const mode = opts?.mode ?? "brom";
+      const brand = opts?.brand ?? null;
+      const targets = targetModesFor(mode, brand);
+      const timeoutMs = Math.max(15_000, Math.min(300_000, opts?.timeoutMs ?? 120_000));
+      pushOperationLog(
+        "HW",
+        `Listening for ${targets.join(" / ")} hardware interface…`,
+        null,
+        "info",
+      );
+      const snap = await waitForHardware(targets, timeoutMs, (s) => {
+        if (s.connected) {
+          for (const line of describeHardware(s)) pushOperationLog("HW", line, null, "info");
+        }
+        if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+          try {
+            win.webContents.send("device:hardware", s);
+          } catch {
+            // Window torn down between guard and send.
+          }
+        }
+      });
+      return snap ?? pollHardware();
+    },
+  );
+
   // Renderer → main toggle: when a Console Log surface mounts it enables the
   // sink so live adb/fastboot output is mirrored into the rolling console; when
   // it unmounts it disables the sink so headless operations stay quiet.
@@ -1074,23 +1124,22 @@ export function registerDeviceHandlers(): void {
       // the ADB-only path above would dead-end. Probe fastboot before failing.
       step(
         "MODE",
-        adb.connected
-          ? "[Connecting... OK] ADB unauthorized — trying Fastboot"
-          : "[Connecting... OK] No ADB device — trying Fastboot",
+        "[Connecting... OK] Probing low-level hardware interface (BROM / EDL / Fastboot)",
         25
       );
       const devices = await fastbootDevices();
       if (devices === null) {
-        const message = adb.connected
-          ? "Device not authorized — enable USB debugging or use a supported recovery mode."
-          : "No ADB or Fastboot device connected. Boot the phone into Fastboot/Recovery and retry.";
+        // ADB-free guidance: a locked phone cannot enable USB debugging, so the
+        // only actionable instruction is the hardware key combination.
+        const message =
+          "No low-level interface detected. Power the phone off, then hold Volume Up + Volume Down (or Volume Down + Power) and connect the USB cable to enter BROM / Fastboot.";
         pushOperationLog("ERROR", message, null, "error");
         return { success: false, message };
       }
       const serial = devices[0];
       if (!serial) {
         const message =
-          "No Fastboot device detected. Boot the phone into Fastboot mode (Vol Down + Power) and retry.";
+          "No Fastboot interface detected. Power off the phone, hold Volume Down + Power, then connect USB and retry.";
         pushOperationLog("ERROR", message, null, "error");
         return { success: false, message };
       }
@@ -1376,6 +1425,17 @@ interface DeviceInfoSnapshot {
   driverInstalled: boolean;
   source: "adb" | "usb" | null;
   lastScanAt: string;
+  // ── Low-level hardware transport (raw USB VID/PID + COM; ADB-independent) ──
+  /** Classified transport: brom | preloader | edl | fastboot | download | mtp | serial | adb | none. */
+  hardwareMode: string;
+  /** Human label for AUTO-READ HARDWARE, e.g. "MediaTek BROM Mode (0x0003)". */
+  hardwareLabel: string;
+  /** Windows Device Instance ID, e.g. "USB\\VID_0E8D&PID_0003\\…". */
+  deviceInstanceId: string | null;
+  /** True when this transport needs a hardware key combination (BROM/EDL). */
+  requiresKeyCombo: boolean;
+  /** True while a guided hardware listen loop is running. */
+  listening: boolean;
 }
 
 let lastInfoSnapshot: DeviceInfoSnapshot | null = null;
@@ -1469,7 +1529,10 @@ async function buildInfoSnapshot(): Promise<DeviceInfoSnapshot> {
   const vidNum = usb?.vid ?? null;
   const model = scan.model ?? null;
   const brand = scan.brand ?? usb?.brand ?? null;
-  const mode = scan.mode ?? usb?.mode ?? null;
+  // Raw hardware transport takes precedence over the ADB-derived label so a
+  // locked phone in BROM/EDL/Fastboot is reported by its real interface.
+  const hw = pollHardware();
+  const mode = (hw.connected ? hw.label : null) ?? scan.mode ?? usb?.mode ?? null;
 
   const mtp =
     mode && /mtp/i.test(mode)
@@ -1496,20 +1559,25 @@ async function buildInfoSnapshot(): Promise<DeviceInfoSnapshot> {
         : false;
 
   return {
-    connected: scan.connected,
+    connected: scan.connected || hw.connected,
     serial: scan.serial ?? null,
     model,
     brand,
     vendor: scan.vendor ?? null,
-    vid: vidNum !== null ? vidNum.toString(16).padStart(4, "0") : null,
-    pid: usb ? usb.pid.toString(16).padStart(4, "0") : null,
-    port,
-    chipset: chipsetFor(model, vidNum),
+    vid: vidNum !== null ? vidNum.toString(16).padStart(4, "0") : hw.vidHex,
+    pid: usb ? usb.pid.toString(16).padStart(4, "0") : hw.pidHex,
+    port: port ?? hw.port,
+    chipset: chipsetFor(model, vidNum) ?? (hw.chipset !== "Unknown" ? hw.chipset : null),
     mode,
     mtp,
     driverInstalled,
     source: scan.source ?? null,
     lastScanAt: scan.lastScanAt,
+    hardwareMode: hw.mode,
+    hardwareLabel: hw.label,
+    deviceInstanceId: hw.deviceInstanceId,
+    requiresKeyCombo: hw.requiresKeyCombo,
+    listening: hw.listenerActive,
   };
 }
 
@@ -1527,6 +1595,11 @@ const INFO_DIFF_KEYS: Array<keyof DeviceInfoSnapshot> = [
   "mtp",
   "driverInstalled",
   "source",
+  "hardwareMode",
+  "hardwareLabel",
+  "deviceInstanceId",
+  "requiresKeyCombo",
+  "listening",
 ];
 
 /** Push only when a user-visible field changed (lastScanAt excluded). */

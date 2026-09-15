@@ -113,6 +113,10 @@ export interface ConnectionGuide {
   modeChip: string;
   /** First live-log line emitted while the engine waits for this transport. */
   waitHint: string;
+  /** Exact button combination the user must hold, e.g. "Volume Up + Volume Down". */
+  keyCombo: string;
+  /** Live status line shown while listening, e.g. "Listening for BROM…". */
+  listeningLabel: string;
   steps: ConnectionStep[];
 }
 
@@ -120,6 +124,8 @@ const TEST_MODE_GUIDE: ConnectionGuide = {
   key: "test-mode",
   title: "Samsung Test Mode (MTP)",
   modeChip: "Samsung Test Mode · MTP",
+  keyCombo: "None — plug in while Test Mode is open",
+  listeningLabel: "Listening for MTP Hardware Interface…",
   waitHint:
     "Waiting for the phone in Samsung Test Mode (MTP)… tap Emergency call on the FRP screen and dial *#0*# (or *#888# / *#808#).",
   steps: [
@@ -146,6 +152,8 @@ const BROM_GUIDE: ConnectionGuide = {
   key: "brom",
   title: "MediaTek BROM / Preloader",
   modeChip: "MediaTek BROM · VCOM",
+  keyCombo: "Volume Up + Volume Down",
+  listeningLabel: "Listening for BROM Hardware Interface…",
   waitHint:
     "Waiting for MediaTek BROM / Preloader (VCOM)… with the phone OFF, hold Volume Up + Volume Down together and plug in the USB cable.",
   steps: [
@@ -172,6 +180,8 @@ const FASTBOOT_RECOVERY_GUIDE: ConnectionGuide = {
   key: "fastboot-recovery",
   title: "Fastboot / Recovery",
   modeChip: "Fastboot / Recovery",
+  keyCombo: "Volume Down + Power",
+  listeningLabel: "Listening for Fastboot Hardware Interface…",
   waitHint:
     "Waiting for Fastboot / Recovery mode… power the phone off, then hold Volume Down + Power and connect the USB cable.",
   steps: [
@@ -195,10 +205,52 @@ const FASTBOOT_RECOVERY_GUIDE: ConnectionGuide = {
   ],
 };
 
+const EDL_GUIDE: ConnectionGuide = {
+  key: "brom",
+  title: "Qualcomm EDL (9008)",
+  modeChip: "Qualcomm EDL · 9008",
+  keyCombo: "Volume Up + Volume Down (or EDL cable)",
+  listeningLabel: "Listening for EDL 9008 Hardware Interface…",
+  waitHint:
+    "Waiting for the Qualcomm EDL (9008) interface… power the phone off, hold Volume Up + Volume Down, then connect the USB cable and keep holding until the screen stays black.",
+  steps: [
+    {
+      title: "Power the phone completely off.",
+      detail: "Long-press Power → Power off. Locking the screen is not enough.",
+    },
+    {
+      title: "Press and hold Volume Up + Volume Down together.",
+      detail: "Hold both — neither alone enters EDL mode.",
+    },
+    {
+      title: "Plug in the USB cable while holding both buttons.",
+      detail: "Keep holding until the screen stays black — the phone is now in EDL (9008).",
+    },
+    {
+      title: "Watch for the 05C6:9008 port in the console.",
+      detail: "Some Snapdragon models need a deep-flash / EDL cable. The console confirms the interface.",
+    },
+  ],
+};
+
 /** Brand + method → the exact key-combo / dial-code guide shown on the method
  *  screen and streamed into the live operation log while the engine waits. */
 export function connectionGuideFor(brand: string | null, method: MethodId): ConnectionGuide {
   if (method === "mediatek") return BROM_GUIDE;
   if (brand === "Samsung") return TEST_MODE_GUIDE;
+  return FASTBOOT_RECOVERY_GUIDE;
+}
+
+/** Chipset/brand/mode → the wizard guide used before an operation starts.
+ *  Qualcomm devices get the EDL walkthrough; MediaTek gets BROM. */
+export function wizardGuide(
+  brand: string | null,
+  chipset: string | null,
+  mode: ConnectionGuideKey,
+): ConnectionGuide {
+  if (mode === "brom") {
+    return chipset === "Qualcomm" ? EDL_GUIDE : BROM_GUIDE;
+  }
+  if (mode === "test-mode") return TEST_MODE_GUIDE;
   return FASTBOOT_RECOVERY_GUIDE;
 }

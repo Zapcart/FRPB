@@ -1,19 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Power, RotateCcw, Terminal, Zap } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type {
-  ChipsetFamily,
-  DeviceAutoDetected,
-  ManualModeGuide,
-  PrimaryAction,
-} from "@frpb/shared";
-import { manualModeGuideFor } from "@frpb/shared";
+import type { ChipsetFamily, DeviceAutoDetected } from "@frpb/shared";
 import type {
   ConsentState,
   DeviceInfoSnapshot,
   DeviceLogPayload,
   DeviceModelsResult,
   DeviceStatus,
+  HardwareSnapshot,
   OperationEvent,
   OperationKind,
   OperationResult,
@@ -21,8 +16,8 @@ import type {
 } from "../lib/ipc";
 import ActionScreen, { type ActionProgress } from "./frp/ActionScreen";
 import DisclaimerModal from "./frp/DisclaimerModal";
-import ManualModeModal from "./frp/ManualModeModal";
-import type { ConnectionGuideKey } from "./frp/shared";
+import ConnectionWizardModal, { type WizardPhase } from "./frp/ConnectionWizardModal";
+import { wizardGuide, type ConnectionGuide, type ConnectionGuideKey } from "./frp/shared";
 
 interface LogEntry {
   time: string;
@@ -101,11 +96,69 @@ function overallFor(stage: string | null, pct: number, done: boolean): number {
  * attached (ADB session or raw USB transport), so Model / Serial / Port /
  * Chipset populate themselves with no manual "Read Info" click.
  */
+/**
+ * Format the console lines for a hardware snapshot transition. Mirrors
+ * `describeHardware()` in electron/hardware/detector.ts so the wizard console and
+ * the durable Console Log tab read identically ([INFO] MediaTek USB Port Found
+ * (COM3), [INFO] Injecting DA Payload…, etc.).
+ */
+function describeHardwareLines(snap: HardwareSnapshot): string[] {
+  if (!snap.connected) return [];
+  const port = snap.port ? ` (${snap.port})` : "";
+  switch (snap.mode) {
+    case "brom":
+      return [
+        `[INFO] MediaTek BROM Port Found${port}`,
+        `[INFO] Device Instance ID: ${snap.deviceInstanceId ?? "n/a"}`,
+        "[INFO] Injecting DA Payload…",
+      ];
+    case "preloader":
+      return [`[INFO] MediaTek Preloader Detected${port}`, "[INFO] Injecting DA Payload…"];
+    case "edl":
+      return [
+        `[INFO] Qualcomm EDL 9008 Port Found${port}`,
+        `[INFO] Device Instance ID: ${snap.deviceInstanceId ?? "n/a"}`,
+        "[INFO] Sending Sahara/Firehose handshake…",
+      ];
+    case "fastboot":
+      return [`[INFO] Fastboot Interface Found${port}`, "[INFO] Preparing partition commands…"];
+    case "download":
+      return [`[INFO] Odin Download Mode Found${port}`, "[INFO] Preparing download payload…"];
+    case "mtp":
+      return [`[INFO] MTP Device Found${port}`];
+    case "serial":
+      return [`[INFO] Serial Port Found${port}`];
+    case "adb":
+      return ["[INFO] ADB session present (not required)"];
+    default:
+      return [];
+  }
+}
+
+/** Low-level transport → tone class for the detected-mode chip. */
+const MODE_CHIP_TONE: Record<string, string> = {
+  brom: "bg-amber-100 text-amber-800",
+  preloader: "bg-amber-100 text-amber-800",
+  edl: "bg-violet-100 text-violet-800",
+  fastboot: "bg-emerald-100 text-emerald-800",
+  download: "bg-emerald-100 text-emerald-800",
+  mtp: "bg-brand-100 text-brand-700",
+  serial: "bg-slate-100 text-slate-600",
+  adb: "bg-slate-100 text-slate-600",
+  none: "bg-slate-100 text-slate-500",
+};
+
 function AutoReadPanel({ info }: { info: DeviceInfoSnapshot | null }) {
   const connected = Boolean(info?.connected);
+  const hwMode = info?.hardwareMode ?? "none";
+  // Surface the classified low-level transport ("BROM Mode", "EDL 9008 Mode",
+  // "Fastboot", "MTP") instead of a generic connected/disconnected warning.
+  const modeLabel = connected
+    ? info?.hardwareLabel || info?.mode || "Connected"
+    : "No hardware interface";
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
         <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
           <span
             className={
@@ -116,12 +169,21 @@ function AutoReadPanel({ info }: { info: DeviceInfoSnapshot | null }) {
           />
           Auto-Read Hardware
         </span>
-        <span className="text-[11px] text-slate-400">
-          {info
-            ? `${info.mode ?? (connected ? "Connected" : "Disconnected")} · ${new Date(
-                info.lastScanAt
-              ).toLocaleTimeString()}`
-            : "scanning…"}
+        <span className="flex items-center gap-2">
+          {connected && (
+            <span
+              className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                MODE_CHIP_TONE[hwMode] ?? MODE_CHIP_TONE.none
+              }`}
+            >
+              {modeLabel}
+            </span>
+          )}
+          <span className="text-[11px] text-slate-400">
+            {info
+              ? `${new Date(info.lastScanAt).toLocaleTimeString()}`
+              : "scanning…"}
+          </span>
         </span>
       </div>
       <div className="grid grid-cols-2 gap-px bg-slate-100 sm:grid-cols-4">
@@ -192,9 +254,19 @@ export default function FRPToolsScreen({
   // and auto-sets the brand context the instant a phone is plugged in.
   const [autoDetected, setAutoDetected] = useState<DeviceAutoDetected | null>(null);
 
-  // H. Manual key-combination fallback popup.
-  const [manualGuide, setManualGuide] = useState<ManualModeGuide | null>(null);
-  const manualContinueRef = useRef<(() => void) | null>(null);
+  // H. Guided hardware Connection Wizard (ADB-free low-level interface workflow).
+  const [wizard, setWizard] = useState<{
+    op: OperationKind;
+    guide: ConnectionGuide;
+    phase: WizardPhase;
+    lines: string[];
+    hardware: HardwareSnapshot | null;
+    error: string | null;
+  } | null>(null);
+  const wizardRef = useRef<typeof wizard>(null);
+  useEffect(() => {
+    wizardRef.current = wizard;
+  }, [wizard]);
 
   // Continuous auto-read hardware snapshot (`device:info-updated`).
   const [hwInfo, setHwInfo] = useState<DeviceInfoSnapshot | null>(null);
@@ -356,22 +428,24 @@ export default function FRPToolsScreen({
   // engine never demands USB debugging: it waits for the physical transport
   // (Samsung Test Mode / MediaTek BROM / Fastboot-Recovery) instead.
   async function runOperation(op: OperationKind) {
-    // Reject if this screen is already busy OR another tab holds the global
-    // run-state lock (main process enforces the same invariant).
-    if (runningOpRef.current || operationRunning) return;
-    setRunningOp(op);
-    runningOpRef.current = op;
-    setResult(null);
-    setOpStage(null);
-    setOpProgress(null);
-    setOpLog([]);
-    const model = (selectedModel || modelInput).trim();
-    const options = {
-      brand: selectedBrand,
-      mode: engineModeFor(selectedBrand),
-      model: model || undefined,
-    };
-    try {
+      // Reject if this screen is already busy OR another tab holds the global
+      // run-state lock (main process enforces the same invariant).
+      if (runningOpRef.current || operationRunning) return;
+      setRunningOp(op);
+      runningOpRef.current = op;
+      setResult(null);
+      setOpStage(null);
+      setOpProgress(null);
+      setOpLog([]);
+      const model = (selectedModel || modelInput).trim();
+      // The wizard is the sole interactive surface; drive its phase from the run.
+      setWizard((prev) => (prev ? { ...prev, phase: "executing" } : prev));
+      const options = {
+        brand: selectedBrand,
+        mode: engineModeFor(selectedBrand),
+        model: model || undefined,
+      };
+      try {
       const res: OperationResult =
         op === "flash-reset"
           ? await window.frpb.device.flashReset(options)
@@ -388,12 +462,20 @@ export default function FRPToolsScreen({
       appendLog(res.message);
       if (res.detail) appendLog(res.detail);
       if (!res.success) showToast(res.message);
+      setWizard((prev) =>
+        prev
+          ? res.success
+            ? { ...prev, phase: "success" }
+            : { ...prev, phase: "error", error: res.message }
+          : prev
+      );
     } catch (err) {
       const message =
         err instanceof Error && err.message ? err.message : "Operation failed to start.";
       setResult({ success: false, message });
       appendLog(message);
       showToast(message);
+      setWizard((prev) => (prev ? { ...prev, phase: "error", error: message } : prev));
     } finally {
       runningOpRef.current = null;
       setRunningOp(null);
@@ -423,7 +505,8 @@ export default function FRPToolsScreen({
         }));
         setDisclaimerOp(null);
         setChecked(false);
-        void runOperation(op);
+        // Consent recorded — open the Connection Wizard (no ADB prerequisite).
+        beginWizard(op);
       } else {
         setConsentError(res.error ?? "Could not record your consent. Please try again.");
       }
@@ -438,69 +521,83 @@ export default function FRPToolsScreen({
     }
   }
 
-  // Part 3 — manual-mode fallback. When the selected model strictly requires a
-  // hardware key combination, present the step-by-step popup first; the actual
-  // operation only starts once the user confirms.
-  function beginManualMode(action: PrimaryAction) {
-    const guide = manualModeGuideFor(
-      selectedBrand,
-      (selectedModel || modelInput).trim() || null,
-      chipset
-    );
-    manualContinueRef.current = () => {
-      setManualGuide(null);
-      manualContinueRef.current = null;
-      if (action === "flash-reset") {
-        handleFlashReset(true);
-      } else {
-        handleFrpBypass(true);
+  // Part 3 — guided hardware Connection Wizard. Opened the instant the user
+  // triggers an action: it shows the key combination, then runs a live hardware
+  // listen loop that auto-advances once the low-level interface appears. There is
+  // NO ADB / USB-debugging prerequisite anywhere in this path.
+  function beginWizard(op: OperationKind) {
+    const mode = engineModeFor(selectedBrand);
+    const guide = wizardGuide(selectedBrand, chipset, mode);
+    setWizard({ op, guide, phase: "instructions", lines: [], hardware: null, error: null });
+  }
+
+  // The user confirmed the key combination — start actively listening for the
+  // BROM / EDL / Fastboot interface, streaming console lines, then execute.
+  async function handleWizardStart() {
+    const current = wizardRef.current;
+    if (!current) return;
+    const { op } = current;
+    setWizard((prev) => (prev ? { ...prev, phase: "listening", lines: [] } : prev));
+    // Live snapshots pushed by the main-process listen loop.
+    const off = window.frpb.device.onHardware((snap) => {
+      const lines = describeHardwareLines(snap);
+      setWizard((prev) => {
+        if (!prev) return prev;
+        const merged = lines.length ? [...prev.lines, ...lines] : prev.lines;
+        return { ...prev, hardware: snap, lines: merged };
+      });
+    });
+    try {
+      const snap = await window.frpb.device.waitForHardware({
+        mode: engineModeFor(selectedBrand),
+        brand: selectedBrand,
+        timeoutMs: 120_000,
+      });
+      off();
+      if (!snap || !snap.connected) {
+        setWizard((prev) =>
+          prev
+            ? {
+                ...prev,
+                phase: "error",
+                error:
+                  "No hardware interface detected. Keep the buttons held, reconnect the USB cable and try again.",
+              }
+            : prev
+        );
+        return;
       }
-    };
-    setManualGuide(guide);
+      // Interface found — auto-advance to execution and run the real engine.
+      setWizard((prev) =>
+        prev ? { ...prev, hardware: snap, phase: "executing" } : prev
+      );
+      await runOperation(op);
+    } finally {
+      off();
+    }
   }
 
-  function handleManualContinue() {
-    const fn = manualContinueRef.current;
-    if (fn) fn();
+  function handleWizardCancel() {
+    setWizard(null);
   }
 
-  function handleManualCancel() {
-    manualContinueRef.current = null;
-    setManualGuide(null);
-  }
-
-  // Step 3 — the two primary actions, with manual-mode fallback + consent gating.
-  function handleFlashReset(skipManual = false) {
+  // Step 3 — the two primary actions. The wizard (key combo + live hardware
+  // listen) is always the entry point; consent gates only the destructive run.
+  function handleFlashReset() {
     if (busy) return;
-    if (needsAuth) {
-      showToast("Device is not authorized — accept the USB debugging prompt on the phone.");
-      return;
-    }
-    if (!skipManual && requiresManualMode) {
-      beginManualMode("flash-reset");
-      return;
-    }
     if (!flashConsented) {
       openDisclaimer("flash-reset");
     } else {
-      void runOperation("flash-reset");
+      beginWizard("flash-reset");
     }
   }
 
-  function handleFrpBypass(skipManual = false) {
+  function handleFrpBypass() {
     if (busy) return;
-    if (needsAuth) {
-      showToast("Device is not authorized — accept the USB debugging prompt on the phone.");
-      return;
-    }
-    if (!skipManual && requiresManualMode) {
-      beginManualMode("frp-bypass");
-      return;
-    }
     if (!frpConsented) {
       openDisclaimer("frp-bypass");
     } else {
-      void runOperation("frp-bypass");
+      beginWizard("frp-bypass");
     }
   }
 
@@ -530,9 +627,15 @@ export default function FRPToolsScreen({
     }
   }
 
-  // Derived state
+  // Derived state. The low-level hardware snapshot (raw USB/COM) is the primary
+  // signal so a device that is NOT running ADB still counts as available.
   const isConnected =
-    Boolean(status?.connected) || status?.state === "CONNECTED" || Boolean(autoDetected?.detected);
+    Boolean(status?.connected) ||
+    status?.state === "CONNECTED" ||
+    Boolean(autoDetected?.detected) ||
+    Boolean(hwInfo?.connected);
+  // ADB authorization only gates the ADB-only Quick Boot Switcher — the FRP /
+  // Flash Reset path never requires it (see handleFlashReset/handleFrpBypass).
   const needsAuth = Boolean(status?.connected) && status?.authorized === false;
   const flashConsented = Boolean(consent?.flashReset);
   const frpConsented = Boolean(consent?.frpBypass);
@@ -624,12 +727,19 @@ export default function FRPToolsScreen({
         />
       )}
 
-      {/* Part 3 — manual key-combination fallback popup */}
-      {manualGuide && (
-        <ManualModeModal
-          guide={manualGuide}
-          onContinue={handleManualContinue}
-          onCancel={handleManualCancel}
+      {/* Guided hardware Connection Wizard (key combo → listen → execute → success) */}
+      {wizard && (
+        <ConnectionWizardModal
+          op={wizard.op}
+          guide={wizard.guide}
+          brand={selectedBrand ?? brand}
+          model={(selectedModel || modelInput).trim() || model}
+          lines={wizard.lines}
+          hardware={wizard.hardware}
+          phase={wizard.phase}
+          errorMessage={wizard.error}
+          onStart={() => void handleWizardStart()}
+          onCancel={handleWizardCancel}
         />
       )}
 

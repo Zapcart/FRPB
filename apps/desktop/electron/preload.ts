@@ -12,6 +12,7 @@ import type {
   DeviceModelsResult,
   DeviceStatus,
   FrpbBridge,
+  HardwareSnapshot,
   LicenseProfile,
   ModelCatalogEntry,
   OperationEvent,
@@ -98,6 +99,15 @@ const bridge: FrpbBridge = {
       onChannel<DeviceAutoDetected>("device:auto-detected", cb),
     requestInfo: (): Promise<DeviceInfoSnapshot> =>
       ipcRenderer.invoke("device:requestInfo"),
+    hardwareStatus: (): Promise<HardwareSnapshot> =>
+      ipcRenderer.invoke("device:hardware:status"),
+    waitForHardware: (opts?: {
+      mode?: "test-mode" | "brom" | "fastboot-recovery";
+      brand?: string | null;
+      timeoutMs?: number;
+    }): Promise<HardwareSnapshot | null> => ipcRenderer.invoke("device:hardware:wait", opts),
+    onHardware: (cb: (snapshot: HardwareSnapshot) => void): (() => void) =>
+      onChannel<HardwareSnapshot>("device:hardware", cb),
     searchModels: (opts?: {
       query?: string | null;
       brand?: string | null;

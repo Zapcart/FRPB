@@ -25,6 +25,7 @@ import type {
   DeviceModelsResult,
   DeviceStatus,
   FrpbBridge,
+  HardwareSnapshot,
   LicenseProfile,
   LogEntry,
   ModelCatalogEntry,
@@ -54,6 +55,7 @@ function createWebBridge(): FrpbBridge {
   const deviceLogListeners = new Set<(payload: DeviceLogPayload) => void>();
   const deviceInfoListeners = new Set<(info: DeviceInfoSnapshot) => void>();
   const autoDetectedListeners = new Set<(info: DeviceAutoDetected) => void>();
+  const hardwareListeners = new Set<(snapshot: HardwareSnapshot) => void>();
   // Mirrors the main-process `deviceLogSinkEnabled` flag driven by
   // `setLogSink`; raw chunks are only mirrored while a Console surface listens.
   let deviceLogSinkEnabled = true;
@@ -320,7 +322,42 @@ function createWebBridge(): FrpbBridge {
         driverInstalled: false,
         source: null,
         lastScanAt: new Date().toISOString(),
+        hardwareMode: "none",
+        hardwareLabel: "No Device",
+        deviceInstanceId: null,
+        requiresKeyCombo: false,
+        listening: false,
       }),
+      // Browser preview has no USB/COM bus — report an honest empty snapshot so
+      // the wizard renders its "Listening…" state and never fabricates a device.
+      hardwareStatus: async (): Promise<HardwareSnapshot> => ({
+        mode: "none",
+        label: "No Device",
+        connected: false,
+        vid: null,
+        pid: null,
+        vidHex: null,
+        pidHex: null,
+        port: null,
+        chipset: "Unknown",
+        deviceInstanceId: null,
+        deviceName: null,
+        listenerActive: false,
+        requiresKeyCombo: false,
+        lowLevel: false,
+        lastScanAt: new Date().toISOString(),
+      }),
+      waitForHardware: async (): Promise<HardwareSnapshot | null> => {
+        // No hardware in a browser: never resolve with a phantom device.
+        await new Promise((resolve) => setTimeout(resolve, 600));
+        return null;
+      },
+      onHardware: (cb: (snapshot: HardwareSnapshot) => void): (() => void) => {
+        hardwareListeners.add(cb);
+        return () => {
+          hardwareListeners.delete(cb);
+        };
+      },
       // Browser preview has no hardware — subscribe but never fabricate a
       // device, mirroring the honest disconnected snapshot above.
       onAutoDetected: (cb: (info: DeviceAutoDetected) => void): (() => void) => {
