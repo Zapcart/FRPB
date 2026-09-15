@@ -9,7 +9,15 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { SessionProvider } from "@/components/session-provider";
 import { PostHogProvider } from "./providers";
-import { SITE_URL, SITE_NAME, PRODUCT_DESCRIPTION, PRIMARY_TITLE } from "@/lib/seo";
+import JsonLd from "@/components/seo/json-ld";
+import {
+  SITE_URL,
+  SITE_NAME,
+  PRODUCT_DESCRIPTION,
+  PRIMARY_TITLE,
+  PRIMARY_KEYWORDS,
+} from "@/lib/seo";
+import { softwareApplicationSchema } from "@/lib/schema";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -22,6 +30,11 @@ export const metadata: Metadata = {
   },
   description: PRODUCT_DESCRIPTION,
   applicationName: SITE_NAME,
+  keywords: PRIMARY_KEYWORDS,
+  authors: [{ name: SITE_NAME, url: SITE_URL }],
+  creator: SITE_NAME,
+  publisher: SITE_NAME,
+  category: "technology",
   // Canonical for the marketing root — every other route overrides this.
   alternates: { canonical: "/" },
   openGraph: {

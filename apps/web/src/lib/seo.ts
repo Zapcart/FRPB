@@ -20,11 +20,18 @@ export const PRODUCT_DESCRIPTION =
 /** Primary high-volume query target for the landing page. */
 export const PRIMARY_TITLE = `FRPB - ${PRODUCT_TAGLINE}`;
 
-/** Focus keyword set attached to the landing page + core routes. */
+/**
+ * Focus keyword set attached to the landing page + core routes.
+ * Ordered by commercial intent — the 2026-qualified and chipset-specific
+ * queries first, since those convert best for a paid desktop tool.
+ */
 export const PRIMARY_KEYWORDS = [
+  "samsung frp bypass 2026",
+  "xiaomi unlock tool",
+  "mtk brom tool",
+  "qualcomm edl repair",
   "frp bypass tool",
   "samsung frp tool",
-  "xiaomi frp bypass",
   "flash reset app",
   "frp lock removal",
 ];

@@ -12,7 +12,17 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, ArrowRight, ShieldCheck, Globe } from "lucide-react";
+import {
+  Check,
+  Loader2,
+  ArrowRight,
+  ShieldCheck,
+  Globe,
+  Zap,
+  Headphones,
+  Lock,
+  ChevronDown,
+} from "lucide-react";
 import {
   PLANS,
   formatMoney,
@@ -21,6 +31,67 @@ import {
   type PlanSlug,
 } from "@frpb/shared";
 import { createClient } from "@/lib/supabase/client";
+import JsonLd from "@/components/seo/json-ld";
+import { faqPageSchema } from "@/lib/schema";
+
+/**
+ * Trust / conversion badges rendered under the pricing grid. Addresses the four
+ * hesitations that block a paid-utility purchase: activation speed, refund
+ * risk, after-sales help and payment safety.
+ */
+const TRUST_BADGES = [
+  {
+    icon: Zap,
+    title: "Instant License Activation Key",
+    desc: "Your key is generated and emailed the moment payment clears — no waiting.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "100% Risk-Free Money-Back Guarantee",
+    desc: "If the tool does not resolve your device, request a full refund within 7 days.",
+  },
+  {
+    icon: Headphones,
+    title: "24/7 Priority Technician Support",
+    desc: "Real technicians on standby for paid plans — not a chatbot.",
+  },
+  {
+    icon: Lock,
+    title: "Safe & Encrypted Checkout",
+    desc: "PCI-DSS compliant processing with bank-grade 256-bit TLS encryption.",
+  },
+] as const;
+
+/**
+ * Buyer-hesitation FAQ. Rendered as an accordion AND mirrored into a `FAQPage`
+ * JSON-LD block — Google requires the markup to match the visible content.
+ */
+const PRICING_FAQS = [
+  {
+    q: "Will it work without USB Debugging enabled?",
+    a: "Yes. FRPB does not depend on ADB or USB debugging. It talks directly to the device's low-level hardware interfaces — MediaTek BROM/Preloader (VID 0E8D), Qualcomm EDL 9008, and Fastboot — so a locked phone that cannot reach Android Settings still works.",
+  },
+  {
+    q: "How fast do I get my key?",
+    a: "Instantly. Your license key is generated server-side and emailed within seconds of a successful payment, so you can activate the desktop app right away.",
+  },
+  {
+    q: "Which Windows versions are supported?",
+    a: "64-bit Windows 10 and Windows 11 are fully supported. Older 32-bit systems are not supported.",
+  },
+  {
+    q: "Can I move my license to another PC?",
+    a: "Yes. You can unbind a machine from your dashboard and activate the same license on a different computer, within your plan's device limit.",
+  },
+  {
+    q: "What if the tool does not work on my device?",
+    a: "You are covered by a 7-day money-back guarantee. If FRPB cannot resolve your device, contact support and we will refund the purchase in full.",
+  },
+  {
+    q: "Can I pay in Indian Rupees?",
+    a: "Yes. Switch the currency toggle to INR (₹) and you will be routed to our India payment rail supporting UPI, NetBanking and domestic cards. International buyers are charged in USD by card.",
+  },
+] as const;
 
 // Billing interval suffix, keyed by plan slug + display currency.
 // Lifetime plans render a one-time label only — never a recurring interval.
@@ -88,6 +159,15 @@ export default function PricingPage() {
       // Non-fatal: the choice simply is not persisted.
     }
   }
+
+  // Accordion state — first question starts open so the section reads as
+  // helpful content rather than a collapsed wall of headers.
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
+
+  // FAQPage structured data, mirroring the visible accordion below.
+  const faqLd = faqPageSchema(
+    PRICING_FAQS.map((f) => ({ question: f.q, answer: f.a }))
+  );
 
   /** The other currency's price, shown as a secondary "(~$…)" hint. */
   function alternatePrice(planSlug: PlanSlug): string | null {
@@ -313,11 +393,75 @@ export default function PricingPage() {
           })}
         </div>
 
+        {/* Trust badges — conversion triggers addressing buyer hesitations */}
+        <section
+          aria-label="Purchase guarantees"
+          className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+        >
+          {TRUST_BADGES.map((badge) => (
+            <div
+              key={badge.title}
+              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card transition hover:shadow-card-hover"
+            >
+              <span className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand-600">
+                <badge.icon className="h-5 w-5" />
+              </span>
+              <h3 className="text-sm font-bold text-slate-900">{badge.title}</h3>
+              <p className="mt-1 text-xs leading-relaxed text-slate-500">{badge.desc}</p>
+            </div>
+          ))}
+        </section>
+
+        {/* FAQ accordion — buyer-hesitation content, mirrored in FAQPage JSON-LD */}
+        <section aria-label="Frequently asked questions" className="mx-auto mt-16 max-w-3xl">
+          <h2 className="text-center text-2xl font-extrabold tracking-tight text-ink">
+            Frequently asked questions
+          </h2>
+          <p className="mt-2 text-center text-sm text-slate-500">
+            Everything buyers ask before purchasing FRPB.
+          </p>
+          <div className="mt-8 space-y-3">
+            {PRICING_FAQS.map((faq, i) => {
+              const open = openFaq === i;
+              return (
+                <div
+                  key={faq.q}
+                  className={`overflow-hidden rounded-2xl border bg-white transition ${
+                    open ? "border-brand-200 shadow-card" : "border-slate-200"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOpenFaq(open ? null : i)}
+                    aria-expanded={open}
+                    className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
+                  >
+                    <span className="text-sm font-semibold text-slate-900">{faq.q}</span>
+                    <ChevronDown
+                      className={`h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 ${
+                        open ? "rotate-180 text-brand-500" : ""
+                      }`}
+                    />
+                  </button>
+                  {open && (
+                    <p className="border-t border-slate-100 px-5 py-4 text-sm leading-relaxed text-slate-600">
+                      {faq.a}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
         <p className="mx-auto mt-10 max-w-2xl text-center text-xs leading-relaxed text-slate-400">
           FRPB is a device utility intended for authorized device owners only. You must have the
           right to access the device you recover. Use of FRPB to bypass security protections on
           devices you do not own may violate applicable laws.
         </p>
+
+        {/* FAQPage structured data — matches the visible accordion above. */}
+        <JsonLd id="ld-pricing-faq" data={faqLd} />
       </main>
 
       <footer className="border-t border-slate-200 bg-slate-50/70 py-8 text-center text-sm text-slate-500">
