@@ -9,10 +9,10 @@ import { useRouter } from "next/navigation";
 import { Loader2, Mail, Lock, User, ShieldCheck, Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  clearPendingPlan,
   checkoutUrlFor,
   readPendingPlan,
 } from "@/lib/checkout/pending-plan";
+import { PLANS, formatMoney, priceFor } from "@frpb/shared";
 import posthog from "posthog-js";
 import { isPostHogEnabled } from "@/app/providers";
 
@@ -20,12 +20,24 @@ interface AuthViewProps {
   initialMode: "signin" | "signup";
   /** Server-sanitized post-auth destination (defaults to the dashboard). */
   returnTo: string;
+  /**
+   * Plan the visitor was purchasing, forwarded from the pricing page. Rendered
+   * as a confirmation badge so they can see what they are signing up for.
+   * Validated against the canonical plan list before display.
+   */
+  selectedPlan?: string | null;
 }
 
 /** Where to send the user after a successful authentication. */
 const DASHBOARD_PATH = "/dashboard";
 
-export default function AuthView({ initialMode, returnTo }: AuthViewProps) {
+export default function AuthView({
+  initialMode,
+  returnTo,
+  selectedPlan = null,
+}: AuthViewProps) {
+  // Only render a badge for a real plan slug — never echo arbitrary query input.
+  const badgePlan = PLANS.find((p) => p.slug === selectedPlan) ?? null;
   const router = useRouter();
   const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [email, setEmail] = useState("");
@@ -90,8 +102,10 @@ export default function AuthView({ initialMode, returnTo }: AuthViewProps) {
     const pending = readPendingPlan();
     if (pending) {
       destination = checkoutUrlFor(pending);
-      // Consumed — clear it so a later sign-in is not hijacked by a stale plan.
-      clearPendingPlan();
+      // NOT cleared here: the intent is cleared by CheckoutClient once the
+      // gateway session is actually created. Clearing at this point would lose
+      // the purchase if checkout subsequently failed or the user navigated
+      // away mid-flow.
     }
 
     // Use router.push (not window.location.href) so Next.js handles the
@@ -102,6 +116,24 @@ export default function AuthView({ initialMode, returnTo }: AuthViewProps) {
   return (
     <div className="mx-auto w-full max-w-md">
       <div className="card p-8">
+        {/* Plan confirmation badge — shows a visitor arriving mid-purchase
+            exactly what they are signing up for, so they do not have to trust
+            that the selection survived the redirect. */}
+        {badgePlan && (
+          <div className="mb-5 flex items-center gap-2.5 rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-2.5">
+            <ShieldCheck className="h-4 w-4 shrink-0 text-brand-600" />
+            <p className="text-xs text-brand-800">
+              Continuing with the{" "}
+              <span className="font-bold">{badgePlan.name}</span>{" "}
+              <span className="text-brand-600">
+                ({formatMoney(priceFor(badgePlan, "USD"), "USD")} /{" "}
+                {formatMoney(priceFor(badgePlan, "INR"), "INR")})
+              </span>
+              . You'll complete payment right after this step.
+            </p>
+          </div>
+        )}
+
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
           {mode === "signin" ? "Welcome back" : "Create your account"}
         </h1>

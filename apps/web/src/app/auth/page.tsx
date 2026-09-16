@@ -20,7 +20,14 @@ export const metadata = {
 };
 
 interface AuthPageProps {
-  searchParams?: { returnTo?: string; callbackUrl?: string };
+  searchParams?: {
+    returnTo?: string;
+    callbackUrl?: string;
+    /** "signup" opens the create-account form (used by the purchase funnel). */
+    mode?: string;
+    /** Plan the visitor was buying — rendered as a confirmation badge. */
+    plan?: string;
+  };
 }
 
 export default async function AuthPage({ searchParams }: AuthPageProps) {
@@ -28,9 +35,17 @@ export default async function AuthPage({ searchParams }: AuthPageProps) {
     searchParams?.returnTo ?? searchParams?.callbackUrl
   );
 
+  // Visitors arriving mid-purchase land on the signup form; everyone else gets
+  // the default sign-in form.
+  const initialMode = searchParams?.mode === "signup" ? "signup" : "signin";
+
   return (
     <AuthShell>
-      <AuthView initialMode="signin" returnTo={returnTo} />
+      <AuthView
+        initialMode={initialMode}
+        returnTo={returnTo}
+        selectedPlan={searchParams?.plan ?? null}
+      />
     </AuthShell>
   );
 }

@@ -36,41 +36,85 @@ function isCurrency(value: unknown): value is CheckoutCurrency {
 }
 
 /**
- * Persist the plan the visitor intended to buy. Never throws — storage can be
- * unavailable under strict privacy settings, and losing this must not break
- * the redirect.
+ * Persist the plan the visitor intended to buy.
+ *
+ * Written to BOTH localStorage and sessionStorage:
+ *   - localStorage  survives the email-confirmation round trip (a brand-new
+ *     tab) and a browser restart, which is the common signup path.
+ *   - sessionStorage is a same-tab safety net for environments where
+ *     localStorage is partitioned or blocked (Safari private mode, strict
+ *     third-party-cookie settings, embedded webviews).
+ *
+ * `readPendingPlan` prefers whichever payload is newest, so the two can never
+ * disagree in a way that matters. Never throws — losing this must not break
+ * the redirect, since the URL query params also carry the intent.
  */
 export function savePendingPlan(planSlug: PlanSlug, currency: CheckoutCurrency): void {
+  const payload: PendingPlan = { planSlug, currency, savedAt: Date.now() };
+  const serialized = JSON.stringify(payload);
   try {
-    const payload: PendingPlan = { planSlug, currency, savedAt: Date.now() };
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    window.localStorage.setItem(STORAGE_KEY, serialized);
   } catch {
-    // Non-fatal: the URL query parameters still carry the intent.
+    // Non-fatal: sessionStorage and the URL params are the fallbacks.
+  }
+  try {
+    window.sessionStorage.setItem(STORAGE_KEY, serialized);
+  } catch {
+    // Non-fatal.
   }
 }
 
-/** Read a still-valid pending plan, or null. Never throws. */
-export function readPendingPlan(): PendingPlan | null {
+/** Parse + validate a stored payload, returning null when unusable/stale. */
+function parseStored(raw: string | null): PendingPlan | null {
+  if (!raw) return null;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PendingPlan>;
     if (!isPlanSlug(parsed.planSlug) || !isCurrency(parsed.currency)) return null;
     const savedAt = typeof parsed.savedAt === "number" ? parsed.savedAt : 0;
-    if (Date.now() - savedAt > MAX_AGE_MS) {
-      clearPendingPlan();
-      return null;
-    }
+    if (Date.now() - savedAt > MAX_AGE_MS) return null;
     return { planSlug: parsed.planSlug, currency: parsed.currency, savedAt };
   } catch {
     return null;
   }
 }
 
-/** Clear the pending intent (after it has been consumed). Never throws. */
+/**
+ * Read a still-valid pending plan, or null. Checks both stores and returns the
+ * NEWEST valid payload so a stale sessionStorage entry can never override a
+ * fresh localStorage one (or vice versa). Never throws.
+ */
+export function readPendingPlan(): PendingPlan | null {
+  let local: PendingPlan | null = null;
+  let session: PendingPlan | null = null;
+
+  try {
+    local = parseStored(window.localStorage.getItem(STORAGE_KEY));
+  } catch {
+    local = null;
+  }
+  try {
+    session = parseStored(window.sessionStorage.getItem(STORAGE_KEY));
+  } catch {
+    session = null;
+  }
+
+  if (local && session) return local.savedAt >= session.savedAt ? local : session;
+  const found = local ?? session;
+
+  // Expired in both stores → purge so a later visit starts clean.
+  if (!found) clearPendingPlan();
+  return found;
+}
+
+/** Clear the pending intent from BOTH stores. Never throws. */
 export function clearPendingPlan(): void {
   try {
     window.localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Non-fatal.
+  }
+  try {
+    window.sessionStorage.removeItem(STORAGE_KEY);
   } catch {
     // Non-fatal.
   }

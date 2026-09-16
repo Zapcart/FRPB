@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Loader2, ShieldCheck, ArrowLeft } from "lucide-react";
 import { PLANS, type PlanSlug } from "@frpb/shared";
+import { clearPendingPlan } from "@/lib/checkout/pending-plan";
 
 interface CheckoutClientProps {
   planSlug: PlanSlug;
@@ -41,6 +42,11 @@ export default function CheckoutClient({ planSlug, currency = "USD" }: CheckoutC
         };
 
         if (data.success && data.checkoutUrl) {
+          // The gateway session exists, so the purchase intent has served its
+          // purpose. Cleared HERE (not at the auth step) so a failure above
+          // leaves the intent intact and the user can retry without re-picking
+          // their plan.
+          clearPendingPlan();
           window.location.href = data.checkoutUrl;
           return;
         }

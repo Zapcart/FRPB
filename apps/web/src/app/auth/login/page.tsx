@@ -26,6 +26,7 @@ interface AuthLoginPageProps {
     callbackUrl?: string;
     redirectTo?: string;
     plan?: string;
+    mode?: string;
   };
 }
 
@@ -49,7 +50,11 @@ export default async function AuthLoginPage({ searchParams }: AuthLoginPageProps
 
   return (
     <AuthShell>
-      <AuthView initialMode="signin" returnTo={returnTo} />
+      <AuthView
+        initialMode={searchParams?.mode === "signup" ? "signup" : "signin"}
+        returnTo={returnTo}
+        selectedPlan={plan ?? null}
+      />
     </AuthShell>
   );
 }

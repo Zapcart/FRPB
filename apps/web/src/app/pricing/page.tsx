@@ -34,6 +34,10 @@ import { createClient } from "@/lib/supabase/client";
 import JsonLd from "@/components/seo/json-ld";
 import { faqPageSchema } from "@/lib/schema";
 import { savePendingPlan } from "@/lib/checkout/pending-plan";
+import {
+  resolveDefaultCurrency,
+  storeCurrency,
+} from "@/lib/checkout/currency";
 
 /**
  * Trust / conversion badges rendered under the pricing grid. Addresses the four
@@ -102,25 +106,8 @@ const BILLING_SUFFIX: Record<PlanSlug, Record<Currency, string>> = {
   LIFETIME: { USD: "one-time", INR: "एक बार" },
 };
 
-/** Currency the user last picked, so a return visit keeps their choice. */
-const CURRENCY_STORAGE_KEY = "frpb:currency";
-
-/**
- * Best-effort region detection with NO network call and no PII: an
- * Asia/Kolkata (or *_IN) locale is treated as India → INR. Anything else
- * defaults to USD. The user can always override with the toggle.
- */
-function detectCurrency(): Currency | null {
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
-    if (/kolkata|calcutta/i.test(tz)) return "INR";
-    const lang = navigator.language ?? "";
-    if (/-in$/i.test(lang)) return "INR";
-  } catch {
-    // Intl/locale unavailable — fall through to the default.
-  }
-  return null;
-}
+// Currency detection + persistence now live in @/lib/checkout/currency, which
+// layers PostHog geoip on top of the timezone/locale heuristic.
 
 export default function PricingPage() {
   const router = useRouter();
@@ -130,35 +117,19 @@ export default function PricingPage() {
   const [autoDetected, setAutoDetected] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialise the currency from a stored preference, else region detection.
-  // Runs once on mount, so it never fights an explicit user toggle.
+  // Initialise the currency on mount: an explicit prior choice wins, else
+  // geo/locale detection (India → INR, rest of world → USD). Runs once, so it
+  // never fights an explicit user toggle afterwards.
   useEffect(() => {
-    let initial: Currency | null = null;
-    try {
-      const stored = window.localStorage.getItem(CURRENCY_STORAGE_KEY);
-      if (stored === "USD" || stored === "INR") initial = stored;
-    } catch {
-      // Storage unavailable (strict privacy mode) — fall back to detection.
-    }
-    if (initial) {
-      setCurrency(initial);
-      return;
-    }
-    const detected = detectCurrency();
-    if (detected) {
-      setCurrency(detected);
-      setAutoDetected(true);
-    }
+    const { currency: initial, source } = resolveDefaultCurrency();
+    setCurrency(initial);
+    setAutoDetected(source !== "stored");
   }, []);
 
   function chooseCurrency(next: Currency) {
     setCurrency(next);
     setAutoDetected(false);
-    try {
-      window.localStorage.setItem(CURRENCY_STORAGE_KEY, next);
-    } catch {
-      // Non-fatal: the choice simply is not persisted.
-    }
+    storeCurrency(next);
   }
 
   // Accordion state — first question starts open so the section reads as
@@ -201,15 +172,18 @@ export default function PricingPage() {
       user = null;
     }
 
-    // Not logged in → persist the purchase intent, then send the visitor to the
-    // auth entry. The intent is stored in localStorage (not just the query
+    // Not logged in → persist the purchase intent, then send the visitor to
+    // the SIGNUP view (mode=signup) since they are mid-purchase. The intent is
+    // stored in both localStorage and sessionStorage (not just the query
     // string) so it survives the email-confirmation round trip, and the auth
     // view consumes it after sign-in to resume checkout automatically.
     if (!user) {
       savePendingPlan(planSlug, currency);
       setLoadingPlan(null);
+      // mode=signup: the visitor is mid-purchase, so land them on the signup
+      // form rather than a sign-in form they may not have an account for.
       router.push(
-        `/auth?plan=${encodeURIComponent(planSlug)}&currency=${encodeURIComponent(
+        `/auth?mode=signup&plan=${encodeURIComponent(planSlug)}&currency=${encodeURIComponent(
           currency
         )}&returnTo=${encodeURIComponent(
           `/checkout?plan=${planSlug}&currency=${currency}`
