@@ -74,19 +74,9 @@ export const metadata: Metadata = {
     icon: [{ url: "/logo.png", type: "image/png" }],
     apple: [{ url: "/logo.png", sizes: "180x180", type: "image/png" }],
   },
-  // Third-party site-ownership verification tags.
-  //
-  // `verification.other` is rendered by Next.js into <head> as
-  //   <meta name="<key>" content="<value>" />
-  // so this emits exactly: <meta name="monetag" content="a262f070..." />
-  // Using the Metadata API (rather than a raw <meta> in the JSX) guarantees it
-  // is hoisted into <head> on every route, including the statically generated
-  // marketing pages.
-  verification: {
-    other: {
-      monetag: "a262f070adebeef495eec6ef5c52af34",
-    },
-  },
+  // No third-party ad-network or site-verification tags are emitted. All such
+  // entries were removed by request, so the layout ships zero ad-network
+  // references of any kind.
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
