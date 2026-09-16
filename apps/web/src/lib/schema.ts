@@ -185,6 +185,54 @@ export function blogPostingSchema(post: {
   };
 }
 
+/**
+ * `HowTo` rich-result for a step-by-step guide.
+ *
+ * Eligible for the HowTo carousel/rich snippet, which is materially better
+ * click-through than a plain article result for "how do I…" queries — the
+ * exact intent behind these model-specific guides.
+ *
+ * Only emit this when the page genuinely renders a numbered procedure with the
+ * SAME steps: Google requires the markup to match visible content, and
+ * fabricated HowTo data is a structured-data violation.
+ */
+export function howToSchema(guide: {
+  name: string;
+  description: string;
+  path: string;
+  steps: string[];
+  /** ISO-8601 duration, e.g. "PT12M". Omitted when unknown. */
+  estimatedTime?: string;
+  /** Tools / prerequisites the reader must have. */
+  prerequisites?: string[];
+  /** Product this how-to is about (the device, not the software). */
+  deviceName?: string;
+}): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "HowTo",
+    name: guide.name,
+    description: guide.description,
+    inLanguage: "en",
+    ...(guide.estimatedTime ? { totalTime: guide.estimatedTime } : {}),
+    ...(guide.prerequisites?.length
+      ? { tool: guide.prerequisites.map((p) => ({ "@type": "HowToTool", name: p })) }
+      : {}),
+    ...(guide.deviceName
+      ? { about: { "@type": "Product", name: guide.deviceName } }
+      : {}),
+    supply: [{ "@type": "HowToSupply", name: "USB data cable" }],
+    step: guide.steps.map((text, index) => ({
+      "@type": "HowToStep",
+      position: index + 1,
+      name: `Step ${index + 1}`,
+      text,
+      // Deep-link each step so the carousel can jump to it.
+      url: `${absoluteUrl(guide.path)}#step-${index + 1}`,
+    })),
+  };
+}
+
 /** ItemList of blog articles for the `/blog` index. */
 export function blogListSchema(
   posts: readonly { title: string; description: string; path: string }[]

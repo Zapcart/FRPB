@@ -8,7 +8,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, CalendarDays, Clock, Download } from "lucide-react";
 import JsonLd from "@/components/seo/json-ld";
 import { pageMetadata } from "@/lib/seo";
-import { blogPostingSchema, breadcrumbSchema } from "@/lib/schema";
+import { blogPostingSchema, breadcrumbSchema, howToSchema } from "@/lib/schema";
 import { BLOG_POSTS, getPost } from "@/lib/blog";
 
 interface BlogPostPageProps {
@@ -28,9 +28,18 @@ export function generateMetadata({ params }: BlogPostPageProps): Metadata {
       path: `/blog/${params.slug}`,
     });
   }
+  // Model-specific guides get the brand + Android version folded into the
+  // DESCRIPTION (not the title) so the SERP snippet answers the exact long-tail
+  // query — "Samsung Galaxy S24 Ultra Android 14/15" — without keyword-stuffing
+  // the headline. The title already contains the primary query.
+  const versionSuffix =
+    post.androidVersions?.length ? ` Covers Android ${post.androidVersions.join(" and ")}.` : "";
+  const description =
+    post.brand && post.model ? `${post.description}${versionSuffix}` : post.description;
+
   return pageMetadata({
     title: post.title,
-    description: post.description,
+    description,
     path: `/blog/${post.slug}`,
     keywords: post.keywords,
   });
@@ -49,6 +58,11 @@ export default function BlogPostPage({ params }: BlogPostPageProps) {
   if (!post) notFound();
 
   const downloadUrl = process.env.NEXT_PUBLIC_DOWNLOAD_URL || "/downloads";
+
+  // The canonical ordered procedure for the HowTo schema: the first section that
+  // actually renders a numbered list. Using the same array for both the markup
+  // and the schema is what keeps them from drifting apart.
+  const howToSteps = post.sections.find((s) => s.steps?.length)?.steps ?? [];
 
   return (
     <div className="flex min-h-screen flex-col bg-white text-slate-900">
@@ -71,6 +85,25 @@ export default function BlogPostPage({ params }: BlogPostPageProps) {
           { name: post.title, path: `/blog/${post.slug}` },
         ])}
       />
+      {/*
+        HowTo is emitted ONLY for guides that declare an ordered procedure.
+        Google requires the markup to mirror visible on-page steps — the first
+        section that renders a numbered list is that procedure.
+      */}
+      {howToSteps.length > 0 && (
+        <JsonLd
+          id="ld-post-howto"
+          data={howToSchema({
+            name: post.title,
+            description: post.description,
+            path: `/blog/${post.slug}`,
+            steps: howToSteps,
+            estimatedTime: post.estimatedTime,
+            prerequisites: post.prerequisites,
+            deviceName: post.brand && post.model ? `${post.brand} ${post.model}` : undefined,
+          })}
+        />
+      )}
 
       <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/85 backdrop-blur-xl">
         <nav className="mx-auto flex h-16 max-w-3xl items-center justify-between px-6">
@@ -120,7 +153,13 @@ export default function BlogPostPage({ params }: BlogPostPageProps) {
               {section.steps?.length ? (
                 <ol className="space-y-3">
                   {section.steps.map((step, stepIndex) => (
-                    <li key={step} className="flex gap-3 text-base leading-relaxed text-slate-600">
+                    <li
+                      // Anchor target for the HowTo step URLs — the JSON-LD
+                      // deep-links to #step-N, so the element must exist.
+                      id={`step-${stepIndex + 1}`}
+                      key={step}
+                      className="flex scroll-mt-24 gap-3 text-base leading-relaxed text-slate-600"
+                    >
                       <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-50 text-xs font-bold text-brand-600">
                         {stepIndex + 1}
                       </span>

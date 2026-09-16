@@ -9,6 +9,19 @@ export interface BlogSection {
   steps?: string[];
 }
 
+/**
+ * Transport the guide's method actually uses. Drives the Connection-Wizard
+ * cross-link and, more importantly, keeps each guide honest about what it
+ * requires (a BROM guide must not read like a fastboot guide).
+ */
+export type FrpMethod =
+  | "brom" // MediaTek BROM / Preloader
+  | "edl" // Qualcomm Emergency Download 9008
+  | "fastboot"
+  | "download" // Samsung Odin / Download mode
+  | "mtp"
+  | "manual"; // No automated transport — hardware/service path only
+
 export interface BlogPost {
   slug: string;
   title: string;
@@ -19,9 +32,36 @@ export interface BlogPost {
   readingMinutes: number;
   keywords: string[];
   sections: BlogSection[];
+
+  // ── Structured, model-specific SEO metadata (optional) ────────────────────
+  // These exist so the per-route <head> and the HowTo/Article JSON-LD can be
+  // populated FROM STRUCTURE rather than by hand-writing meta copy per post.
+  // A guide that omits them still renders; it simply omits the extras.
+  /** Manufacturer, e.g. "Samsung". */
+  brand?: string;
+  /** Marketing model name, e.g. "Galaxy S24 Ultra". */
+  model?: string;
+  /** Android versions this guide is verified against, e.g. ["14", "15"]. */
+  androidVersions?: string[];
+  /** Primary transport the automated path uses. */
+  method?: FrpMethod;
+  /** Chipset family, when the guide is chipset-specific. */
+  chipset?: string;
+  /** ISO-8601 duration for the HowTo schema (e.g. "PT12M"). */
+  estimatedTime?: string;
+  /** Tools/conditions required — surfaced in HowTo `tool`/`supply`. */
+  prerequisites?: string[];
 }
 
+/**
+ * Model-specific, high-intent guides live in ./blog-guides so this file stays
+ * readable. Merged below so the blog index, sitemap and dynamic route pick them
+ * up with no further wiring.
+ */
+import { MODEL_GUIDES } from "./blog-guides";
+
 export const BLOG_POSTS: readonly BlogPost[] = [
+  ...MODEL_GUIDES,
   {
     slug: "how-to-bypass-samsung-frp-2026",
     title: "How to Bypass Samsung FRP in 2026: Step-by-Step Guide",
