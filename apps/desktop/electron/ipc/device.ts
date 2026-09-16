@@ -53,6 +53,7 @@ import { detectChipsetFromModel } from "../utils/mtk-brom";
 import {
   describeHardware,
   pollHardware,
+  rescanSerialPorts,
   waitForHardware,
 } from "../hardware/detector";
 import { targetModesFor } from "../hardware/modes";
@@ -710,6 +711,16 @@ export function registerDeviceHandlers(): void {
   ipcMain.handle("device:stopPolling", () => {
     stopPolling();
     return undefined;
+  });
+
+  // device:rescan — user-initiated refresh. Forces a FRESH serialport enumeration
+  // (bypassing the 2s/10s caches) so a phone that was just plugged in is seen
+  // immediately, then returns the freshly-classified hardware snapshot. Without
+  // the cache bypass the Rescan button could report "no device" from a stale
+  // list and appear broken.
+  ipcMain.handle("device:rescan", async () => {
+    await rescanSerialPorts();
+    return pollHardware();
   });
 
   // device:hardware:status — raw USB/COM hardware poll with NO ADB dependency.
@@ -1446,29 +1457,24 @@ const CHIPSET_BY_VENDOR_ID: Record<number, string> = {
   0x04e8: "Samsung Exynos",
 };
 
-// Best-effort Windows COM enumeration via the SERIALCOMM device map. Cached so
-// the 2s poll never shells out on every tick; null on non-Windows / no port.
-let comPortCache: { at: number; port: string | null } | null = null;
-const COM_PORT_TTL_MS = 10_000;
-
+/**
+ * Validated COM port for the current snapshot.
+ *
+ * This used to read `HKLM\HARDWARE\DEVICEMAP\SERIALCOMM` directly and return the
+ * first `COM\d+` it found — with no filtering whatsoever. That is precisely how
+ * a Bluetooth headset (BTHENUM, COM3) became the reported `port`, which made
+ * `connectionStateFrom()` return "com" and the UI show "Connected · COM" with
+ * no phone attached.
+ *
+ * It now delegates to the hardware detector, which already rejects
+ * Bluetooth/virtual endpoints and requires a valid mobile vendor id
+ * (MediaTek 0E8D, Qualcomm 05C6, Samsung 04E8, UNISOC 1782, Google 18D1).
+ * Delegating keeps ONE implementation of this rule instead of two that can
+ * drift apart — the reason the earlier detector fix missed this path.
+ */
 function probeComPort(): string | null {
-  if (process.platform !== "win32") return null;
-  const now = Date.now();
-  if (comPortCache && now - comPortCache.at < COM_PORT_TTL_MS) return comPortCache.port;
-  let port: string | null = null;
-  try {
-    const { execSync } = require("child_process");
-    const out = execSync("reg query HKLM\\HARDWARE\\DEVICEMAP\\SERIALCOMM", {
-      encoding: "utf8",
-      timeout: 4000,
-    });
-    const match = /COM\d+/.exec(out);
-    port = match ? match[0] : null;
-  } catch {
-    port = null;
-  }
-  comPortCache = { at: now, port };
-  return port;
+  const hw = pollHardware();
+  return hw.connected && hw.port ? hw.port : null;
 }
 
 /** Chipset family from the model string first, then the USB vendor id. */
@@ -1636,8 +1642,20 @@ function connectionStateFrom(snapshot: DeviceInfoSnapshot): DeviceConnectionStat
   if (snapshot.source === "adb") return "adb";
   if (/brom|vcom|preloader/.test(mode)) return "brom";
   if (/edl|9008/.test(mode)) return "edl";
-  if (snapshot.port) return "com";
   if (/mtp/.test(mode)) return "mtp";
+
+  // A bare COM port is ONLY reported as "com" when the classified hardware
+  // transport is genuinely low-level (BROM / preloader / EDL). Previously any
+  // truthy `snapshot.port` produced "com" — which surfaced as "Connected · COM"
+  // for an unattached machine whose Bluetooth headset owned COM3.
+  //
+  // "serial" is deliberately excluded: an unrecognised serial endpoint is not a
+  // phone, so it must not present itself as one.
+  if (snapshot.port) {
+    const hwMode = snapshot.hardwareMode ?? "";
+    if (hwMode === "brom" || hwMode === "preloader" || hwMode === "edl") return "com";
+  }
+
   return snapshot.source === "usb" ? "mtp" : "disconnected";
 }
 

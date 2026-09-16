@@ -130,6 +130,71 @@ for (const [name, port, expectVirtual] of cases) {
   );
 }
 
+// ─── connectionStateFrom() — the source of the "Connected · COM" label ───────
+//
+// Mirrors the guard in electron/ipc/device.ts. The regression this pins: a
+// machine with ONLY a Bluetooth headset used to report connection "com", which
+// the UI rendered as "Connected · COM" with no phone attached. "com" is now
+// allowed only for a genuine BROM/preloader/EDL transport.
+function connectionStateFrom(s) {
+  if (!s.connected) return "disconnected";
+  const mode = `${s.mode ?? ""} ${s.mtp ?? ""}`.toLowerCase();
+  if (/fastboot|bootloader/.test(mode)) return "fastboot";
+  if (s.source === "adb") return "adb";
+  if (/brom|vcom|preloader/.test(mode)) return "brom";
+  if (/edl|9008/.test(mode)) return "edl";
+  if (/mtp/.test(mode)) return "mtp";
+  if (s.port) {
+    const hw = s.hardwareMode ?? "";
+    if (hw === "brom" || hw === "preloader" || hw === "edl") return "com";
+  }
+  return s.source === "usb" ? "mtp" : "disconnected";
+}
+
+const stateCases = [
+  [
+    "Bluetooth COM3 only (was 'com' — the bug)",
+    { connected: true, source: "usb", port: "COM3", hardwareMode: "serial", mode: "Serial Port (COM3)" },
+    "mtp",
+  ],
+  ["Nothing connected", { connected: false }, "disconnected"],
+  // A BROM/EDL device is classified by its MODE string first, so it reports the
+  // more specific "brom"/"edl" rather than the generic "com". "com" is only the
+  // fallback for a low-level transport whose label does not name the mode.
+  [
+    "MediaTek BROM on COM5",
+    { connected: true, source: "usb", port: "COM5", hardwareMode: "brom", mode: "MediaTek BROM Mode (COM5)" },
+    "brom",
+  ],
+  [
+    "Qualcomm EDL on COM7",
+    { connected: true, source: "usb", port: "COM7", hardwareMode: "edl", mode: "Qualcomm EDL 9008 Mode (COM7)" },
+    "edl",
+  ],
+  [
+    "Low-level transport, mode label unhelpful -> com",
+    { connected: true, source: "usb", port: "COM8", hardwareMode: "preloader", mode: "MediaTek USB Port (COM8)" },
+    "com",
+  ],
+  ["ADB phone", { connected: true, source: "adb", port: null, mode: "ADB" }, "adb"],
+  [
+    "Fastboot",
+    { connected: true, source: "usb", port: null, mode: "Fastboot / Bootloader" },
+    "fastboot",
+  ],
+];
+
+console.log("\nconnectionStateFrom() — 'Connected · COM' guard\n");
+for (const [name, snapshot, expected] of stateCases) {
+  const got = connectionStateFrom(snapshot);
+  const ok = got === expected;
+  if (ok) pass++;
+  else fail++;
+  console.log(
+    `${ok ? "PASS" : "FAIL"} | ${name.padEnd(38)} -> ${got}${ok ? "" : ` (expected ${expected})`}`
+  );
+}
+
 console.log("\n" + "-".repeat(62));
 console.log(`result: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

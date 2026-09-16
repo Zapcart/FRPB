@@ -215,6 +215,27 @@ function serialPorts(): SerialPortInfo[] {
   return serialPortCache?.ports ?? [];
 }
 
+/**
+ * Force a FRESH `serialport.list()` and resolve once it completes.
+ *
+ * The normal poll path is cache-backed (COM_TTL_MS) so the 2s loop never shells
+ * out per tick. A user-initiated "Rescan" must not be served from that cache —
+ * if the phone was just plugged in, a stale list would report "no device" and
+ * make the button look broken. This bypasses the TTL by clearing the stamp
+ * first, then waits for the in-flight enumeration to land.
+ */
+export async function rescanSerialPorts(): Promise<void> {
+  // Invalidate the cache so refreshSerialPorts() actually re-enumerates.
+  if (serialPortCache) serialPortCache = { at: 0, ports: serialPortCache.ports };
+  refreshSerialPorts();
+  // Wait for the in-flight promise to settle (bounded, so a hung driver cannot
+  // block the IPC handler forever).
+  const deadline = Date.now() + 4_000;
+  while (serialPollInFlight && Date.now() < deadline) {
+    await sleep(60);
+  }
+}
+
 /** True when a serial endpoint's metadata points at a MediaTek/Qualcomm port. */
 function serialHint(port: SerialPortInfo): ChipsetFamily {
   const hay = `${port.manufacturer ?? ""} ${port.friendlyName ?? ""}`.toLowerCase();

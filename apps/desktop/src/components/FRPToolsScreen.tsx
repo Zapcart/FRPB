@@ -453,6 +453,14 @@ export default function FRPToolsScreen({
   // the detected model.
   function handleManualRefresh() {
     void onRefresh();
+    // Force a FRESH serialport enumeration in the main process (bypassing the
+    // poll caches), then re-read the typed info snapshot so the hardware strip
+    // reflects a phone plugged in moments ago instead of a cached port list.
+    void window.frpb.device
+      .rescan()
+      .then(() => window.frpb.device.requestInfo())
+      .then((info: DeviceInfoSnapshot) => setHwInfo(info))
+      .catch(() => {});
     window.frpb.device
       .listModels()
       .then((res: DeviceModelsResult) => {

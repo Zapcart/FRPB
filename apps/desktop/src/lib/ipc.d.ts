@@ -450,6 +450,13 @@ export interface FrpbBridge {
      */
     hardwareStatus: () => Promise<HardwareSnapshot>;
     /**
+     * User-initiated refresh. Forces a FRESH serialport enumeration (bypassing
+     * the poll caches) and resolves the freshly-classified snapshot, so a phone
+     * plugged in moments ago is detected immediately rather than being masked by
+     * a stale cached port list.
+     */
+    rescan: () => Promise<HardwareSnapshot>;
+    /**
      * Actively LISTEN for a low-level transport for up to `timeoutMs`, resolving
      * the moment the target interface appears (or null on timeout). Streams
      * console lines + `device:hardware` snapshots so the Connection Wizard can

@@ -347,6 +347,23 @@ function createWebBridge(): FrpbBridge {
         lowLevel: false,
         lastScanAt: new Date().toISOString(),
       }),
+      rescan: async (): Promise<HardwareSnapshot> => ({
+        mode: "none",
+        label: "No Device",
+        connected: false,
+        vid: null,
+        pid: null,
+        vidHex: null,
+        pidHex: null,
+        port: null,
+        chipset: "Unknown",
+        deviceInstanceId: null,
+        deviceName: null,
+        listenerActive: false,
+        requiresKeyCombo: false,
+        lowLevel: false,
+        lastScanAt: new Date().toISOString(),
+      }),
       waitForHardware: async (): Promise<HardwareSnapshot | null> => {
         // No hardware in a browser: never resolve with a phantom device.
         await new Promise((resolve) => setTimeout(resolve, 600));

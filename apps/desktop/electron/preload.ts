@@ -101,6 +101,12 @@ const bridge: FrpbBridge = {
       ipcRenderer.invoke("device:requestInfo"),
     hardwareStatus: (): Promise<HardwareSnapshot> =>
       ipcRenderer.invoke("device:hardware:status"),
+    /**
+     * User-initiated refresh. Forces a FRESH serialport enumeration (bypassing
+     * the poll caches) and resolves the freshly-classified snapshot, so a phone
+     * plugged in moments ago is detected immediately.
+     */
+    rescan: (): Promise<HardwareSnapshot> => ipcRenderer.invoke("device:rescan"),
     waitForHardware: (opts?: {
       mode?: "test-mode" | "brom" | "fastboot-recovery";
       brand?: string | null;
