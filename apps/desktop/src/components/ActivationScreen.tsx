@@ -31,23 +31,27 @@ interface ActivationScreenProps {
 
 /**
  * Entry screen shown before verification. Verifying is always online — the
- * encrypted cached profile only pre-fills the key box as a convenience hint
- * and never grants access by itself.
+ * encrypted cached profile never grants access by itself.
+ *
+ * The key field ALWAYS starts empty. Previously it was pre-filled from the
+ * encrypted cache, which meant that after activating with the shared
+ * FRPB-TEST-* key the published test string appeared in the box on every
+ * subsequent launch — and (because that value is compiled into the app) it
+ * looked like the field shipped hardcoded. The cached key is still available,
+ * but only behind an explicit "use previous key" action the user has to click.
  */
 export default function ActivationScreen({ cached, onActivated }: ActivationScreenProps) {
-  const [key, setKey] = useState(cached?.key ?? "");
+  // Deliberately empty: never seeded from the cache, never hardcoded.
+  const [key, setKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [activated, setActivated] = useState<LicenseProfile | null>(null);
 
-  // Keep the hint box in sync with the latest persisted state: a dev reset
-  // re-reads the cache (null) and clears the field, while a fresh server
-  // activation re-populates it. Only touch the input while idle so a reset can
-  // never clobber a key the user is mid-typing.
-  useEffect(() => {
-    if (verifying || activated) return;
-    setKey(cached?.key ?? "");
-  }, [cached, verifying, activated]);
+  // Saved key from a previous activation on this machine, offered as an
+  // opt-in convenience rather than being written into the field automatically.
+  const previousKey = cached?.key ?? "";
+  const canOfferPreviousKey =
+    previousKey.length > 0 && key.length === 0 && !verifying && !activated;
 
   // Dev-only hint: the master test key exists solely for local browser preview
   // (Vite dev server without Electron). `import.meta.env.DEV` is statically
@@ -139,13 +143,24 @@ export default function ActivationScreen({ cached, onActivated }: ActivationScre
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleVerify();
                   }}
-                  placeholder="FRPB-XXXX-XXXX-XXXX"
+                  placeholder="Enter your license key"
                   autoCapitalize="characters"
                   autoCorrect="off"
                   spellCheck={false}
                   className="frpb-input py-2.5 pl-10 pr-3 font-mono"
                 />
               </div>
+
+              {canOfferPreviousKey && (
+                <button
+                  type="button"
+                  onClick={() => setKey(previousKey.toUpperCase())}
+                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 transition hover:text-brand-700"
+                >
+                  <KeyRound className="h-3 w-3" />
+                  Use the key activated on this machine previously
+                </button>
+              )}
 
               {error && (
                 <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">
