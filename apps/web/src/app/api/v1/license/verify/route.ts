@@ -41,6 +41,9 @@ function masterTestProfile(key: string) {
     success: true,
     status: "ACTIVE",
     message: "License activated (FRPB master test key)",
+    // Marks the response as a dev/test bypass so it is never mistaken for a
+    // purchased entitlement.
+    isMasterTest: true,
     license: {
       key,
       plan: "LIFETIME",
@@ -82,10 +85,10 @@ export async function POST(req: NextRequest) {
 async function verify(req: NextRequest) {
   const ip = clientIp(req);
 
-  // 1. Body validation (cheap) before any rate-limit writes
-  let parsed;
+  // 1. Read + parse the body (cheap, no DB, no rate-limit writes).
+  let rawBody: unknown;
   try {
-    parsed = VerifyRequestSchema.safeParse(await req.json());
+    rawBody = await req.json();
   } catch {
     return NextResponse.json(
       { success: false, status: "INVALID_REQUEST", message: "Invalid JSON body" },
@@ -93,6 +96,32 @@ async function verify(req: NextRequest) {
     );
   }
 
+  // 1.1 MASTER TEST KEY — evaluated FIRST, before strict schema validation.
+  //
+  //     Order matters: the shortcut must not depend on the client sending a
+  //     well-formed `hardwareId`/`deviceName`. If it ran after `safeParse`, a
+  //     desktop build whose hardware fingerprint failed to resolve (or a plain
+  //     curl probe) would get a 400 and never reach the bypass — the exact
+  //     "can't activate locally" class of failure this exists to prevent.
+  //
+  //     It remains strictly dev-gated: `isMasterTestKey` is fail-closed in
+  //     production unless ALLOW_DEV_TEST_KEYS=true was set deliberately (the
+  //     key is published in this repo, so accepting it in prod would hand out
+  //     free entitlements).
+  //
+  //     On success it bypasses the DB and rate-limiter entirely and returns a
+  //     synthetic ACTIVE LIFETIME profile, so activation works even when the
+  //     Supabase database is unreachable.
+  const probeKey =
+    typeof (rawBody as { licenseKey?: unknown })?.licenseKey === "string"
+      ? (rawBody as { licenseKey: string }).licenseKey
+      : "";
+  if (probeKey && isMasterTestKey(probeKey)) {
+    return NextResponse.json(masterTestProfile(probeKey.trim().toUpperCase()));
+  }
+
+  // 2. Strict schema validation for every real licence key.
+  const parsed = VerifyRequestSchema.safeParse(rawBody);
   if (!parsed.success) {
     return NextResponse.json(
       {
@@ -105,17 +134,6 @@ async function verify(req: NextRequest) {
   }
 
   const { licenseKey, hardwareId, deviceName } = parsed.data;
-
-  // 1.5 Master test key — dev-only shortcut. `isMasterTestKey` is hard-disabled
-  //     in production, so this branch only runs during local development. It
-  //     bypasses the database entirely (no Prisma connection attempt) and
-  //     returns a synthetic ACTIVE LIFETIME profile so the desktop app can run
-  //     through the full activate → dashboard flow instantly — even when the
-  //     Supabase DB is unreachable. Rate-limit and lockout are intentionally
-  //     skipped so local testing stays frictionless.
-  if (isMasterTestKey(licenseKey)) {
-    return NextResponse.json(masterTestProfile(licenseKey.trim().toUpperCase()));
-  }
 
   // 2. Rate limit per IP and per HWID (fixed-window counters)
   const ipKey = `verify:ip:${ip}`;

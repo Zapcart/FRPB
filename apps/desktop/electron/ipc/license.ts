@@ -81,15 +81,29 @@ export function registerLicenseHandlers(): void {
         });
       } catch (err) {
         // The web API is unreachable (e.g. apps/web not running in dev, or no
-        // network in prod). Return a structured failure instead of letting the
-        // TypeError bubble across IPC into the renderer.
-        log.error(`license:verify network failure (${VERIFY_ENDPOINT}):`, err);
+        // network in prod). Return a STRUCTURED failure instead of letting the
+        // TypeError bubble across IPC into the renderer, and distinguish a
+        // timeout from a refused connection so the message is actionable.
+        const isTimeout =
+          err instanceof Error &&
+          (err.name === "TimeoutError" || err.name === "AbortError");
+        const code =
+          (err as { cause?: { code?: string } })?.cause?.code ??
+          (err as { code?: string })?.code;
+        log.error(
+          `license:verify network failure (${VERIFY_ENDPOINT}) ` +
+            `[${isTimeout ? "TIMEOUT" : code ?? "FETCH_FAILED"}]:`,
+          err
+        );
         return {
           httpStatus: 0,
           success: false,
           status: "SERVER_ERROR" as const,
-          message:
-            "Unable to reach the verification server. Make sure your local FRPB web server is running (dev) or that you have an active internet connection (production).",
+          message: isTimeout
+            ? `The verification server at ${VERIFY_ENDPOINT} did not respond within 10 seconds. Check your connection and try again.`
+            : code === "ECONNREFUSED"
+              ? `No verification server is listening at ${VERIFY_ENDPOINT}. Start the local FRPB web server (dev) or check your connection.`
+              : `Unable to reach the verification server at ${VERIFY_ENDPOINT}. Check your internet connection and try again.`,
         };
       }
 

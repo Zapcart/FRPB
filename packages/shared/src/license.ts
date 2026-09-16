@@ -56,6 +56,12 @@ export interface VerifyResponse extends ApiResponse {
   httpStatus: number;
   status: VerifyStatus;
   license?: LicenseProfile;
+  /**
+   * True when the response came from the dev/test master-key shortcut rather
+   * than a real licence lookup. Lets the client label it and ensures a bypass
+   * response is never mistaken for a purchased entitlement.
+   */
+  isMasterTest?: boolean;
 }
 
 // ─── Unbind request (Dashboard → POST /api/v1/license/unbind) ──────────────
