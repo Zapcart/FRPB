@@ -7,7 +7,6 @@
 
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import Script from "next/script";
 import { SessionProvider } from "@/components/session-provider";
 import { PostHogProvider } from "./providers";
 import JsonLd from "@/components/seo/json-ld";
@@ -94,31 +93,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen bg-white font-sans text-slate-900 antialiased">
-        {/*
-          Monetag In-Page Push (zone 11816708).
-
-          `strategy="afterInteractive"` is deliberate and load-bearing here:
-          next/script defers execution until AFTER hydration, so the third-party
-          tag cannot run during hydration and cause a DOM mismatch. It also
-          never blocks client-side navigation.
-
-          Placed as a direct child of <body> — outside the provider tree — so it
-          is not tied to any client component's lifecycle and stays mounted
-          across App Router navigations.
-
-          NOTE: this tag is served to EVERY route, including the authenticated
-          /dashboard and /admin surfaces. In-page push advertising on a paid
-          product's own dashboard is usually undesirable — if that is not
-          intended, move this <Script> into the marketing pages (or gate it on
-          the pathname) rather than the root layout.
-        */}
-        <Script
-          id="monetag-inpage-push"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `(function(s){s.dataset.zone='11816708',s.src='https://nap5k.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')));`,
-          }}
-        />
         <PostHogProvider>
           <SessionProvider>{children}</SessionProvider>
         </PostHogProvider>
