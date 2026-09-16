@@ -229,18 +229,98 @@ function serialHint(port: SerialPortInfo): ChipsetFamily {
 }
 
 /**
+ * USB vendor IDs that identify a real mobile device in a flashable mode.
+ * A serial endpoint is ONLY trusted when its PnP chain carries one of these —
+ * that is what separates a phone from a Bluetooth headset's virtual COM port.
+ *
+ *   0x0e8d MediaTek  0x05c6 Qualcomm  0x04e8 Samsung
+ *   0x1782 UNISOC/Spreadtrum          0x18d1 Google (ADB/Fastboot reference)
+ */
+const VALID_MOBILE_VIDS: ReadonlySet<number> = new Set([
+  MTK_VID,
+  QUALCOMM_VID,
+  SAMSUNG_VID,
+  0x1782, // UNISOC / Spreadtrum
+  0x18d1, // Google ADB / Fastboot
+]);
+
+/** True when a USB vendor id belongs to a known flashable device vendor. */
+function isValidMobileVid(vid: number | null | undefined): boolean {
+  return typeof vid === "number" && VALID_MOBILE_VIDS.has(vid);
+}
+
+/**
+ * Bluetooth / virtual serial endpoints that must NEVER be treated as a phone.
+ *
+ * `BTHENUM` is the Windows enumerator for Bluetooth serial profiles — it is the
+ * exact reason a hands-free headset shows up as "COM3" and previously wedged the
+ * wizard in "Listening…" forever. `com0com` and the `ROOT\`/`SWD\` enumerators
+ * are software loopback ports with no hardware behind them at all.
+ */
+const VIRTUAL_PORT_PATTERNS: readonly RegExp[] = [
+  /bthenum/i,
+  /\bbth\b/i,
+  /bluetooth/i,
+  /com0com/i,
+  /^root\\/i,
+  /^swd\\/i,
+  /virtual\s+serial/i,
+  /standard\s+serial\s+over\s+bluetooth/i,
+];
+
+/**
+ * True when a serial endpoint is Bluetooth or a software/virtual port.
+ *
+ * Checks every identifying field serialport exposes — a Bluetooth device is
+ * not always flagged in the same property across driver versions, so matching
+ * only `pnpId` would let some of them through.
+ */
+function isVirtualOrBluetoothPort(port: SerialPortInfo): boolean {
+  const hay = [
+    port.pnpId,
+    port.path,
+    port.friendlyName,
+    port.manufacturer,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  if (!hay) return true; // No identifying metadata at all → not trustworthy.
+  if (VIRTUAL_PORT_PATTERNS.some((re) => re.test(hay))) return true;
+
+  // A Bluetooth port's PnP id is BTHENUM\...; also catch the classic
+  // "BTHENUM\{...}_LOCALMFG" hands-free signature via the path alone.
+  return /^BTH/i.test(port.path ?? "");
+}
+
+/**
+ * VID parsed from a serialport entry, when the driver exposes it.
+ * serialport reports these as hex strings without a 0x prefix.
+ */
+function vidFromSerialEntry(port: SerialPortInfo): number | null {
+  const raw = port.vendorId;
+  if (!raw) return null;
+  const parsed = Number.parseInt(raw.replace(/^0x/i, ""), 16);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
  * Best COM port. Preference order:
  *   1. serialport entry whose metadata names a mobile SoC vendor (the true
  *      MediaTek Preloader / Qualcomm VCOM port)
  *   2. the VID/PID-matched PnP friendly name
- *   3. any serialport entry
- *   4. the Windows SERIALCOMM registry map
+ *   3. a serialport entry that carries a valid mobile VID
+ *   4. the Windows SERIALCOMM registry map, but ONLY when the matching PnP row
+ *      resolves to a valid mobile VID
+ *
+ * Every branch rejects Bluetooth and virtual ports. When nothing valid is
+ * present the result is `{ port: null }` so callers report "no device" rather
+ * than latching onto a headset.
  */
 function readComPort(
   pnp: PnpDevice[],
   preferVid?: number | null
 ): { port: string | null; entry: SerialPortInfo | null } {
-  const ports = serialPorts();
+  const ports = serialPorts().filter((p) => !isVirtualOrBluetoothPort(p));
 
   // 1. Vendor-hinted serialport entry.
   const hinted = ports.find((p) => serialHint(p) !== "Unknown");
@@ -252,15 +332,23 @@ function readComPort(
     const m = row && /\((COM\d+)\)/i.exec(row.friendlyName);
     if (m?.[1]) return { port: m[1].toUpperCase(), entry: null };
   }
+
+  // 3. A serialport entry backed by a real mobile USB vendor id.
+  const withVid = ports.find((p) => isValidMobileVid(vidFromSerialEntry(p)));
+  if (withVid?.path) return { port: withVid.path.toUpperCase(), entry: withVid };
+
+  // 3b. PnP row whose Device Instance ID carries a valid mobile VID.
   for (const d of pnp) {
+    const vidMatch = /VID_([0-9A-F]{4})/i.exec(d.instanceId);
+    const vid = vidMatch?.[1] ? Number.parseInt(vidMatch[1], 16) : null;
+    if (!isValidMobileVid(vid)) continue;
     const m = /\((COM\d+)\)/i.exec(d.friendlyName);
     if (m?.[1]) return { port: m[1].toUpperCase(), entry: null };
   }
 
-  // 3. Any serialport entry.
-  if (ports[0]?.path) return { port: ports[0].path.toUpperCase(), entry: ports[0] };
-
-  // 4. Windows SERIALCOMM registry map.
+  // 4. Windows SERIALCOMM registry map — accepted only if the COM port maps to
+  //    a PnP row with a valid mobile VID (the registry alone cannot tell us the
+  //    vendor, and blindly trusting it is how a Bluetooth port got in).
   if (process.platform !== "win32") return { port: null, entry: null };
   try {
     const out = execSync("reg query HKLM\\HARDWARE\\DEVICEMAP\\SERIALCOMM", {
@@ -268,8 +356,15 @@ function readComPort(
       timeout: 4000,
       windowsHide: true,
     });
-    const m = /(COM\d+)/i.exec(out);
-    return { port: m && m[1] ? m[1].toUpperCase() : null, entry: null };
+    const comMatch = /(COM\d+)/i.exec(out);
+    const com = comMatch?.[1] ? comMatch[1].toUpperCase() : null;
+    if (!com) return { port: null, entry: null };
+
+    const row = pnp.find((d) => d.friendlyName.toUpperCase().includes(com));
+    const vidMatch = row ? /VID_([0-9A-F]{4})/i.exec(row.instanceId) : null;
+    const vid = vidMatch?.[1] ? Number.parseInt(vidMatch[1], 16) : null;
+    if (!row || !isValidMobileVid(vid)) return { port: null, entry: null };
+    return { port: com, entry: null };
   } catch {
     return { port: null, entry: null };
   }
@@ -397,16 +492,33 @@ export function pollHardware(): HardwareSnapshot {
   // low-level interface and auto-advances.
   if (!best) {
     const com = readComPort(pnp, null);
-    if (com.port) {
+    // Defence in depth: `readComPort` already filters Bluetooth/virtual ports,
+    // but re-check here so a future change to the port list can never silently
+    // reintroduce a headset as a "connected device".
+    const comIsVirtual = com.entry ? isVirtualOrBluetoothPort(com.entry) : false;
+    if (com.port && !comIsVirtual) {
+      // A serial endpoint may only be promoted to a LOW-LEVEL mode (preloader /
+      // EDL) when its PnP chain proves a mobile vendor. Without that evidence it
+      // is reported as a bare "serial" endpoint, which is deliberately NOT a
+      // wizard target — so the wizard keeps waiting for a real phone instead of
+      // attaching to an unrelated COM device.
+      const pnpRowForCom = pnp.find((d) =>
+        d.friendlyName.toUpperCase().includes(com.port!)
+      );
+      const comVidMatch = pnpRowForCom
+        ? /VID_([0-9A-F]{4})/i.exec(pnpRowForCom.instanceId)
+        : null;
+      const comVid = comVidMatch?.[1] ? Number.parseInt(comVidMatch[1], 16) : null;
+      const vendorProven = isValidMobileVid(comVid) || isValidMobileVid(vidFromSerialEntry(com.entry ?? {}));
+
       const chipset =
         (com.entry ? serialHint(com.entry) : "Unknown") !== "Unknown"
           ? serialHint(com.entry!)
-          : inferChipsetFromName(
-              pnp.find((d) => d.friendlyName.toUpperCase().includes(com.port!))?.friendlyName ?? ""
-            );
+          : inferChipsetFromName(pnpRowForCom?.friendlyName ?? "");
       const isMtk = chipset === "MediaTek";
       const isQcom = chipset === "Qualcomm";
-      const mode: HardwareMode = isMtk ? "preloader" : isQcom ? "edl" : "serial";
+      const mode: HardwareMode =
+        !vendorProven ? "serial" : isMtk ? "preloader" : isQcom ? "edl" : "serial";
       const pnpRow = pnp.find((d) => d.friendlyName.toUpperCase().includes(com.port!));
       best = {
         mode,
@@ -517,7 +629,13 @@ export function describeHardware(snap: HardwareSnapshot): string[] {
       lines.push(`[INFO] MTP Device Found${portSuffix}`);
       break;
     case "serial":
-      lines.push(`[INFO] Serial Port Found${portSuffix}`);
+      // Deliberately explicit: a bare serial endpoint is NOT a flashable phone
+      // (and never a Bluetooth port — those are filtered before we get here).
+      // Saying so prevents the console from implying a device was found while
+      // the wizard is still correctly waiting.
+      lines.push(
+        `[INFO] Serial device detected${portSuffix} — not a recognised phone interface, still waiting`
+      );
       break;
     case "adb":
       lines.push("[INFO] ADB session present (not required)");

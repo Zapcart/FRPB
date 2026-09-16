@@ -268,6 +268,50 @@ export default function FRPToolsScreen({
     wizardRef.current = wizard;
   }, [wizard]);
 
+  // Wizard HARDWARE CONSOLE streaming.
+  //
+  // The wizard's console box previously showed ONLY hardware-detection lines
+  // (describeHardwareLines), so once the listen loop handed over to the engine
+  // the panel went silent — which read as "nothing is happening" even while a
+  // flash/FRP operation was streaming output. This pipes the real operation
+  // traffic into the same box for the lifetime of the wizard:
+  //
+  //   device:operation:event → staged engine progress (WIPE / REBOOT / DONE …)
+  //   device:log             → raw stdout/stderr from the underlying tool
+  //
+  // Each entry is tagged so the console reads like a terminal transcript and a
+  // [ERROR] line can be styled distinctly. Overwrites are avoided by appending
+  // only when the text actually differs from the last line, because the engine
+  // emits both a stage event AND a matching log entry for the same step.
+  useEffect(() => {
+    if (!wizard) return;
+
+    const appendUnique = (line: string) => {
+      setWizard((prev) => {
+        if (!prev) return prev;
+        const last = prev.lines[prev.lines.length - 1];
+        if (last === line) return prev;
+        return { ...prev, lines: [...prev.lines, line] };
+      });
+    };
+
+    const offEvent = window.frpb.device.onOperationEvent((event: OperationEvent) => {
+      const pct = typeof event.pct === "number" ? ` ${Math.round(event.pct)}%` : "";
+      appendUnique(`[${event.stage.toUpperCase()}]${pct} ${event.message}`);
+    });
+
+    const offLog = window.frpb.device.onLog((payload: DeviceLogPayload) => {
+      const text = payload.text.replace(/\r?\n$/, "").trim();
+      if (!text) return;
+      appendUnique(payload.stream === "err" ? `[ERROR] ${text}` : `[TOOL] ${text}`);
+    });
+
+    return () => {
+      offEvent();
+      offLog();
+    };
+  }, [wizard !== null]);
+
   // Continuous auto-read hardware snapshot (`device:info-updated`).
   const [hwInfo, setHwInfo] = useState<DeviceInfoSnapshot | null>(null);
 
