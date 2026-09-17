@@ -58,38 +58,27 @@ export default function PaymentMethodModal({
 
   if (!plan) return null;
 
-  /** Pay in INR → the self-hosted Direct-UPI engine. */
-  async function payWithUpi() {
+  /**
+   * Pay in INR → the self-hosted Direct-UPI engine.
+   *
+   * Navigation is IMMEDIATE and does not depend on any network call.
+   *
+   * Previously this POSTed to /api/v1/payment/create *before* navigating, and
+   * rendered a blocking "Checkout unavailable" error whenever that request
+   * failed (DB unreachable, session lookup error, cold start). That made the
+   * zero-dependency UPI rail the most fragile path in the app.
+   *
+   * The UPI checkout page owns order creation: it renders the QR/intent UI with
+   * its own loading state and reports failures inline with a retry, so the
+   * customer always reaches the payment screen. The amount remains locked
+   * server-side.
+   */
+  function payWithUpi() {
     if (!plan) return;
     setError(null);
     setBusy("UPI");
-    try {
-      const res = await fetch("/api/v1/payment/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        // The amount is NOT sent — the server locks it to the INR tier rate.
-        body: JSON.stringify({
-          planId: plan.orderPlanId,
-          userEmail: email ?? undefined,
-        }),
-      });
-      const data = (await res.json()) as {
-        success?: boolean;
-        message?: string;
-        order?: { orderId: string };
-      };
-      if (!res.ok || !data.success || !data.order) {
-        setError(data.message ?? "Could not start the UPI payment. Please try again.");
-        return;
-      }
-      // Hand the created order to the dedicated UPI checkout page.
-      router.push(`/checkout/upi?plan=${plan.slug}&orderId=${data.order.orderId}`);
-    } catch {
-      setError("Could not reach the payment service. Check your connection and retry.");
-    } finally {
-      setBusy(null);
-    }
+    // No await needed — the page creates the order and shows its own progress.
+    router.push(`/checkout/upi?plan=${plan.slug}`);
   }
 
   /** Pay in USD → PayGlocal hosted card checkout. */

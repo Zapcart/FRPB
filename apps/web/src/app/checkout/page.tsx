@@ -5,18 +5,24 @@
 //     straight to the merchant VPA via QR / native UPI app and the license is
 //     granted on UTR verification. No sign-in is required to pay — the license
 //     is bound to the email entered at checkout.
-//   • USD → the existing authenticated gateway hand-off (CheckoutClient), which
-//     redirects to the provider-hosted checkout and grants via webhook.
+//   • USD → the authenticated gateway hand-off (CheckoutClient), which redirects
+//     to the provider-hosted checkout and grants via webhook.
 //
-// The currency + selected plan are preserved across the auth hop for the USD
-// rail so the purchase resumes automatically after sign-in.
+// FAIL-SAFE AUTH: this page never throws on a missing/unreachable auth
+// dependency. It uses `getOptionalUser()`, which returns null instead of
+// throwing, so a Supabase outage or absent env var degrades to a normal
+// signed-out experience rather than the blocking "Checkout unavailable" screen.
+// The self-hosted UPI rail in particular must never be blocked by an optional
+// third-party service.
 
 import { redirect } from "next/navigation";
 import { PLANS, type PlanSlug } from "@frpb/shared";
-import { createClient } from "@/lib/supabase/server";
+import { getOptionalUser } from "@/lib/supabase/server";
 import CheckoutClient from "@/components/checkout/checkout-client";
 import DirectUpiCheckout from "@/components/checkout/direct-upi-checkout";
+import { getDualPlan } from "@/config/plans";
 import { pageMetadata } from "@/lib/seo";
+import type { UpiPlanId } from "@/lib/upi";
 
 export const dynamic = "force-dynamic";
 
@@ -51,25 +57,30 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   // `?method=upi` forces the direct-UPI rail regardless of currency.
   const wantsUpi = searchParams?.method === "upi" || currency === "INR";
 
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Never throws: null simply means "treat this visitor as a guest".
+  const user = await getOptionalUser();
 
   // ── Direct UPI rail (self-hosted, zero-MDR) ────────────────────────────────
   // Deliberately NOT gated behind sign-in: a buyer can pay from a direct link
   // and receive the license by email. The signed-in email (when present) is
-  // prefilled for convenience.
+  // prefilled for convenience. This branch is reached BEFORE any auth check so
+  // it can never be blocked by an auth failure.
   if (wantsUpi) {
+    const initialPlanId = (getDualPlan(planSlug ?? "")?.orderPlanId as
+      | UpiPlanId
+      | undefined) ?? null;
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
-        <DirectUpiCheckout defaultEmail={user?.email ?? null} />
+        <DirectUpiCheckout
+          defaultEmail={user?.email ?? null}
+          initialPlanId={initialPlanId}
+        />
       </main>
     );
   }
 
   // ── Gateway rail (USD) — requires a signed-in account ──────────────────────
-  // Not signed in → login, preserving the plan + currency + post-auth target.
+  // Not signed in (or auth unavailable) → login, preserving plan + currency.
   if (!user) {
     const query = new URLSearchParams({ redirectTo: "/checkout" });
     if (planSlug) query.set("plan", planSlug);

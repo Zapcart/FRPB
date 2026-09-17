@@ -136,6 +136,7 @@ export default function DirectUpiCheckout({
         order?: CreatedOrder;
         upiUri?: string;
         intentUrls?: IntentUrls;
+        persisted?: boolean;
       };
       if (!res.ok || !data.success || !data.order || !data.upiUri) {
         setError(data.message ?? "Could not start the payment. Please try again.");
@@ -145,6 +146,15 @@ export default function DirectUpiCheckout({
       setUpiUri(data.upiUri);
       setIntentUrls(data.intentUrls ?? null);
       setSecondsLeft(data.order.expiresInSeconds);
+      // A non-persisted order still works — the payment settles to the VPA and
+      // the UTR verification reconciles it. Tell the customer so the missing
+      // live status polling is expected rather than looking like a stall.
+      if (data.persisted === false) {
+        setNotice(
+          "Live order tracking is temporarily unavailable — you can still pay normally. " +
+            "After paying, enter your UTR below to activate your license."
+        );
+      }
     } catch {
       setError("Could not reach the payment service. Check your connection and retry.");
     } finally {

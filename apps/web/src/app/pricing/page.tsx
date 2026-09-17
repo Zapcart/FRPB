@@ -116,7 +116,7 @@ const BILLING_SUFFIX: Record<PlanSlug, Record<Currency, string>> = {
 /**
  * The pricing grid renders from DUAL_PLANS (the authoritative tier rates) rather
  * than the shared legacy PLANS, so the displayed price is always one of
- * ₹1,900/$25, ₹4,900/$60 or ₹9,999/$120 — matching exactly what the UPI and
+ * ₹1,900/$20, ₹4,900/$50 or ₹9,999/$100 — matching exactly what the UPI and
  * PayGlocal rails charge.
  */
 const PLAN_CARDS = DUAL_PLANS.map((plan) => ({

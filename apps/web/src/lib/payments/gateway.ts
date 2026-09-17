@@ -24,7 +24,7 @@ export interface CreateCheckoutInput {
   /**
    * Explicit MAJOR-unit amount to charge. When supplied this WINS over the
    * plan-derived price, letting a caller (e.g. the dual-currency PayGlocal init
-   * route) charge the tier rate from config/plans.ts — $25 / $60 / $120 — rather
+   * route) charge the tier rate from config/plans.ts — $20 / $50 / $100 — rather
    * than the legacy shared `priceCents`.
    */
   amountMajor?: number;

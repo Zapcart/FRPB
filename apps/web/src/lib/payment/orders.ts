@@ -99,7 +99,7 @@ export async function expireStaleOrders(client: PrismaClient = prisma): Promise<
  * Resolve the Prisma `Plan` row for a slug, creating it from the DUAL_PLANS
  * configuration when the seed has not run. This keeps both rails
  * self-sufficient: a license FK always has a valid Plan row to point at, and
- * the stored prices match the tiers actually charged (₹1,900/$25, etc.).
+ * the stored prices match the tiers actually charged (₹1,900/$20, etc.).
  */
 async function ensurePlanRow(planSlug: PlanSlug, client: PrismaClient = prisma) {
   const existing = await client.plan.findUnique({ where: { slug: planSlug } });
@@ -114,7 +114,7 @@ async function ensurePlanRow(planSlug: PlanSlug, client: PrismaClient = prisma) 
     create: {
       slug: def.slug,
       name: def.name,
-      // USD is stored in cents ($25 = 2500), INR in paise (₹1,900 = 190000) —
+      // USD is stored in cents ($20 = 2000), INR in paise (₹1,900 = 190000) —
       // the minor-unit convention every Prisma Plan row uses.
       priceCents: Math.round(def.usd * 100),
       priceInr: Math.round(def.inr * 100),

@@ -160,7 +160,7 @@ export const ALLOWED_INR_AMOUNTS: ReadonlySet<number> = new Set(
   DUAL_PLANS.map((p) => p.inr)
 );
 
-/** Amounts the PayGlocal rail will ever charge ($25 / $60 / $120). */
+/** Amounts the PayGlocal rail will ever charge ($20 / $50 / $100). */
 export const ALLOWED_USD_AMOUNTS: ReadonlySet<number> = new Set(
   DUAL_PLANS.map((p) => p.usd)
 );
@@ -183,13 +183,13 @@ export function formatDualInr(amount: number): string {
   return `₹${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(value)}`;
 }
 
-/** "$25" — US digit grouping, no decimals (all tiers are whole dollars). */
+/** "$20" — US digit grouping, no decimals (all tiers are whole dollars). */
 export function formatDualUsd(amount: number): string {
   const value = Number.isFinite(amount) ? Math.round(amount) : 0;
   return `$${new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value)}`;
 }
 
-/** "₹1,900 / $25" — the combined label the modal and pricing grid display. */
+/** "₹1,900 / $20" — the combined label the modal and pricing grid display. */
 export function formatDualPrice(plan: DualPlan): string {
   return `${formatDualInr(plan.inr)} / ${formatDualUsd(plan.usd)}`;
 }

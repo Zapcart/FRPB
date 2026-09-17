@@ -4,7 +4,7 @@
 // and returns the provider-hosted checkout URL to redirect to.
 //
 // Flow:
-//   1. Resolve the plan's USD tier rate from config/plans.ts ($25 / $60 / $120).
+//   1. Resolve the plan's USD tier rate from config/plans.ts ($20 / $50 / $100).
 //      The client NEVER supplies an amount — the strict amount lock is enforced
 //      here and again inside the adapter.
 //   2. Create a PENDING PaymentOrder (provider=PAYGLOCAL, currency=USD) so the
@@ -142,7 +142,7 @@ async function handleInit(req: NextRequest) {
       successUrl: `${APP_URL}/api/v1/payment/callback?provider=payglocal&orderId=${orderId}`,
       cancelUrl: `${APP_URL}/pricing?checkout=cancelled`,
       currency: "USD",
-      // Explicit tier rate from config/plans.ts ($25 / $60 / $120).
+      // Explicit tier rate from config/plans.ts ($20 / $50 / $100).
       amountMajor: plan.usd,
       orderRef: orderId,
     });

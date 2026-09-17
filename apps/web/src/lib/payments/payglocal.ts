@@ -55,7 +55,7 @@ export class PayGlocalGateway implements PaymentGateway {
     // PayGlocal is the USD/international rail.
     const currency = currencyFor(input.currency ?? "USD");
     // An explicit major-unit amount (from config/plans.ts) takes precedence over
-    // the legacy shared price, so the dual-currency tiers ($25/$60/$120) are what
+    // the legacy shared price, so the dual-currency tiers ($20/$50/$100) are what
     // actually gets charged.
     const amountMinor =
       input.amountMajor != null && Number.isFinite(input.amountMajor)

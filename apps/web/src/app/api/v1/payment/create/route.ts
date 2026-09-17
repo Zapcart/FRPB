@@ -15,7 +15,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { preflight, withCorsResponse } from "@/lib/cors";
-import { createClient } from "@/lib/supabase/server";
+import { getOptionalUser } from "@/lib/supabase/server";
 import { upsertPrismaUser } from "@/lib/auth/user-identity";
 import {
   UPI_PLANS,
@@ -71,20 +71,27 @@ async function handleCreate(req: NextRequest) {
   }
 
   // 3. Resolve the buyer email — prefer the authenticated Supabase session.
+  //
+  //    EVERY step here is optional and individually guarded:
+  //      • a missing Supabase env var makes createClient() throw synchronously,
+  //      • a Supabase/DB outage makes the lookup reject,
+  //      • the local user row may not exist for a first-time buyer.
+  //    In all three cases the purchase simply continues as a guest — the
+  //    license is bound by email at grant time. Guest checkout must never be a
+  //    500.
   let email = parsed.userEmail ?? null;
   let userId: string | null = null;
-  try {
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (user?.email) {
-      email = user.email;
+  const user = await getOptionalUser();
+  if (user) {
+    email = user.email;
+    try {
       const record = await upsertPrismaUser(prisma, { id: user.id, email: user.email });
       userId = record.id;
+    } catch (err) {
+      // Auth succeeded but the local user row could not be written. Continue as
+      // a guest rather than failing the checkout.
+      console.warn("[payment/create] user upsert failed; continuing as guest:", err);
     }
-  } catch {
-    // Anonymous purchase is allowed; the license is bound by email at grant.
   }
 
   if (!email) {
@@ -101,9 +108,27 @@ async function handleCreate(req: NextRequest) {
   const orderId = generateOrderId();
   const expiresAt = orderExpiry();
 
-  let order;
+  // PERSIST, OR DEGRADE GRACEFULLY.
+  //
+  // A DB outage must NOT stop a customer from paying: the UPI rail needs no
+  // third-party service, and the amount is locked from the backend plan table
+  // regardless. When persistence fails we still return a fully usable order
+  // (URI + intent links) marked `persisted: false`, and log loudly so the
+  // missing reconciliation row is visible to operations.
+  //
+  // What is lost in that mode: the pending-order row used for expiry/status
+  // polling. The UTR verify step recreates what it needs from the request, so
+  // the payment can still be completed and the license granted.
+  let order: {
+    orderId: string;
+    status: string;
+    createdAt: Date;
+    expiresAt: Date;
+  } = { orderId, status: "PENDING", createdAt: new Date(), expiresAt };
+  let persisted = false;
+
   try {
-    order = await prisma.paymentOrder.create({
+    const created = await prisma.paymentOrder.create({
       data: {
         orderId,
         userId,
@@ -117,11 +142,13 @@ async function handleCreate(req: NextRequest) {
         expiresAt,
       },
     });
+    order = created;
+    persisted = true;
   } catch (err) {
-    console.error("[payment/create] DB error:", err);
-    return NextResponse.json(
-      { success: false, message: "We couldn't create your order right now. Please retry." },
-      { status: 503 }
+    console.error(
+      "[payment/create] order persistence failed — issuing a non-persisted order so " +
+        "the customer can still pay:",
+      err
     );
   }
 
@@ -155,6 +182,12 @@ async function handleCreate(req: NextRequest) {
       merchant: { vpa: UPI_MERCHANT_VPA, name: UPI_MERCHANT_NAME },
       upiUri,
       intentUrls: generateUpiIntentUrls(upiUri),
+      /**
+       * False when the order row could not be stored (DB outage). The payment is
+       * still fully completable — the client shows a reassurance notice and the
+       * verify step reconciles against the request payload.
+       */
+      persisted,
     },
     { status: 201 }
   );
