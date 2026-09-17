@@ -472,6 +472,71 @@ check(
   /resolveAdminAccess\(\)/.test(adminActions) && !/if\s*\(!user\)/.test(adminActions)
 );
 
+// ─── 9. Fail-safe admin data loading (serverless / Vercel) ───────────────────
+console.log("\nFRPB — admin fail-safe loading\n");
+
+const adminData = source("src/app/admin/data.ts");
+const adminDataCode = code("src/app/admin/data.ts");
+const adminShellCode = code("src/app/admin/client-shell.tsx");
+const adminPageCode = code("src/app/admin/page.tsx");
+const adminActionsCode = code("src/app/admin/actions.ts");
+
+// 1. The whole aggregation is wrapped and can never throw or return null.
+check(
+  "loadAdminAnalytics wraps the aggregation in try/catch",
+  /export async function loadAdminAnalytics[\s\S]*?try\s*\{[\s\S]*?getAdminAnalytics\(\)[\s\S]*?catch/.test(adminDataCode)
+);
+check(
+  "loadAdminAnalytics can no longer return null",
+  /Promise<AdminAnalyticsLoad>/.test(adminData) && !/Promise<AdminAnalyticsResponse \| null>/.test(adminData)
+);
+check(
+  "emptyAdminAnalytics provides a complete zeroed payload",
+  /export function emptyAdminAnalytics\(\):\s*AdminAnalyticsResponse/.test(adminDataCode) &&
+    /successRate:\s*0/.test(adminDataCode) &&
+    /frpByBrand:\s*\[\]/.test(adminDataCode) &&
+    /plans:\s*\[\]/.test(adminDataCode)
+);
+check(
+  "a degraded load reports degraded: true",
+  /degraded:\s*true/.test(adminDataCode) && /degraded:\s*false/.test(adminDataCode)
+);
+// 2. The page always renders: it consumes the safe payload, never null-guards.
+check(
+  "page destructures { data, degraded } from the loader",
+  /const \{ data, degraded \} = await loadAdminAnalytics\(\)/.test(adminPageCode)
+);
+check(
+  "page never null-checks the analytics payload",
+  !/initialData\s*\?/.test(adminPageCode) && !/initialData === null/.test(adminPageCode)
+);
+check(
+  "page passes degraded through to the shell",
+  /<ClientAdminShell[^>]*degraded=\{degraded\}/.test(adminPageCode)
+);
+// 3. The shell shows the notice and never blocks on a loading/error screen.
+check(
+  'shell renders a "Database connecting…" notice',
+  /Database connecting/.test(adminShellCode)
+);
+check(
+  "shell no longer renders a blocking loading/error screen",
+  !/if \(loading && !data\)/.test(adminShellCode) && !/if \(error && !data\)/.test(adminShellCode)
+);
+check(
+  "shell no longer auto-refreshes on mount (avoids retry storms)",
+  !/if \(!initialData\) fetchAnalytics\(\)/.test(adminShellCode)
+);
+// 4. The refresh action is fail-safe too.
+check(
+  "refreshAdminAnalytics wraps its DB read in try/catch",
+  /export async function refreshAdminAnalytics[\s\S]*?try\s*\{[\s\S]*?getAdminAnalytics\(\)[\s\S]*?catch/.test(adminActionsCode)
+);
+check(
+  "refreshAdminAnalytics returns the fallback payload on failure",
+  /emptyAdminAnalytics\(\)/.test(adminActionsCode)
+);
+
 console.log("\n" + "-".repeat(56));
 console.log(`result: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

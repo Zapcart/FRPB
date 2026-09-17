@@ -12,6 +12,7 @@
 
 import { cookies } from "next/headers";
 import { getAdminAnalytics } from "@/lib/admin-analytics";
+import { emptyAdminAnalytics } from "./data";
 import {
   ADMIN_COOKIE,
   ADMIN_COOKIE_MAX_AGE,
@@ -64,6 +65,11 @@ export async function authorizeAdminKey(
  * signed-in Supabase user. The previous implementation checked `user` only, so
  * an owner who unlocked the console with a key would render the dashboard and
  * then have every refresh fail with "Unauthorized".
+ *
+ * FAIL-SAFE: a Server Action that throws is reported to the client as a generic
+ * error, which on Vercel showed up as an unhandled failure whenever the database
+ * was down. The DB read is therefore wrapped and returns the same zero-metrics
+ * fallback the page loader uses, so the console degrades instead of erroring.
  */
 export async function refreshAdminAnalytics(): Promise<RefreshAnalyticsResult> {
   const access = await resolveAdminAccess();
@@ -71,10 +77,19 @@ export async function refreshAdminAnalytics(): Promise<RefreshAnalyticsResult> {
     return { ok: false, error: "Unauthorized" };
   }
 
-  const data = await getAdminAnalytics();
-  if (!data) {
-    return { ok: false, error: "Admin analytics is not configured" };
+  try {
+    const data = await getAdminAnalytics();
+    if (!data) {
+      return { ok: false, data: emptyAdminAnalytics(), error: "Database unavailable" };
+    }
+    return { ok: true, data };
+  } catch (err) {
+    // `ok: false` here means "stale/placeholder data", NOT "forbidden" — the
+    // client previously threw on a null payload and blanked the console.
+    console.warn(
+      "[admin] refresh failed — returning safe empty payload:",
+      (err as Error)?.message ?? err
+    );
+    return { ok: false, data: emptyAdminAnalytics(), error: "Database unavailable" };
   }
-
-  return { ok: true, data };
 }

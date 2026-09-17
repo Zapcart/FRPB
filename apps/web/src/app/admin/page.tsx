@@ -30,6 +30,8 @@ export const metadata = {
 };
 
 export default async function AdminPage() {
+  // resolveAdminAccess() never throws — a misconfigured/unreachable auth
+  // dependency yields `authorized: false` rather than a route-level crash.
   const access = await resolveAdminAccess();
 
   // Unauthorized → render the key form (not a redirect, not an error page).
@@ -37,9 +39,14 @@ export default async function AdminPage() {
     return <AdminKeyGate />;
   }
 
-  // Authorized → load the data server-side. loadAdminAnalytics() returns null
-  // rather than throwing, and the client shell then shows its own loading/error
-  // state, so a DB outage degrades gracefully instead of 503-ing.
-  const initialData = await loadAdminAnalytics();
-  return <ClientAdminShell initialData={initialData} />;
+  // Authorized → load the data server-side.
+  //
+  // loadAdminAnalytics() NEVER throws and NEVER returns null: a DB outage is
+  // converted into a complete zero-metrics payload with `degraded: true`. That
+  // is what keeps this page from surfacing a Server Component Error on Vercel —
+  // the shell always receives well-formed data, so it renders normally (with a
+  // "Database connecting…" notice) instead of falling into its failing refresh
+  // branch.
+  const { data, degraded } = await loadAdminAnalytics();
+  return <ClientAdminShell initialData={data} degraded={degraded} />;
 }

@@ -94,65 +94,58 @@ function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-export default function ClientAdminShell({ initialData }: { initialData: AdminAnalyticsResponse | null }) {
-  const [data, setData] = useState<AdminAnalyticsResponse | null>(initialData);
-  const [loading, setLoading] = useState(!initialData);
+export default function ClientAdminShell({
+  initialData,
+  degraded: initialDegraded = false,
+}: {
+  // ALWAYS a complete payload: the server loader swaps in a zero-metrics
+  // fallback when the database is unreachable, so this component never has to
+  // render a hard error screen for a transient DB problem.
+  initialData: AdminAnalyticsResponse;
+  /** `true` when the server already knows the DB could not be reached. */
+  degraded?: boolean;
+}) {
+  const [data, setData] = useState<AdminAnalyticsResponse>(initialData);
+  const [degraded, setDegraded] = useState(initialDegraded);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   // Server Action: authenticates the session server-side and returns fresh
   // analytics. No secret ever leaves the server.
   const fetchAnalytics = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const result = await refreshAdminAnalytics();
-      if (!result.ok || !result.data) {
-        throw new Error(result.error ?? "Failed to load analytics");
+      if (result.data) {
+        setData(result.data);
+        setDegraded(false);
+        return;
       }
-      setData(result.data);
+      // No payload → the DB is still unreachable. Keep the existing figures
+      // rather than blanking the console.
+      setDegraded(true);
+      setError(result.error ?? "Analytics temporarily unavailable");
     } catch (err) {
+      setDegraded(true);
       setError((err as Error).message);
-    } finally {
-      setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    if (!initialData) fetchAnalytics();
-  }, [initialData, fetchAnalytics]);
+  // NOTE: there is deliberately NO auto-refresh-on-mount. `initialData` is
+  // always populated, and when the server reports `degraded` an automatic fetch
+  // would immediately re-query a database we already know is failing — turning
+  // one outage into a retry storm on every page load. Recovery is explicit via
+  // the Refresh/Retry buttons.
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
     fetchAnalytics().finally(() => setRefreshing(false));
   }, [fetchAnalytics]);
 
-  if (loading && !data) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <Loader2 className="h-10 w-10 animate-spin text-brand-500" />
-        <p className="mt-4 text-sm text-slate-500">Loading analytics…</p>
-      </div>
-    );
-  }
-
-  if (error && !data) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <AlertTriangle className="h-12 w-12 text-rose-500" />
-        <p className="mt-4 text-sm font-medium text-slate-800">{error}</p>
-        <button
-          onClick={handleRefresh}
-          className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
-        >
-          Try Again
-        </button>
-      </div>
-    );
-  }
-
-  const d = data!;
-  if (!d) return null;
+  // No blocking loading/error screens any more: `data` is always populated, so a
+  // degraded database is reported as an inline notice instead of replacing the
+  // entire console with an error state.
+  const d = data;
 
   return (
     <div className="space-y-8">
@@ -175,6 +168,34 @@ export default function ClientAdminShell({ initialData }: { initialData: AdminAn
           </button>
         </div>
       </div>
+
+      {/* Degraded notice — the server loader substitutes a zero-metrics payload
+          when the database is unreachable, so we say so plainly instead of
+          presenting zeros as real numbers. */}
+      {degraded && (
+        <div className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-amber-600" />
+            <div>
+              <p className="text-sm font-semibold text-amber-800">Database connecting…</p>
+              <p className="mt-0.5 text-xs text-amber-700">
+                The analytics database is unreachable right now, so the figures below are
+                placeholders. This page stays available and will show live data once the
+                connection recovers.
+                {error ? ` (${error})` : ""}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Retrying…" : "Retry"}
+          </button>
+        </div>
+      )}
 
       {/* Top stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
