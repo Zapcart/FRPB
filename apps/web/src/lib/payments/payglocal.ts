@@ -54,10 +54,18 @@ export class PayGlocalGateway implements PaymentGateway {
     const plan = getPlanDefinition(input.planSlug as never);
     // PayGlocal is the USD/international rail.
     const currency = currencyFor(input.currency ?? "USD");
-    const amountMinor = priceFor(plan, input.currency ?? "USD");
+    // An explicit major-unit amount (from config/plans.ts) takes precedence over
+    // the legacy shared price, so the dual-currency tiers ($25/$60/$120) are what
+    // actually gets charged.
+    const amountMinor =
+      input.amountMajor != null && Number.isFinite(input.amountMajor)
+        ? Math.round(input.amountMajor * 100)
+        : priceFor(plan, input.currency ?? "USD");
 
-    // Our own idempotent order reference; doubles as Payment.providerTxnId.
-    const orderId = `frpb_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    // Reuse the caller's order reference when supplied so the provider txn maps
+    // back onto our PaymentOrder row; otherwise mint a local one.
+    const orderId =
+      input.orderRef ?? `frpb_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     const apiVersion = process.env.PAYGLOCAL_API_VERSION ?? "v1";
 
     const returnUrl = `${input.successUrl}${

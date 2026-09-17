@@ -111,6 +111,8 @@ async function handleCreate(req: NextRequest) {
         planId: plan.planSlug,
         // Persisted from the SERVER-resolved plan, never from the client.
         amount: plan.amount,
+        currency: "INR",
+        provider: "UPI",
         status: "PENDING",
         expiresAt,
       },
@@ -140,6 +142,7 @@ async function handleCreate(req: NextRequest) {
         planName: planNameFor(plan.planSlug),
         amount: plan.amount,
         currency: "INR",
+        provider: "UPI",
         status: order.status,
         createdAt: order.createdAt.toISOString(),
         expiresAt: order.expiresAt.toISOString(),

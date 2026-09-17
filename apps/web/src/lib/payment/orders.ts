@@ -1,10 +1,10 @@
-// FRPB — Direct-UPI order lifecycle helpers.
+// FRPB — dual-rail payment order lifecycle helpers.
 //
-// Centralises the three rules the direct-UPI rail depends on so every route
-// (create / verify / status) applies them identically:
+// Centralises the rules BOTH rails depend on so every route (create / verify /
+// status / callback / payglocal init) applies them identically:
 //
-//   1. AMOUNT LOCK   — the chargeable amount is resolved from the UPI_PLANS
-//                      table, never from the client payload.
+//   1. AMOUNT LOCK   — the chargeable amount is resolved from DUAL_PLANS, never
+//                      from the client payload.
 //   2. 10-MIN EXPIRY — a PENDING order past `expiresAt` is EXPIRED and can no
 //                      longer be claimed.
 //   3. LICENSE GRANT — a verified order mints exactly one license, linked back
@@ -12,14 +12,14 @@
 
 import type { PrismaClient } from "@prisma/client";
 import { randomBytes } from "node:crypto";
-import { PLANS, type PlanSlug } from "@frpb/shared";
+import type { PlanSlug } from "@frpb/shared";
 import { prisma } from "@/lib/prisma";
 import { sha256 } from "@/lib/crypto/sha256";
 import { generateLicenseKey } from "@/lib/license/generate";
-import { getPlanDefinition } from "@/lib/license/constants";
 import { normalizeEmail } from "@/lib/auth/user-identity";
 import { sendLicenseEmail } from "@/lib/email/resend";
 import { getUpiPlan } from "@/lib/upi";
+import { getDualPlan } from "@/config/plans";
 
 /** Direct-UPI orders expire 10 minutes after creation. */
 export const ORDER_TTL_MS = 10 * 60 * 1000;
@@ -96,24 +96,29 @@ export async function expireStaleOrders(client: PrismaClient = prisma): Promise<
 }
 
 /**
- * Resolve the Prisma `Plan` row for a slug, creating it from the shared plan
- * definition when the seed has not run. This keeps the direct-UPI rail
- * self-sufficient: a license FK always has a valid Plan row to point at.
+ * Resolve the Prisma `Plan` row for a slug, creating it from the DUAL_PLANS
+ * configuration when the seed has not run. This keeps both rails
+ * self-sufficient: a license FK always has a valid Plan row to point at, and
+ * the stored prices match the tiers actually charged (₹1,900/$25, etc.).
  */
 async function ensurePlanRow(planSlug: PlanSlug, client: PrismaClient = prisma) {
   const existing = await client.plan.findUnique({ where: { slug: planSlug } });
   if (existing) return existing;
 
-  const def = getPlanDefinition(planSlug);
+  const def = getDualPlan(planSlug);
+  if (!def) throw new Error(`Unknown plan slug: ${planSlug}`);
+
   return client.plan.upsert({
-    where: { slug: planSlug },
+    where: { slug: def.slug },
     update: {},
     create: {
       slug: def.slug,
       name: def.name,
-      priceCents: def.priceCents,
-      priceInr: def.priceInr,
-      currency: def.currency,
+      // USD is stored in cents ($25 = 2500), INR in paise (₹1,900 = 190000) —
+      // the minor-unit convention every Prisma Plan row uses.
+      priceCents: Math.round(def.usd * 100),
+      priceInr: Math.round(def.inr * 100),
+      currency: "USD",
       durationDays: def.durationDays,
       deviceLimit: def.deviceLimit,
       features: def.features,
@@ -213,5 +218,86 @@ export async function grantLicenseForOrder(
 
 /** Human plan name for the given shared slug (used in API responses). */
 export function planNameFor(planSlug: PlanSlug): string {
-  return PLANS.find((p) => p.slug === planSlug)?.name ?? planSlug;
+  return getDualPlan(planSlug)?.name ?? planSlug;
+}
+
+/**
+ * Create a PENDING order for the PayGlocal (USD card) rail.
+ *
+ * The amount is resolved from DUAL_PLANS — the caller only supplies the plan
+ * slug and email, so a tampered payload can never set the price. `providerTxnId`
+ * is stamped once PayGlocal returns its order reference.
+ */
+export async function createPayGlocalOrder(input: {
+  planSlug: PlanSlug;
+  email: string;
+  userId?: string | null;
+}): Promise<{ orderId: string; amount: number; expiresAt: Date }> {
+  const plan = getDualPlan(input.planSlug);
+  if (!plan) throw new Error(`Unknown plan slug: ${input.planSlug}`);
+
+  const orderId = generateOrderId();
+  const expiresAt = orderExpiry();
+
+  await prisma.paymentOrder.create({
+    data: {
+      orderId,
+      userId: input.userId ?? null,
+      email: normalizeEmail(input.email),
+      planId: plan.slug,
+      // Server-resolved USD tier rate — never from the client.
+      amount: plan.usd,
+      currency: "USD",
+      provider: "PAYGLOCAL",
+      status: "PENDING",
+      expiresAt,
+    },
+  });
+
+  return { orderId, amount: plan.usd, expiresAt };
+}
+
+/** Attach PayGlocal's order/txn reference to our PENDING order row. */
+export async function attachPayGlocalTxn(
+  orderId: string,
+  providerTxnId: string
+): Promise<void> {
+  try {
+    await prisma.paymentOrder.update({
+      where: { orderId },
+      data: { providerTxnId },
+    });
+  } catch (err) {
+    // A unique collision means this txn is already bound to another order —
+    // surface it so the caller does not hand out a checkout for a duplicate.
+    console.error("[payment] failed to attach PayGlocal txn:", err);
+    throw err;
+  }
+}
+
+/**
+ * Mark a PayGlocal order PAID after its webhook/callback confirms success, then
+ * grant the license. Idempotent: an already-PAID order is returned untouched.
+ */
+export async function markPayGlocalOrderPaid(
+  ref: { orderId?: string | null; providerTxnId?: string | null }
+): Promise<GrantResult | null> {
+  const where = ref.orderId
+    ? { orderId: ref.orderId }
+    : ref.providerTxnId
+      ? { providerTxnId: ref.providerTxnId }
+      : null;
+  if (!where) return null;
+
+  const order = await prisma.paymentOrder.findUnique({ where });
+  if (!order) return null;
+
+  if (order.status !== "PAID") {
+    await prisma.paymentOrder.update({
+      where: { id: order.id },
+      data: { status: "PAID", paidAt: new Date() },
+    });
+  }
+
+  return grantLicenseForOrder(order.orderId);
 }

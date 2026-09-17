@@ -21,6 +21,15 @@ export interface CreateCheckoutInput {
    * INR paise). Defaults to USD when omitted.
    */
   currency?: "USD" | "INR";
+  /**
+   * Explicit MAJOR-unit amount to charge. When supplied this WINS over the
+   * plan-derived price, letting a caller (e.g. the dual-currency PayGlocal init
+   * route) charge the tier rate from config/plans.ts — $25 / $60 / $120 — rather
+   * than the legacy shared `priceCents`.
+   */
+  amountMajor?: number;
+  /** Our own order reference, so the provider txn maps back to a PaymentOrder. */
+  orderRef?: string;
 }
 
 export interface CreateCheckoutResult {

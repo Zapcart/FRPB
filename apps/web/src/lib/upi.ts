@@ -8,6 +8,8 @@
 // server (order creation returns the URI) and the client (QR render + intent
 // buttons) without pulling Node APIs into the browser bundle.
 
+import { DUAL_PLANS } from "@/config/plans";
+
 /** Merchant VPA that receives every direct-UPI settlement. */
 export const UPI_MERCHANT_VPA = "alixpay@axl";
 
@@ -24,8 +26,11 @@ export const UPI_CURRENCY = "INR";
  * decimal rupee value (e.g. `am=1900`, `am=9999`) — unlike the paise-based
  * `priceInr` used by the aggregated gateway flow.
  */
+/** The three public Direct-UPI plan identifiers. */
+export type UpiPlanId = "MONTHLY" | "YEARLY" | "LIFETIME";
+
 export interface UpiPlan {
-  planId: "MONTHLY" | "YEARLY" | "LIFETIME";
+  planId: UpiPlanId;
   /** Prisma PlanType + shared PlanSlug value stored on the order. */
   planSlug: "MONTH_1" | "YEAR_1" | "LIFETIME";
   name: string;
@@ -38,15 +43,19 @@ export interface UpiPlan {
 /**
  * The ONLY amounts the backend will ever charge, keyed by public plan id.
  *
- * These are the authoritative prices: `POST /api/v1/payment/create` resolves the
- * amount from this table and ignores any client-supplied value, so a tampered
- * payload can never under-pay.
+ * Derived from DUAL_PLANS in @/config/plans so the INR tiers have exactly ONE
+ * definition shared by the Direct-UPI engine, the payment-method modal and the
+ * PayGlocal rail. `POST /api/v1/payment/create` resolves the amount from this
+ * table and ignores any client-supplied value, so a tampered payload can never
+ * under-pay.
  */
-export const UPI_PLANS: readonly UpiPlan[] = [
-  { planId: "MONTHLY", planSlug: "MONTH_1", name: "1 Month", amount: 1900, durationDays: 30 },
-  { planId: "YEARLY", planSlug: "YEAR_1", name: "1 Year", amount: 4900, durationDays: 365 },
-  { planId: "LIFETIME", planSlug: "LIFETIME", name: "Lifetime", amount: 9999, durationDays: null },
-] as const;
+export const UPI_PLANS: readonly UpiPlan[] = DUAL_PLANS.map((p) => ({
+  planId: p.orderPlanId,
+  planSlug: p.slug,
+  name: p.name,
+  amount: p.inr,
+  durationDays: p.durationDays,
+}));
 
 /** Look up a plan by its public id (case-insensitive). */
 export function getUpiPlan(planId: string): UpiPlan | null {

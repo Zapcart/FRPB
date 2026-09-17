@@ -36,7 +36,9 @@ const LIST_TIMEOUT_MS = 3000;
 
 export default function DashboardPage() {
   const router = useRouter();
-  // Set by the gateway success return: /dashboard?success=true.
+  // Set by a successful payment return. Both spellings are honoured because the
+  // unified callback redirects with `?status=success` while the legacy gateway
+  // return used `?success=true`.
   // Read from window.location in an effect rather than useSearchParams() so the
   // route does not require a Suspense boundary (which would otherwise force this
   // page's client subtree out of the static pass).
@@ -44,7 +46,9 @@ export default function DashboardPage() {
   useEffect(() => {
     try {
       const params = new URLSearchParams(window.location.search);
-      if (params.get("success") === "true") setCheckoutSucceeded(true);
+      if (params.get("success") === "true" || params.get("status") === "success") {
+        setCheckoutSucceeded(true);
+      }
     } catch {
       // No location available (SSR pass) — banner simply stays hidden.
     }

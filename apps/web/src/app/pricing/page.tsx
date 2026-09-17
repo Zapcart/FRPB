@@ -38,6 +38,13 @@ import {
   resolveDefaultCurrency,
   storeCurrency,
 } from "@/lib/checkout/currency";
+import {
+  DUAL_PLANS,
+  formatDualInr,
+  formatDualUsd,
+  getDualPlan,
+} from "@/config/plans";
+import PaymentMethodModal from "@/components/PaymentMethodModal";
 
 /**
  * Trust / conversion badges rendered under the pricing grid. Addresses the four
@@ -106,16 +113,33 @@ const BILLING_SUFFIX: Record<PlanSlug, Record<Currency, string>> = {
   LIFETIME: { USD: "one-time", INR: "एक बार" },
 };
 
+/**
+ * The pricing grid renders from DUAL_PLANS (the authoritative tier rates) rather
+ * than the shared legacy PLANS, so the displayed price is always one of
+ * ₹1,900/$25, ₹4,900/$60 or ₹9,999/$120 — matching exactly what the UPI and
+ * PayGlocal rails charge.
+ */
+const PLAN_CARDS = DUAL_PLANS.map((plan) => ({
+  plan,
+  slug: plan.slug,
+  name: plan.name,
+  features: plan.features,
+  deviceLimit: plan.deviceLimit,
+  durationDays: plan.durationDays,
+}));
+
 // Currency detection + persistence now live in @/lib/checkout/currency, which
 // layers PostHog geoip on top of the timezone/locale heuristic.
 
 export default function PricingPage() {
   const router = useRouter();
-  const [loadingPlan, setLoadingPlan] = useState<PlanSlug | null>(null);
   const [currency, setCurrency] = useState<Currency>("USD");
   // True when the initial currency came from region detection (not the user).
   const [autoDetected, setAutoDetected] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The plan whose payment-method modal is open (null = closed).
+  const [modalPlan, setModalPlan] = useState<string | null>(null);
+  // Signed-in buyer email, used to prefill the modal's email field.
+  const [buyerEmail, setBuyerEmail] = useState<string | null>(null);
 
   // Initialise the currency on mount: an explicit prior choice wins, else
   // geo/locale detection (India → INR, rest of world → USD). Runs once, so it
@@ -141,83 +165,39 @@ export default function PricingPage() {
     PRICING_FAQS.map((f) => ({ question: f.q, answer: f.a }))
   );
 
-  /** The other currency's price, shown as a secondary "(~$…)" hint. */
+  /** The other currency's price, shown as a secondary "(~₹…)" hint. */
   function alternatePrice(planSlug: PlanSlug): string | null {
-    const plan = PLANS.find((p) => p.slug === planSlug);
+    const plan = getDualPlan(planSlug);
     if (!plan) return null;
-    const other: Currency = currency === "USD" ? "INR" : "USD";
-    return formatMoney(priceFor(plan, other), other);
+    return currency === "USD" ? formatDualInr(plan.inr) : formatDualUsd(plan.usd);
   }
 
+  /**
+   * "Choose plan" / "Buy now" → open the payment-method modal. Both rails
+   * (Direct UPI and PayGlocal card) can be started from there; the modal
+   * collects an email when the visitor is not signed in.
+   *
+   * The signed-in email is resolved first so it can be prefilled, and the
+   * purchase intent is persisted so a sign-in round trip can resume cleanly.
+   */
   async function handlePurchase(planSlug: PlanSlug) {
-    if (loadingPlan !== null) return;
-    setLoadingPlan(planSlug);
-    setError(null);
+    savePendingPlan(planSlug, currency);
 
-    const supabase = createClient();
-
-    // Resolve the active session. Read the persisted session first (no
-    // network round-trip), then fall back to a server-validated getUser().
-    // This path only ever *reads* auth state — it never signs the user out
-    // or clears storage, so an accidental logout is impossible here.
-    let user = null;
+    // Read (never mutate) the auth state to prefill the modal's email.
     try {
+      const supabase = createClient();
       const { data: sessionData } = await supabase.auth.getSession();
-      user = sessionData.session?.user ?? null;
+      let user = sessionData.session?.user ?? null;
       if (!user) {
         const { data } = await supabase.auth.getUser();
         user = data.user ?? null;
       }
+      setBuyerEmail(user?.email ?? null);
     } catch {
-      user = null;
+      setBuyerEmail(null);
     }
 
-    // Not logged in → persist the purchase intent, then send the visitor to
-    // the SIGNUP view (mode=signup) since they are mid-purchase. The intent is
-    // stored in both localStorage and sessionStorage (not just the query
-    // string) so it survives the email-confirmation round trip, and the auth
-    // view consumes it after sign-in to resume checkout automatically.
-    if (!user) {
-      savePendingPlan(planSlug, currency);
-      setLoadingPlan(null);
-      // mode=signup: the visitor is mid-purchase, so land them on the signup
-      // form rather than a sign-in form they may not have an account for.
-      router.push(
-        `/auth?mode=signup&plan=${encodeURIComponent(planSlug)}&currency=${encodeURIComponent(
-          currency
-        )}&returnTo=${encodeURIComponent(
-          `/checkout?plan=${planSlug}&currency=${currency}`
-        )}`
-      );
-      return;
-    }
-
-    // Logged in → go straight to the payment handler for the selected plan.
-    try {
-      const res = await fetch("/api/v1/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planSlug, currency }),
-        credentials: "include",
-      });
-
-      const data = (await res.json()) as {
-        success?: boolean;
-        checkoutUrl?: string;
-        message?: string;
-      };
-
-      if (data.success && data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
-        return;
-      }
-
-      setError(data.message ?? "Checkout failed. Please try again.");
-    } catch {
-      setError("Checkout failed. Please try again.");
-    } finally {
-      setLoadingPlan(null);
-    }
+    setModalPlan(planSlug);
   }
 
   return (
@@ -293,17 +273,13 @@ export default function PricingPage() {
           )}
         </div>
 
-        {error && (
-          <p className="mt-6 text-center text-sm font-medium text-rose-500">{error}</p>
-        )}
-
         <div className="mt-12 grid gap-6 md:grid-cols-3">
-          {PLANS.map((plan) => {
-            const popular = plan.slug === "YEAR_1";
-            const alt = alternatePrice(plan.slug);
+          {PLAN_CARDS.map((card) => {
+            const popular = card.slug === "YEAR_1";
+            const alt = alternatePrice(card.slug);
             return (
               <div
-                key={plan.slug}
+                key={card.slug}
                 className={`relative flex flex-col rounded-2xl border bg-white p-8 transition duration-300 ${
                   popular
                     ? "border-brand-200 shadow-xl shadow-brand-500/10 ring-1 ring-brand-500/40"
@@ -315,13 +291,15 @@ export default function PricingPage() {
                     MOST POPULAR
                   </span>
                 )}
-                <h2 className="text-xl font-bold text-slate-900">{plan.name}</h2>
+                <h2 className="text-xl font-bold text-slate-900">{card.name}</h2>
                 <div className="mt-4 flex items-baseline gap-1.5">
                   <span className="text-4xl font-black tracking-tight text-ink">
-                    {formatMoney(priceFor(plan, currency), currency)}
+                    {currency === "USD"
+                      ? formatDualUsd(card.plan.usd)
+                      : formatDualInr(card.plan.inr)}
                   </span>
                   <span className="text-sm font-medium text-slate-400">
-                    {BILLING_SUFFIX[plan.slug][currency]}
+                    {BILLING_SUFFIX[card.slug][currency]}
                   </span>
                 </div>
                 {/* Dual-currency hint — the amount the other currency charges */}
@@ -329,11 +307,11 @@ export default function PricingPage() {
                   <p className="mt-1 text-xs font-medium text-slate-400">(~{alt})</p>
                 )}
                 <p className="mt-1 text-xs text-slate-400">
-                  {plan.deviceLimit} device{plan.deviceLimit === 1 ? "" : "s"} ·{" "}
-                  {plan.durationDays ? `${plan.durationDays} days` : "Lifetime access"}
+                  {card.deviceLimit} device{card.deviceLimit === 1 ? "" : "s"} ·{" "}
+                  {card.durationDays ? `${card.durationDays} days` : "Lifetime access"}
                 </p>
                 <ul className="mt-6 flex-1 space-y-3 text-sm">
-                  {plan.features.map((f) => (
+                  {card.features.map((f) => (
                     <li key={f} className="flex items-start gap-2.5 text-slate-600">
                       <span
                         className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full ${
@@ -348,30 +326,27 @@ export default function PricingPage() {
                 </ul>
                 <button
                   type="button"
-                  onClick={() => handlePurchase(plan.slug)}
-                  disabled={loadingPlan !== null}
-                  className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-bold transition disabled:opacity-60 ${
+                  onClick={() => void handlePurchase(card.slug)}
+                  className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-bold transition ${
                     popular
                       ? "bg-gradient-to-r from-brand-500 to-accent-500 text-white shadow-lg shadow-brand-500/30 hover:brightness-110"
                       : "border border-slate-300 bg-white text-slate-700 hover:border-brand-300 hover:text-brand-600"
                   }`}
                 >
-                  {loadingPlan === plan.slug ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Redirecting…
-                    </>
-                  ) : (
-                    <>
-                      {plan.slug === "LIFETIME" ? "Get lifetime access" : "Choose plan"}
-                      <ArrowRight className="h-4 w-4" />
-                    </>
-                  )}
+                  {card.slug === "LIFETIME" ? "Get lifetime access" : "Choose plan"}
+                  <ArrowRight className="h-4 w-4" />
                 </button>
               </div>
             );
           })}
         </div>
+
+        {/* Payment-method modal — dual currency (INR/UPI or USD/card) */}
+        <PaymentMethodModal
+          plan={getDualPlan(modalPlan ?? "")}
+          email={buyerEmail}
+          onClose={() => setModalPlan(null)}
+        />
 
         {/* Trust badges — conversion triggers addressing buyer hesitations */}
         <section

@@ -63,6 +63,8 @@ async function handleStatus(req: NextRequest) {
     status,
     planId: order.planId as PlanSlug,
     amount: order.amount,
+    currency: order.currency,
+    provider: order.provider,
     utr: order.utr,
     licenseId: order.licenseId,
     expiresAt: order.expiresAt.toISOString(),

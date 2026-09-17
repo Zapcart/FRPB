@@ -28,16 +28,31 @@ import {
   Smartphone,
   Wallet,
 } from "lucide-react";
-import { formatInr } from "@/lib/format-inr";
+import { formatDualInr, getDualPlan } from "@/config/plans";
+import type { UpiPlanId } from "@/lib/upi";
 
-/** Fixed direct-UPI plans — mirrors UPI_PLANS in lib/upi.ts (display only). */
-const PLANS = [
-  { planId: "MONTHLY", name: "1 Month", amount: 1900, tag: "Starter" },
-  { planId: "YEARLY", name: "1 Year", amount: 4900, tag: "Best value" },
-  { planId: "LIFETIME", name: "Lifetime", amount: 9999, tag: "Forever" },
-] as const;
+/**
+ * Fixed direct-UPI plans for display — amounts are sourced from DUAL_PLANS via
+ * config/plans so the INR tiers have a single definition (₹1,900 / ₹4,900 /
+ * ₹9,999). The server re-resolves every amount; these values are presentational.
+ */
+const PLANS = (
+  [
+    { planId: "MONTHLY", tag: "Starter" },
+    { planId: "YEARLY", tag: "Best value" },
+    { planId: "LIFETIME", tag: "Forever" },
+  ] as const
+).map((p) => {
+  const plan = getDualPlan(p.planId === "MONTHLY" ? "MONTH_1" : p.planId === "YEARLY" ? "YEAR_1" : "LIFETIME");
+  return {
+    planId: p.planId as UpiPlanId,
+    tag: p.tag,
+    name: plan?.name ?? p.planId,
+    amount: plan?.inr ?? 0,
+  };
+});
 
-type PlanId = (typeof PLANS)[number]["planId"];
+type PlanId = UpiPlanId;
 
 interface CreatedOrder {
   orderId: string;
@@ -57,6 +72,8 @@ interface IntentUrls {
 interface DirectUpiCheckoutProps {
   /** Buyer email when the visitor is signed in (prefills the field). */
   defaultEmail?: string | null;
+  /** Plan to pre-select, when arriving from the payment-method modal. */
+  initialPlanId?: UpiPlanId | null;
 }
 
 /** Mobile-browser detection (client only) — decides QR vs intent buttons. */
@@ -64,10 +81,13 @@ function detectMobile(ua: string): boolean {
   return /android|iphone|ipad|ipod|mobile|phonepe|paytm|tez/i.test(ua);
 }
 
-export default function DirectUpiCheckout({ defaultEmail = null }: DirectUpiCheckoutProps) {
+export default function DirectUpiCheckout({
+  defaultEmail = null,
+  initialPlanId = null,
+}: DirectUpiCheckoutProps) {
   const router = useRouter();
 
-  const [planId, setPlanId] = useState<PlanId>("YEARLY");
+  const [planId, setPlanId] = useState<PlanId>(initialPlanId ?? "YEARLY");
   const [email, setEmail] = useState(defaultEmail ?? "");
   const [order, setOrder] = useState<CreatedOrder | null>(null);
   const [upiUri, setUpiUri] = useState<string | null>(null);
@@ -81,9 +101,6 @@ export default function DirectUpiCheckout({ defaultEmail = null }: DirectUpiChec
   const [isMobile, setIsMobile] = useState(false);
   const [copied, setCopied] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
-
-  // Guards so the polling/redirect effects never double-fire.
-  const redirectingRef = useRef(false);
 
   const plan = useMemo(() => PLANS.find((p) => p.planId === planId)!, [planId]);
 
@@ -167,8 +184,17 @@ export default function DirectUpiCheckout({ defaultEmail = null }: DirectUpiChec
         if (data.status === "PAID") {
           setPaid(true);
           setNotice("Payment confirmed! Redirecting to your dashboard…");
-          // Give the confirmation a beat to render before navigating.
-          window.setTimeout(() => router.push("/dashboard?payment=success"), 900);
+          // Complete through the unified callback so license activation and the
+          // final redirect match the PayGlocal rail exactly.
+          window.setTimeout(
+            () =>
+              router.push(
+                `/api/v1/payment/callback?provider=upi&orderId=${encodeURIComponent(
+                  orderId
+                )}`
+              ),
+            900
+          );
         } else if (data.status === "EXPIRED") {
           setSecondsLeft(0);
           setError("This order expired after 10 minutes. Please start a new payment.");
@@ -215,7 +241,17 @@ export default function DirectUpiCheckout({ defaultEmail = null }: DirectUpiChec
       }
       setPaid(true);
       setNotice("Payment verified — your license is active. Redirecting…");
-      window.setTimeout(() => router.push("/dashboard?payment=success"), 900);
+      // Route through the unified callback so activation + redirect are shared
+      // with the PayGlocal rail.
+      window.setTimeout(
+        () =>
+          router.push(
+            `/api/v1/payment/callback?provider=upi&orderId=${encodeURIComponent(
+              order.orderId
+            )}&utr=${encodeURIComponent(utr.trim())}`
+          ),
+        900
+      );
     } catch {
       setError("Verification failed. Please check your connection and retry.");
     } finally {
@@ -283,7 +319,7 @@ export default function DirectUpiCheckout({ defaultEmail = null }: DirectUpiChec
                 </div>
                 <div className="mt-1 text-sm font-bold text-slate-900">{p.name}</div>
                 <div className="mt-0.5 text-xl font-extrabold text-slate-900">
-                  {formatInr(p.amount)}
+                  {formatDualInr(p.amount)}
                 </div>
               </button>
             );
@@ -321,7 +357,7 @@ export default function DirectUpiCheckout({ defaultEmail = null }: DirectUpiChec
           ) : order ? (
             "Regenerate payment request"
           ) : (
-            `Pay ${formatInr(plan.amount)} via UPI`
+            `Pay ${formatDualInr(plan.amount)} via UPI`
           )}
         </button>
       </section>
@@ -343,7 +379,7 @@ export default function DirectUpiCheckout({ defaultEmail = null }: DirectUpiChec
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-600">Amount</span>
               <span className="font-bold text-slate-900">
-                {formatInr(order.amount)}
+                {formatDualInr(order.amount)}
               </span>
             </div>
             <div className="mt-1.5 flex items-center justify-between text-sm">
