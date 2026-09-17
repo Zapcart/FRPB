@@ -1,7 +1,7 @@
 // FRPB — currency resolution for the pricing page.
 //
 // Goal: default the currency toggle to the rail the visitor can actually pay
-// with — INR (Cashfree, India) or USD (PayGlocal, rest of world) — without
+// with — INR (Direct UPI, India) or USD (PayGlocal, rest of world) — without
 // asking them to think about it.
 //
 // SIGNAL ORDER (deliberately conservative):

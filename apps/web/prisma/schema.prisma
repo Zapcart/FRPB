@@ -27,14 +27,15 @@ enum LicenseStatus {
 }
 
 enum PaymentProvider {
-  // DEPRECATED — Stripe and Razorpay are no longer supported. The values are
-  // retained so historical Payment rows still validate; they are not reachable
-  // from the code (see lib/payments/index.ts). Drop only after confirming no
-  // Payment rows reference them.
+  // DEPRECATED — Stripe, Razorpay and Cashfree are no longer supported. The
+  // Cashfree adapter + webhook route and all its env vars were deleted. These
+  // values are retained ONLY so historical Payment rows still validate; they are
+  // not constructible from code (see lib/payments/index.ts). Drop only after
+  // confirming no Payment rows reference them.
   STRIPE
   RAZORPAY
-  CASHFREE // India / INR (UPI, NetBanking, domestic cards)
-  PAYGLOCAL // International / USD (credit + debit cards)
+  CASHFREE // legacy — INR now settles via the self-hosted Direct UPI engine
+  PAYGLOCAL // International / USD (credit + debit cards) — the only live gateway
 }
 
 enum PaymentStatus {
@@ -194,7 +195,7 @@ model Payment {
   licenseId        String?         @unique
   license          License?        @relation(fields: [licenseId], references: [id])
   provider         PaymentProvider
-  providerTxnId    String          @unique // Cashfree order id / PayGlocal order id
+  providerTxnId    String          @unique // PayGlocal order id (hosted-gateway rail)
   providerEventId  String? // webhook event id for idempotency
   amountCents      Int
   currency         String          @default("USD")
@@ -211,7 +212,7 @@ model Payment {
 
 model WebhookEvent {
   id          String          @id @default(cuid())
-  provider    PaymentProvider // CASHFREE | PAYGLOCAL (STRIPE/RAZORPAY deprecated)
+  provider    PaymentProvider // PAYGLOCAL live (STRIPE/RAZORPAY/CASHFREE deprecated)
   eventId     String          @unique // provider event id (e.g., evt_..., event_...)
   eventType   String // payment_intent.succeeded / payment.captured
   payload     Json // raw provider payload for audit + replay

@@ -86,7 +86,9 @@ export default function PrivacyPolicyPage() {
                 <strong>Payment data</strong> — when you purchase a plan, we record
                 the payment transaction ID, the plan purchased, the currency and the
                 amount paid. We do <em>not</em> store full card numbers or bank
-                details — those stay with our payment provider (Cashfree).
+                details. INR payments settle directly through UPI; USD card
+                payments are handled by our card payment provider, which alone
+                sees your card data.
               </li>
               <li>
                 <strong>License data</strong> — the license key issued to you, the
@@ -134,9 +136,10 @@ export default function PrivacyPolicyPage() {
             </p>
             <ul className="mt-3 list-disc pl-6 space-y-1 text-slate-600">
               <li>
-                <strong>Payment provider (Cashfree)</strong> — to process your payment
-                and issue refunds. Cashfree handles the actual card/bank data; we only
-                receive the transaction result.
+                <strong>Card payment provider</strong> — to process USD card payments
+                and issue refunds. The provider handles the actual card data; we only
+                receive the transaction result. INR/UPI payments settle bank-to-bank
+                directly and are not routed through a third party.
               </li>
               <li>
                 <strong>Auth provider (Supabase)</strong> — to manage sign-in and

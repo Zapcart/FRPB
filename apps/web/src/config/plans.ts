@@ -15,6 +15,12 @@
 //   Month     ₹1,900     $20
 //   Year      ₹4,900     $50
 //   Lifetime  ₹9,999     $100
+//
+// RAILS:
+//   INR → Direct UPI (Self-Hosted, zero-MDR). Settles straight to the merchant
+//         VPA; no hosted gateway and no third-party key.
+//   USD → PayGlocal (international credit / debit card).
+// Cashfree is no longer part of either rail.
 
 import { PLANS as SHARED_PLANS, type PlanSlug } from "@frpb/shared";
 

@@ -237,23 +237,23 @@ export default function HomePage() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-accent-500" />
             </span>
-            FRPB Utility V1 — Complete Toolkit
+            FRPB Utility V1 — Android FRP Toolkit
           </div>
 
           {/* Headline — gradient typography with a slow pan */}
           <h1 className="mx-auto max-w-4xl text-[2rem] font-black leading-[1.06] tracking-tight text-white sm:text-5xl lg:text-6xl">
             All in One & One for All —{" "}
             <span className="animate-gradient-pan bg-gradient-to-r from-brand-400 via-accent-400 to-violet-400 bg-[length:200%_auto] bg-clip-text text-transparent">
-              Complete Device Recovery & Utility
+              Automated Android FRP Unlock
             </span>
           </h1>
 
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-slate-400 sm:text-lg">
-            The enterprise-grade desktop toolkit for Android & iOS. Fix boot loops, restore
-            firmware, install OEM drivers and manage every device — with full support for{" "}
-            <span className="font-semibold text-slate-200">Android 16</span>,{" "}
-            <span className="font-semibold text-slate-200">Samsung S26 Series</span>, Pixel and
-            Xiaomi.
+            The professional <span className="font-semibold text-slate-200">Android FRP unlock
+            and device utility</span> toolkit. Clear Factory Reset Protection, flash reset a
+            handset and install the right OEM drivers — driving MediaTek BROM, Qualcomm EDL
+            (9008), Samsung Download, Fastboot and ADB, with support for Samsung, Xiaomi, Vivo,
+            OPPO, Realme, Motorola and Pixel.
           </p>
 
           {/* Action buttons */}
@@ -442,9 +442,11 @@ export default function HomePage() {
                 <Award className="h-5 w-5 text-accent-400" />
               </span>
               <div className="text-left">
-                <p className="text-sm font-extrabold leading-none text-white">FRPB Utility V1</p>
+                <p className="text-sm font-extrabold leading-none text-white">
+                  {HOME_METRICS.supportedModes}
+                </p>
                 <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                  Latest release
+                  Boot modes supported
                 </p>
               </div>
             </div>
@@ -736,9 +738,9 @@ export default function HomePage() {
               Step-by-step recovery guides
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-white/80">
-              From stuck boot loops to driver conflicts — follow illustrated walkthroughs for
-              Download mode, Recovery mode, ADB and fastboot, updated for the latest Android and
-              iOS releases.
+              Follow illustrated, model-specific walkthroughs for Download mode, Recovery, ADB,
+              Fastboot, Qualcomm EDL and MediaTek BROM — including honest guidance on the device
+              locks that cannot be cleared in software.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
@@ -784,8 +786,8 @@ export default function HomePage() {
                 <span className="text-lg font-extrabold tracking-tight text-white">FRPB</span>
               </Link>
               <p className="mt-4 max-w-xs text-sm leading-relaxed text-slate-400">
-                The professional Android & iOS device recovery and utility suite. Built for
-                technicians, shops and authorized owners.
+                The professional Android FRP unlock and device utility suite. Built for
+                technicians, repair shops and authorized device owners.
               </p>
               <div className="mt-5 flex items-center gap-2 text-xs text-slate-500">
                 <ShieldCheck className="h-4 w-4 text-emerald-400" />

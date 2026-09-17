@@ -76,7 +76,7 @@ export type UnbindRequest = z.infer<typeof UnbindRequestSchema>;
 
 export const CheckoutRequestSchema = z.object({
   planSlug: z.enum(["MONTH_1", "YEAR_1", "LIFETIME"]),
-  /** Currency for display — defaults to USD. Cashfree accepts INR natively. */
+  /** Currency for display — defaults to USD. INR rails through Direct UPI. */
   currency: z.enum(["USD", "INR"]).optional().default("USD"),
   successUrl: z.string().url().optional(),
   cancelUrl: z.string().url().optional(),

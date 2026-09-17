@@ -1,6 +1,6 @@
 // FRPB — PayGlocal payment gateway adapter.
 // PayGlocal is the INTERNATIONAL (USD) acquirer: card payments from outside
-// India. Like Cashfree it is a hosted-redirect flow — we create an order
+// India. It is a hosted-redirect flow: we create an order
 // server-side and hand the customer to PayGlocal's payment page, then the
 // webhook grants the license (see api/v1/webhooks/payglocal).
 //

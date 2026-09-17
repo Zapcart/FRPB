@@ -18,7 +18,8 @@
 // Alias chains are supported because the two provider integrations in this
 // codebase historically used different variable names.
 
-export type WebhookProvider = "CASHFREE" | "PAYGLOCAL";
+/** Hosted providers that sign webhooks. (INR/Direct-UPI has no webhook.) */
+export type WebhookProvider = "PAYGLOCAL";
 
 /** Thrown when a required production webhook secret is not configured. */
 export class WebhookSecretConfigError extends Error {
@@ -37,7 +38,6 @@ export class WebhookSecretConfigError extends Error {
 
 /** Environment variable names accepted for each provider (first match wins). */
 const SECRET_ENV: Record<WebhookProvider, readonly string[]> = {
-  CASHFREE: ["CASHFREE_WEBHOOK_SECRET", "CASHFREE_CLIENT_SECRET"],
   PAYGLOCAL: ["PAYGLOCAL_WEBHOOK_SECRET", "PAYGLOCAL_MERCHANT_SECRET"],
 };
 

@@ -265,10 +265,12 @@ export default function TermsOfServicePage() {
               content of third-party services.
             </p>
             <p>
-              We use a payment provider (Cashfree) to process payments. Card and bank
-              details are handled by the payment provider, not by us. Payment processing
-              may be subject to foreign exchange rates and transaction fees imposed by the
-              payment provider or your bank, which may affect the final amount charged.
+              INR payments settle directly through UPI to our merchant account; bank
+              details are handled by your own UPI app and are never visible to us. USD
+              payments are processed by our card payment provider, which handles the card
+              data on our behalf. Card payments may be subject to foreign exchange rates
+              and transaction fees imposed by the provider or your bank, which may affect
+              the final amount charged.
             </p>
           </section>
 

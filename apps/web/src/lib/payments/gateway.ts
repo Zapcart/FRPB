@@ -1,14 +1,20 @@
 // FRPB — payment gateway interface.
-// The Cashfree and PayGlocal adapters implement this so checkout + webhooks
-// stay provider-agnostic at the call site.
+// The PayGlocal adapter implements this so checkout + webhooks stay
+// provider-agnostic at the call site.
 //
-// Only two rails are supported:
-//   CASHFREE  — INR / domestic India (UPI, NetBanking, domestic cards)
+// Only ONE hosted-gateway rail remains:
 //   PAYGLOCAL — USD / international (credit + debit cards)
-// Legacy Stripe and Razorpay adapters were removed; the PaymentProvider enum
-// retains those values only so historical Payment rows still type-check.
+//
+// The INR rail is NOT a gateway: it is the self-hosted Direct UPI engine
+// (`UPI`), which settles straight to the merchant VPA and is driven by
+// lib/upi.ts plus the payment routes. Cashfree was removed entirely — the
+// adapter, the webhook route and its env vars are gone.
+//
+// Legacy Stripe / Razorpay / Cashfree values survive ONLY on the Prisma
+// PaymentProvider enum so historical Payment rows still validate; they are not
+// constructible from code.
 
-export type PaymentProviderName = "STRIPE" | "RAZORPAY" | "CASHFREE" | "PAYGLOCAL";
+export type PaymentProviderName = "PAYGLOCAL";
 
 export interface CreateCheckoutInput {
   planSlug: string;

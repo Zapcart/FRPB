@@ -9,7 +9,14 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 // Prisma generates the PaymentProvider enum but does not export it as a value;
 // use the string literal union matching the schema enum for runtime comparisons.
-type PaymentProviderName = "STRIPE" | "RAZORPAY" | "CASHFREE" | "PAYGLOCAL";
+//
+// Only PAYGLOCAL is a live webhook provider. Cashfree was removed along with its
+// adapter, webhook route and env vars; Stripe/Razorpay were dropped earlier.
+// The historical values remain in the union ONLY so a replay of an old event
+// payload still type-checks — no code path can emit them any more.
+type LiveWebhookProvider = "PAYGLOCAL";
+type LegacyPaymentProvider = "STRIPE" | "RAZORPAY" | "CASHFREE";
+type PaymentProviderName = LiveWebhookProvider | LegacyPaymentProvider;
 import { prisma } from "@/lib/prisma";
 import { sha256 } from "@/lib/crypto/sha256";
 import { generateLicenseKey } from "@/lib/license/generate";

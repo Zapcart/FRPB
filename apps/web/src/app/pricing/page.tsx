@@ -3,7 +3,7 @@
 // Amounts come straight from the plan definition (priceCents / priceInr) so the
 // displayed price always matches the amount the gateway actually charges —
 // never a derived FX conversion. The selected currency is forwarded to
-// /api/v1/checkout (Cashfree settles INR natively) and preserved across the
+// the Direct-UPI engine for INR / PayGlocal for USD, and preserved across the
 // auth hop via /checkout?currency=…
 // Currency display only — no payment provider branding on the frontend.
 

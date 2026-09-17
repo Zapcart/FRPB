@@ -57,6 +57,21 @@ function source(relPath: string): string {
   }
 }
 
+/**
+ * Strip `//` line comments and block comments from source.
+ *
+ * The Cashfree-removal and fake-stats assertions must test CODE, not prose.
+ * Explanatory comments that name the thing being removed ("Cashfree was removed
+ * entirely…", "replaces the previously hardcoded 120,000+ devices recovered")
+ * are load-bearing documentation of WHY the code looks the way it does — erasing
+ * them would destroy the audit trail this cleanup is meant to preserve.
+ */
+function code(relPath: string): string {
+  return source(relPath)
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
 console.log("FRPB — checkout resilience & pricing\n");
 
 // ─── 1. Fail-safe session resolution ─────────────────────────────────────────
@@ -182,6 +197,118 @@ const filesToScan = [
 ];
 const stale = filesToScan.filter((f) => /\$(25|60|120)\b/.test(source(f)));
 check("no stale $25/$60/$120 references remain", stale.length === 0, stale.join(", "));
+
+// ─── 4. Cashfree fully removed ───────────────────────────────────────────────
+console.log("\nFRPB — cashfree removal\n");
+
+const gatewaySrc = source("src/lib/payments/gateway.ts");
+const indexSrc = source("src/lib/payments/index.ts");
+const secretsSrc = source("src/lib/payments/webhook-secrets.ts");
+const checkoutSrc = source("src/app/api/v1/checkout/route.ts");
+
+// Comment-stripped views — these test the CODE, so explanatory prose that names
+// the removed provider does not produce a false failure.
+const gatewayCode = code("src/lib/payments/gateway.ts");
+const indexCode = code("src/lib/payments/index.ts");
+const secretsCode = code("src/lib/payments/webhook-secrets.ts");
+const checkoutCode = code("src/app/api/v1/checkout/route.ts");
+
+// Assert on the RAW declaration line so the check cannot be defeated by
+// comment-stripping quirks: the union must be exactly "PAYGLOCAL".
+const providerUnion = /export type PaymentProviderName\s*=\s*([^;]+);/.exec(gatewaySrc);
+check(
+  "gateway.ts PaymentProviderName is exactly PAYGLOCAL (no CASHFREE)",
+  providerUnion?.[1]?.trim() === '"PAYGLOCAL"',
+  providerUnion?.[1]?.trim() ?? "declaration not found"
+);
+check(
+  "index.ts no longer imports the Cashfree adapter",
+  !indexCode.includes("CashfreeGateway") && !indexCode.includes("./cashfree")
+);
+check(
+  "index.ts has no CASHFREE case/env vars",
+  !indexCode.includes("CASHFREE_CLIENT_ID") && !indexCode.includes('case "CASHFREE"')
+);
+check(
+  "providerForCurrency(INR) returns null (self-hosted UPI)",
+  /currency === "INR" \? null : "PAYGLOCAL"/.test(indexCode)
+);
+check(
+  "webhook-secrets.ts has no CASHFREE entry",
+  !secretsCode.includes("CASHFREE")
+);
+check(
+  "checkout route routes INR to /checkout/upi",
+  checkoutCode.includes("/checkout/upi") && checkoutCode.includes('currency === "INR"')
+);
+const inrBranchIdx = checkoutCode.indexOf('currency === "INR"');
+const authGateIdx = checkoutCode.indexOf("Please sign in to purchase");
+check(
+  "checkout route: INR resolves BEFORE the sign-in gate",
+  inrBranchIdx !== -1 && authGateIdx !== -1 && inrBranchIdx < authGateIdx,
+  `inrBranch@${inrBranchIdx} authGate@${authGateIdx}`
+);
+check(
+  "checkout route CODE no longer references Cashfree",
+  !/cashfree/i.test(checkoutCode)
+);
+// The explanatory comment should survive (audit trail), so only assert code.
+check(
+  "checkout route documents the Cashfree removal",
+  /cashfree/i.test(checkoutSrc)
+);
+
+// The dead files themselves must be gone from disk.
+import { existsSync } from "node:fs";
+check(
+  "lib/payments/cashfree.ts is deleted",
+  !existsSync(join(root, "src/lib/payments/cashfree.ts"))
+);
+check(
+  "api/v1/webhooks/cashfree route is deleted",
+  !existsSync(join(root, "src/app/api/v1/webhooks/cashfree"))
+);
+
+// No remaining CASHFREE identifiers in the live payment plumbing.
+const cashfreeFree = [
+  "src/lib/payments/gateway.ts",
+  "src/lib/payments/index.ts",
+  "src/lib/payments/webhook-secrets.ts",
+  "src/config/plans.ts",
+  "src/lib/checkout/currency.ts",
+];
+const cashfreeLeftovers = cashfreeFree.filter((f) => /cashfree/i.test(code(f)));
+check(
+  "no cashfree CODE in the live payment config",
+  cashfreeLeftovers.length === 0,
+  cashfreeLeftovers.join(", ")
+);
+
+// ─── 5. Landing page credibility ─────────────────────────────────────────────
+console.log("\nFRPB — landing page credibility\n");
+
+const landing = source("src/app/page.tsx");
+// Strip comments: the file DOCUMENTS the removed fake stats, which is the point.
+const landingCode = code("src/app/page.tsx");
+check("no fabricated '120,000+' counter in rendered copy", !landingCode.includes("120,000"));
+check("no fabricated '4.9' rating in rendered copy", !landingCode.includes("4.9"));
+check("no fabricated '2,000+ reviews' in rendered copy", !landingCode.includes("2,000"));
+check(
+  "landing no longer claims iOS support",
+  !/Android & iOS|and iOS\b/i.test(landingCode)
+);
+check(
+  "landing no longer promises generic boot-loop repair",
+  !/boot loops/i.test(landingCode)
+);
+check(
+  "landing describes Android FRP capability",
+  /Android FRP/i.test(landingCode)
+);
+check(
+  "landing metrics come from home-metrics",
+  landingCode.includes("HOME_METRICS") && source("src/lib/home-metrics.ts").length > 0
+);
 
 console.log("\n" + "-".repeat(56));
 console.log(`result: ${pass} passed, ${fail} failed`);
