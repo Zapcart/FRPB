@@ -150,39 +150,55 @@ async function handleVerify(req: NextRequest) {
   //          rail won the race and this UPI flow is now replaying the claim.
   //    Checking only (a) is what previously allowed an overlapping UPI +
   //    webhook flow to mint a duplicate key.
-  const existingClaim = await prisma.paymentOrder.findUnique({ where: { utr } });
-  if (existingClaim && existingClaim.orderId !== order.orderId) {
-    return NextResponse.json(
-      {
-        success: false,
-        message:
-          "This UPI reference has already been used for another order. Every payment can be claimed once.",
-      },
-      { status: 409 }
-    );
-  }
-
-  // Look up by the durable UTR hash recorded on the granted license. Using the
-  // hash (not the raw value) keeps the lookup index-friendly and avoids storing
-  // a plaintext reference in an easily-queried column.
+  // The duplicate guards below are READ-ONLY pre-checks. They are wrapped so a
+  // transient DB drop returns a retryable 503 rather than bubbling out as an
+  // unhandled 500 — the customer has already paid at this point, so the error
+  // must be honest and recoverable.
   const utrHash = sha256(utr);
-  const grantedForUtr = await prisma.license.findFirst({
-    where: {
-      OR: [
-        { metadata: { path: ["utrHash"], equals: utrHash } },
-        { metadata: { path: ["utr"], equals: utr } },
-      ],
-    },
-    select: { id: true, userId: true },
-  });
-  if (grantedForUtr && order.licenseId !== grantedForUtr.id) {
+  try {
+    const existingClaim = await prisma.paymentOrder.findUnique({ where: { utr } });
+    if (existingClaim && existingClaim.orderId !== order.orderId) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "This UPI reference has already been used for another order. Every payment can be claimed once.",
+        },
+        { status: 409 }
+      );
+    }
+
+    // Look up by the durable UTR hash recorded on the granted license. Using the
+    // hash (not the raw value) keeps the lookup index-friendly and avoids storing
+    // a plaintext reference in an easily-queried column.
+    const grantedForUtr = await prisma.license.findFirst({
+      where: {
+        OR: [
+          { metadata: { path: ["utrHash"], equals: utrHash } },
+          { metadata: { path: ["utr"], equals: utr } },
+        ],
+      },
+      select: { id: true, userId: true },
+    });
+    if (grantedForUtr && order.licenseId !== grantedForUtr.id) {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "This UPI reference has already been redeemed. Every payment can be claimed once.",
+        },
+        { status: 409 }
+      );
+    }
+  } catch (err) {
+    console.error("[UTR_Verify_Error]: duplicate-claim pre-check failed:", err);
     return NextResponse.json(
       {
         success: false,
-        message:
-          "This UPI reference has already been redeemed. Every payment can be claimed once.",
+        message: "We couldn't verify your payment right now. Please retry.",
+        code: "DB_UNAVAILABLE",
       },
-      { status: 409 }
+      { status: 503 }
     );
   }
 

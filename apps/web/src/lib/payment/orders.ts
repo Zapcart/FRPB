@@ -196,37 +196,80 @@ export async function grantLicenseForOrder(
   const expiresAt =
     planRow.durationDays != null ? addDays(new Date(), planRow.durationDays) : null;
 
-  const license = await client.license.create({
-    data: {
-      key: licenseKey,
-      keySha256: sha256(licenseKey),
-      userId: user.id,
-      planId: planRow.id,
-      status: "ACTIVE",
-      deviceLimit: planRow.deviceLimit,
-      maxActivations: 1,
-      activatedAt: new Date(),
-      expiresAt,
-      metadata: {
-        provider: "DIRECT_UPI",
-        orderId: order.orderId,
-        utr: order.utr,
-        // Hashed copy for an index-friendly cross-flow duplicate lookup: the
-        // webhook rail can find a license already granted for this UTR without
-        // scanning plaintext metadata.
-        utrHash: order.utr ? sha256(order.utr) : null,
-        planSlug,
-        amount: order.amount,
+  // MINT + LINK ATOMICALLY.
+  //
+  // `license.create` followed by `paymentOrder.update` were two independent
+  // writes. A crash, timeout, or pooler drop in the gap between them left a
+  // license row with the order still pointing at `licenseId: null` — and the
+  // retry path above (which keys off `order.licenseId`) then minted a SECOND key
+  // for the same payment. Both writes now happen inside one transaction, and the
+  // link is claimed conditionally (`licenseId: null`) so exactly one concurrent
+  // grant can ever win.
+  const license = await client.$transaction(async (tx) => {
+    const created = await tx.license.create({
+      data: {
+        key: licenseKey,
+        keySha256: sha256(licenseKey),
+        userId: user.id,
+        planId: planRow.id,
+        status: "ACTIVE",
+        deviceLimit: planRow.deviceLimit,
+        maxActivations: 1,
+        activatedAt: new Date(),
+        expiresAt,
+        metadata: {
+          provider: "DIRECT_UPI",
+          orderId: order.orderId,
+          utr: order.utr,
+          // Hashed copy for an index-friendly cross-flow duplicate lookup: the
+          // webhook rail can find a license already granted for this UTR without
+          // scanning plaintext metadata.
+          utrHash: order.utr ? sha256(order.utr) : null,
+          planSlug,
+          amount: order.amount,
+        },
       },
-    },
+    });
+
+    // Race-safe claim: only succeeds while the order is still unlinked.
+    const linked = await tx.paymentOrder.updateMany({
+      where: { id: order.id, licenseId: null },
+      data: { licenseId: created.id },
+    });
+
+    if (linked.count === 0) {
+      // Another grant won concurrently. Discard our duplicate key inside the
+      // same transaction and report the winner instead.
+      const fresh = await tx.paymentOrder.findUnique({
+        where: { id: order.id },
+        select: { licenseId: true },
+      });
+      if (fresh?.licenseId && fresh.licenseId !== created.id) {
+        await tx.license.delete({ where: { id: created.id } }).catch(() => {
+          // If the delete fails the whole transaction rolls back anyway.
+        });
+        return null;
+      }
+    }
+
+    return created;
   });
 
-  await client.paymentOrder.update({
-    where: { id: order.id },
-    data: { licenseId: license.id },
-  });
+  // The transaction lost the race — return the winner's key, never a duplicate.
+  if (!license) {
+    const settled = await client.paymentOrder.findUnique({ where: { orderId } });
+    if (settled?.licenseId) {
+      const winner = await client.license.findUnique({
+        where: { id: settled.licenseId },
+        select: { id: true, key: true },
+      });
+      if (winner) return { licenseId: winner.id, licenseKey: winner.key };
+    }
+    return null;
+  }
 
-  // Best-effort delivery email — never blocks the grant.
+  // Best-effort delivery email — fired AFTER the transaction commits so a mail
+  // outage can never roll back a granted license, and never blocks the grant.
   void sendLicenseEmail(
     {
       id: license.id,

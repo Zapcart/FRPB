@@ -40,6 +40,9 @@ const CreateSchema = z.object({
   userEmail: z.string().email().max(160).optional(),
 });
 
+const DB_UNAVAILABLE_MESSAGE =
+  "We're having trouble reaching our payment system right now. Please try again in a moment.";
+
 export async function POST(req: NextRequest) {
   return withCorsResponse(await handleCreate(req));
 }
@@ -102,33 +105,31 @@ async function handleCreate(req: NextRequest) {
   }
 
   // 4. Housekeeping — retire stale PENDING orders so the table self-heals.
-  void expireStaleOrders();
+  //    Fire-and-forget, but with an explicit catch: `expireStaleOrders` swallows
+  //    internally today, and a bare `void` would silently become an unhandled
+  //    rejection if that ever changed.
+  void expireStaleOrders().catch((err) => {
+    console.warn("[payment/create] stale-order housekeeping failed (non-fatal):", err);
+  });
 
   // 5. Persist the order as PENDING with a 10-minute expiry.
   const orderId = generateOrderId();
   const expiresAt = orderExpiry();
 
-  // PERSIST, OR DEGRADE GRACEFULLY.
+  // PERSIST-OR-FAIL.
   //
-  // A DB outage must NOT stop a customer from paying: the UPI rail needs no
-  // third-party service, and the amount is locked from the backend plan table
-  // regardless. When persistence fails we still return a fully usable order
-  // (URI + intent links) marked `persisted: false`, and log loudly so the
-  // missing reconciliation row is visible to operations.
+  // The order row is the ONLY thing that makes a UPI payment verifiable: the
+  // 12-digit UTR is reconciled against it by /payment/verify, and the live
+  // status poller reads it every 3 seconds. Returning a QR with no persisted row
+  // hands the customer a payment that can never be confirmed — money moves and
+  // no license is ever issued.
   //
-  // What is lost in that mode: the pending-order row used for expiry/status
-  // polling. The UTR verify step recreates what it needs from the request, so
-  // the payment can still be completed and the license granted.
-  let order: {
-    orderId: string;
-    status: string;
-    createdAt: Date;
-    expiresAt: Date;
-  } = { orderId, status: "PENDING", createdAt: new Date(), expiresAt };
-  let persisted = false;
-
+  // That failure mode is strictly worse than a retry, so a DB outage now fails
+  // LOUDLY with a 503 instead of degrading. The amount is still resolved
+  // server-side, so nothing about the price is ever client-controlled.
+  let order: Awaited<ReturnType<typeof prisma.paymentOrder.create>>;
   try {
-    const created = await prisma.paymentOrder.create({
+    order = await prisma.paymentOrder.create({
       data: {
         orderId,
         userId,
@@ -142,13 +143,15 @@ async function handleCreate(req: NextRequest) {
         expiresAt,
       },
     });
-    order = created;
-    persisted = true;
   } catch (err) {
     console.error(
-      "[payment/create] order persistence failed — issuing a non-persisted order so " +
-        "the customer can still pay:",
+      "[payment/create] order persistence failed — refusing to issue an " +
+        "unverifiable UPI QR:",
       err
+    );
+    return NextResponse.json(
+      { success: false, message: DB_UNAVAILABLE_MESSAGE, code: "DB_UNAVAILABLE" },
+      { status: 503 }
     );
   }
 
@@ -183,11 +186,11 @@ async function handleCreate(req: NextRequest) {
       upiUri,
       intentUrls: generateUpiIntentUrls(upiUri),
       /**
-       * False when the order row could not be stored (DB outage). The payment is
-       * still fully completable — the client shows a reassurance notice and the
-       * verify step reconciles against the request payload.
+       * Wire-compatibility field. Order persistence is now mandatory — a DB
+       * outage returns 503 above — so this is always true. Retained so older
+       * clients that branch on it keep working.
        */
-      persisted,
+      persisted: true,
     },
     { status: 201 }
   );
