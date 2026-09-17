@@ -310,6 +310,84 @@ check(
   landingCode.includes("HOME_METRICS") && source("src/lib/home-metrics.ts").length > 0
 );
 
+// ─── 6. Admin analytics multi-currency revenue ───────────────────────────────
+console.log("\nFRPB — admin analytics multi-currency revenue\n");
+
+const analyticsCode = code("src/lib/admin-analytics.ts");
+const sharedAnalytics = source("../../packages/shared/src/analytics.ts");
+const adminShell = code("src/app/admin/client-shell.tsx");
+
+// The bug: every Payment row was summed into ONE figure and mislabelled "INR",
+// even though Payment.currency defaults to USD. The literal assignment must go.
+check(
+  'no hardcoded currency: "INR" revenue label remains',
+  !/currency:\s*"INR",/.test(analyticsCode),
+  "getRevenue() still pins a single currency"
+);
+check(
+  "revenue is bucketed by each row's own currency column",
+  /by:\s*\[\s*"currency"/.test(analyticsCode) &&
+    /\bnormalizeCurrency\b/.test(analyticsCode)
+);
+check(
+  "live PaymentOrder ledger is included (PAID orders)",
+  /paymentOrder\.groupBy/.test(analyticsCode) && /status:\s*"PAID"/.test(analyticsCode)
+);
+check(
+  "historical Payment ledger is still included (SUCCEEDED only)",
+  /payment\.groupBy/.test(analyticsCode) && /status:\s*"SUCCEEDED"/.test(analyticsCode)
+);
+check(
+  "INR and USD are reported as separate pools",
+  /inr:\s*toCurrencyRevenue\(\s*"INR"/.test(analyticsCode) &&
+    /usd:\s*toCurrencyRevenue\(\s*"USD"/.test(analyticsCode)
+);
+check(
+  "no arithmetic mixes INR and USD totals together",
+  !/inr\.amount\s*\+\s*usd\.amount|usd\.amount\s*\+\s*inr\.amount/.test(analyticsCode)
+);
+check(
+  "shared RevenueMetrics exposes per-currency fields",
+  /inr:\s*CurrencyRevenue/.test(sharedAnalytics) &&
+    /usd:\s*CurrencyRevenue/.test(sharedAnalytics) &&
+    /currency:\s*"INR"\s*\|\s*"USD"/.test(sharedAnalytics)
+);
+check(
+  "shared types no longer expose a single-currency revenue label",
+  !/currency:\s*string;\s*\n\s*plans:/.test(sharedAnalytics)
+);
+check(
+  "admin dashboard renders INR and USD in distinct cards",
+  /formatUsd\(/.test(adminShell) &&
+    /d\.revenue\.inr\.amount/.test(adminShell) &&
+    /d\.revenue\.usd\.amount/.test(adminShell)
+);
+check(
+  "admin dashboard no longer reads the removed single-currency fields",
+  !/revenue\.(totalRevenue|successfulRevenue|failedRevenue|currency)\b/.test(adminShell)
+);
+
+// ─── 7. Payment enum integrity ───────────────────────────────────────────────
+console.log("\nFRPB — payment enum integrity\n");
+
+const schemaSrc = source("prisma/schema.prisma");
+const providerBlock = /enum PaymentProvider \{([\s\S]*?)\}/.exec(schemaSrc)?.[1] ?? "";
+
+check("PaymentProvider enum still declares CASHFREE (legacy rows keep validating)", /\bCASHFREE\b/.test(providerBlock));
+check(
+  "CASHFREE is documented as DEPRECATED / historical",
+  /CASHFREE[^\n]*DEPRECATED/i.test(providerBlock) || /DEPRECATED[\s\S]{0,400}?CASHFREE/i.test(providerBlock)
+);
+check("PAYGLOCAL remains an ACTIVE member", /\bPAYGLOCAL\b/.test(providerBlock) && /ACTIVE/i.test(providerBlock));
+check(
+  "the live gateway type still permits ONLY PAYGLOCAL",
+  /export type PaymentProviderName\s*=\s*"PAYGLOCAL"/.test(source("src/lib/payments/gateway.ts"))
+);
+check(
+  "PayGlocal USD tier comment reflects $20/$50/$100 (no stale 25/60/120)",
+  /20\/50\/100/.test(schemaSrc) && !/\(25\/60\/120\)/.test(schemaSrc)
+);
+
 console.log("\n" + "-".repeat(56));
 console.log(`result: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

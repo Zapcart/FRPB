@@ -7,7 +7,12 @@
 // into a client bundle.
 
 import { prisma } from "@/lib/prisma";
-import type { AdminAnalyticsResponse } from "@frpb/shared/analytics";
+import type {
+  AdminAnalyticsResponse,
+  CurrencyRevenue,
+  RevenueMetrics,
+  RevenuePlanBreakdown,
+} from "@frpb/shared/analytics";
 
 /**
  * Return `true` when the admin analytics feature is configured.
@@ -234,34 +239,164 @@ async function getRecentLicenses(limit = 10) {
   }));
 }
 
-async function getRevenue() {
-  const [total, successful, failed, plans] = await Promise.all([
-    prisma.payment.aggregate({ _sum: { amountCents: true } }),
-    prisma.payment.aggregate({ where: { status: "SUCCEEDED" }, _sum: { amountCents: true } }),
-    prisma.payment.aggregate({ where: { status: "FAILED" }, _sum: { amountCents: true } }),
-    prisma.payment.groupBy({
-      by: ["planSlug"],
-      _count: { planSlug: true },
-      _sum: { amountCents: true },
-      where: { status: "SUCCEEDED" },
-    }),
-  ]);
+const PLAN_NAMES: Record<string, string> = {
+  MONTH_1: "1-Month Plan",
+  YEAR_1: "1-Year Plan",
+  LIFETIME: "Lifetime Plan",
+};
 
-  const planNames: Record<string, string> = {
-    MONTH_1: "1-Month Plan",
-    YEAR_1: "1-Year Plan",
-    LIFETIME: "Lifetime Plan",
+/** Normalize a stored currency string to the only two pools we report. */
+function normalizeCurrency(value: string | null | undefined): "INR" | "USD" {
+  return (value ?? "").toUpperCase() === "INR" ? "INR" : "USD";
+}
+
+/** Running totals for a single currency, accumulated across both ledgers. */
+interface CurrencyAccumulator {
+  minorAmount: number;
+  successfulCount: number;
+  legacyMinor: number;
+  liveMinor: number;
+}
+
+function emptyAccumulator(): CurrencyAccumulator {
+  return { minorAmount: 0, successfulCount: 0, legacyMinor: 0, liveMinor: 0 };
+}
+
+/**
+ * Multi-currency revenue.
+ *
+ * HISTORY / WHY THIS IS SPLIT:
+ * The previous implementation summed every `Payment` row into one figure and
+ * hard-coded `currency: "INR"` — but `Payment.currency` defaults to `"USD"`, so
+ * international card revenue was reported under an INR label. It also ignored
+ * the live `PaymentOrder` ledger (Direct UPI + PayGlocal) entirely, so real
+ * sales were missing from the dashboard.
+ *
+ * We now read BOTH ledgers and bucket strictly by each row's own `currency`:
+ *   • `Payment`      — historical (`STRIPE`/`RAZORPAY`/`CASHFREE`) + the legacy
+ *                      `checkout` rail. Counted as the "legacy" contribution.
+ *   • `PaymentOrder` — the LIVE dual rail: `UPI` → INR, `PAYGLOCAL` → USD.
+ *
+ * `Payment` and `PaymentOrder` are disjoint by construction (the PayGlocal
+ * settle helper writes only `PaymentOrder`; the webhook processor writes only
+ * `Payment`), so nothing is double-counted, and only `SUCCEEDED`/`PAID` rows
+ * contribute to successful revenue. INR and USD are NEVER added together —
+ * ₹1,900 and $20 are not summable.
+ */
+async function getRevenue(): Promise<RevenueMetrics> {
+  interface LegacyGroup {
+    currency: string;
+    planSlug: string;
+    _count: { planSlug: number };
+    _sum: { amountCents: number | null };
+  }
+  interface LiveGroup {
+    currency: string;
+    planId: string;
+    _count: { planId: number };
+    _sum: { amount: number | null };
+  }
+
+  // Historical ledger — SUCCEEDED rows only.
+  const legacy = (await prisma.payment.groupBy({
+    by: ["currency", "planSlug"],
+    _count: { planSlug: true },
+    _sum: { amountCents: true },
+    where: { status: "SUCCEEDED" },
+  })) as unknown as LegacyGroup[];
+
+  // Live dual-rail ledger — PAID orders only.
+  const live = (await prisma.paymentOrder.groupBy({
+    by: ["currency", "planId"],
+    _count: { planId: true },
+    _sum: { amount: true },
+    where: { status: "PAID" },
+  })) as unknown as LiveGroup[];
+
+  const totals = { INR: emptyAccumulator(), USD: emptyAccumulator() };
+  const planTotals = new Map<
+    string,
+    { sold: number; revenueInr: number; revenueUsd: number; countInr: number; countUsd: number }
+  >();
+
+  const touchPlan = (slug: string) => {
+    let entry = planTotals.get(slug);
+    if (!entry) {
+      entry = { sold: 0, revenueInr: 0, revenueUsd: 0, countInr: 0, countUsd: 0 };
+      planTotals.set(slug, entry);
+    }
+    return entry;
   };
 
+  for (const row of legacy) {
+    const bucket = normalizeCurrency(row.currency);
+    const minor = row._sum.amountCents ?? 0;
+    const count = row._count.planSlug;
+    // `Payment` stores USD in cents and INR in paise — both are minor units, so
+    // dividing by 100 yields the major (whole) figure for either currency.
+    totals[bucket].minorAmount += minor;
+    totals[bucket].legacyMinor += minor;
+    totals[bucket].successfulCount += count;
+
+    const entry = touchPlan(row.planSlug);
+    entry.sold += count;
+    if (bucket === "INR") {
+      entry.revenueInr += minor / 100;
+      entry.countInr += count;
+    } else {
+      entry.revenueUsd += minor / 100;
+      entry.countUsd += count;
+    }
+  }
+
+  for (const row of live) {
+    const bucket = normalizeCurrency(row.currency);
+    // `PaymentOrder.amount` is already in WHOLE major units (₹1,900 / $20).
+    const major = row._sum.amount ?? 0;
+    const count = row._count.planId;
+    totals[bucket].minorAmount += Math.round(major * 100);
+    totals[bucket].liveMinor += Math.round(major * 100);
+    totals[bucket].successfulCount += count;
+
+    const entry = touchPlan(row.planId);
+    entry.sold += count;
+    if (bucket === "INR") {
+      entry.revenueInr += major;
+      entry.countInr += count;
+    } else {
+      entry.revenueUsd += major;
+      entry.countUsd += count;
+    }
+  }
+
+  const toCurrencyRevenue = (
+    currency: "INR" | "USD",
+    acc: CurrencyAccumulator
+  ): CurrencyRevenue => ({
+    currency,
+    amount: Math.round(acc.minorAmount) / 100,
+    minorAmount: Math.round(acc.minorAmount),
+    successfulCount: acc.successfulCount,
+    legacyAmount: Math.round(acc.legacyMinor) / 100,
+    liveAmount: Math.round(acc.liveMinor) / 100,
+  });
+
+  const plans: RevenuePlanBreakdown[] = [...planTotals.entries()]
+    .map(([slug, entry]) => ({
+      name: PLAN_NAMES[slug] ?? slug,
+      // "Sold" counts transactions in ANY currency, so it stays a plain count of
+      // settled orders rather than a sum of incomparable money.
+      sold: entry.sold,
+      revenueInr: Math.round(entry.revenueInr * 100) / 100,
+      revenueUsd: Math.round(entry.revenueUsd * 100) / 100,
+      countInr: entry.countInr,
+      countUsd: entry.countUsd,
+    }))
+    .sort((a, b) => b.sold - a.sold);
+
   return {
-    totalRevenue: total._sum.amountCents ?? 0,
-    successfulRevenue: successful._sum.amountCents ?? 0,
-    failedRevenue: failed._sum.amountCents ?? 0,
-    currency: "INR",
-    plans: (plans ?? []).map((p) => ({
-      name: planNames[p.planSlug] ?? p.planSlug,
-      sold: p._count.planSlug,
-      revenue: p._sum.amountCents ?? 0,
-    })),
+    inr: toCurrencyRevenue("INR", totals.INR),
+    usd: toCurrencyRevenue("USD", totals.USD),
+    plans,
   };
 }

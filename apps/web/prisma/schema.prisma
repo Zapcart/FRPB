@@ -26,16 +26,34 @@ enum LicenseStatus {
   PENDING
 }
 
+// Provider of record for a settled transaction.
+//
+// ── ACTIVE RAILS (the only ones any code path may construct) ────────────────
+//   PAYGLOCAL — international / USD card rail (hosted checkout). The sole live
+//               gateway; the ONLY member `lib/payments/gateway.ts`
+//               (PaymentProviderName) permits.
+//
+// Direct UPI is intentionally NOT a member here: it is self-hosted (no gateway
+// account) and is tracked on `PaymentOrder.provider = "UPI"` instead. See the
+// PaymentOrder model below.
+//
+// ── DEPRECATED / HISTORICAL (must NOT be used for new orders) ───────────────
+//   STRIPE, RAZORPAY, CASHFREE
+//
+// These are retained solely so historical `Payment` / `WebhookEvent` rows keep
+// validating. The Cashfree adapter and its webhook route were DELETED, and INR
+// now settles exclusively through the self-hosted Direct UPI engine, so no
+// runtime code can produce these values (see lib/payments/index.ts and
+// lib/webhooks/processor.ts `LegacyPaymentProvider`).
+//
+// ENFORCEMENT: the live route code is strictly typed to `"PAYGLOCAL"`; this enum
+// is intentionally WIDER than the live union so legacy rows never break. Drop a
+// deprecated value ONLY after confirming zero rows reference it.
 enum PaymentProvider {
-  // DEPRECATED — Stripe, Razorpay and Cashfree are no longer supported. The
-  // Cashfree adapter + webhook route and all its env vars were deleted. These
-  // values are retained ONLY so historical Payment rows still validate; they are
-  // not constructible from code (see lib/payments/index.ts). Drop only after
-  // confirming no Payment rows reference them.
-  STRIPE
-  RAZORPAY
-  CASHFREE // legacy — INR now settles via the self-hosted Direct UPI engine
-  PAYGLOCAL // International / USD (credit + debit cards) — the only live gateway
+  STRIPE // DEPRECATED — historical rows only
+  RAZORPAY // DEPRECATED — historical rows only
+  CASHFREE // DEPRECATED — was the INR card rail; INR now uses Direct UPI
+  PAYGLOCAL // ACTIVE — international / USD cards (only live gateway)
 }
 
 enum PaymentStatus {
@@ -146,11 +164,14 @@ model PaymentOrder {
   email     String
   planId    PlanType
   // Whole major units in `currency`: INR rupees (1900/4900/9999) for the UPI
-  // rail, or whole USD dollars (25/60/120) for the PayGlocal rail.
+  // rail, or whole USD dollars (20/50/100) for the PayGlocal rail. Always
+  // resolved server-side from config/plans.ts — never taken from the client.
   amount    Float
   /// "INR" (Direct UPI) | "USD" (PayGlocal card).
   currency  String         @default("INR")
-  /// "UPI" | "PAYGLOCAL" — which rail created this order.
+  /// "UPI" (Direct UPI, self-hosted) | "PAYGLOCAL" (card) — which rail created
+  /// this order. This is the LIVE rail ledger; `PaymentProvider` above is the
+  /// hosted-gateway enum used by the legacy `Payment` table.
   provider  String         @default("UPI")
   status    UpiOrderStatus @default(PENDING)
   utr       String?        @unique // 12-digit UPI reference; unique = no double-claim

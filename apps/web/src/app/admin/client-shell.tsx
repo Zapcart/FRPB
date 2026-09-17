@@ -81,6 +81,11 @@ function formatCurrency(rupees: number): string {
   return `₹${rupees.toLocaleString("en-IN")}`;
 }
 
+function formatUsd(dollars: number): string {
+  if (dollars === 0) return "$0";
+  return `$${dollars.toLocaleString("en-US")}`;
+}
+
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
@@ -294,22 +299,43 @@ export default function ClientAdminShell({ initialData }: { initialData: AdminAn
           <TrendingUp className="h-4 w-4 text-slate-400" />
           <h2 className="text-sm font-semibold text-slate-900">Revenue Summary</h2>
         </div>
+        {/* Currency pools are reported SEPARATELY — ₹ and $ are never summed. */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
-            <p className="text-xs font-medium text-slate-500">Total Revenue</p>
-            <p className="text-xl font-bold text-slate-900">{formatCurrency(d.revenue.totalRevenue)}</p>
+            <p className="text-xs font-medium text-slate-500">India (INR) &middot; Direct UPI</p>
+            <p className="text-xl font-bold text-slate-900">{formatCurrency(d.revenue.inr.amount)}</p>
+            <p className="text-xs text-slate-500">
+              {d.revenue.inr.successfulCount} settled
+              {d.revenue.inr.legacyAmount > 0
+                ? ` · ${formatCurrency(d.revenue.inr.legacyAmount)} legacy`
+                : ""}
+            </p>
+          </div>
+          <div className="rounded-lg border border-sky-100 bg-sky-50 p-3">
+            <p className="text-xs font-medium text-sky-700">International (USD) &middot; Cards</p>
+            <p className="text-xl font-bold text-sky-700">{formatUsd(d.revenue.usd.amount)}</p>
+            <p className="text-xs text-sky-700">
+              {d.revenue.usd.successfulCount} settled
+              {d.revenue.usd.legacyAmount > 0
+                ? ` · ${formatUsd(d.revenue.usd.legacyAmount)} legacy`
+                : ""}
+            </p>
           </div>
           <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
-            <p className="text-xs font-medium text-emerald-700">Successful</p>
-            <p className="text-xl font-bold text-emerald-700">{formatCurrency(d.revenue.successfulRevenue)}</p>
-          </div>
-          <div className="rounded-lg border border-rose-100 bg-rose-50 p-3">
-            <p className="text-xs font-medium text-rose-700">Failed</p>
-            <p className="text-xl font-bold text-rose-700">{formatCurrency(d.revenue.failedRevenue)}</p>
+            <p className="text-xs font-medium text-emerald-700">Settled Orders</p>
+            <p className="text-xl font-bold text-emerald-700">
+              {d.revenue.inr.successfulCount + d.revenue.usd.successfulCount}
+            </p>
+            <p className="text-xs text-emerald-700">
+              {d.revenue.inr.successfulCount} INR · {d.revenue.usd.successfulCount} USD
+            </p>
           </div>
           <div className="rounded-lg border border-violet-100 bg-violet-50 p-3">
-            <p className="text-xs font-medium text-violet-700">Currency</p>
-            <p className="text-xl font-bold text-violet-700">{d.revenue.currency}</p>
+            <p className="text-xs font-medium text-violet-700">Live Rail Share</p>
+            <p className="text-xl font-bold text-violet-700">
+              {formatCurrency(d.revenue.inr.liveAmount)}/{formatUsd(d.revenue.usd.liveAmount)}
+            </p>
+            <p className="text-xs text-violet-700">UPI / PayGlocal</p>
           </div>
         </div>
         {d.revenue.plans.length > 0 && (
@@ -320,7 +346,12 @@ export default function ClientAdminShell({ initialData }: { initialData: AdminAn
                 <div key={plan.name} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
                   <p className="text-xs font-medium text-slate-800">{plan.name}</p>
                   <p className="text-lg font-bold text-slate-900">{plan.sold} sold</p>
-                  <p className="text-xs text-slate-500">{formatCurrency(plan.revenue)}</p>
+                  <p className="text-xs text-slate-500">
+                    {formatCurrency(plan.revenueInr)} &middot; {formatUsd(plan.revenueUsd)}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {plan.countInr} INR · {plan.countUsd} USD
+                  </p>
                 </div>
               ))}
             </div>
