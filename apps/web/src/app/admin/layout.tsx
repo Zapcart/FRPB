@@ -1,13 +1,21 @@
-// FRPB — Admin layout (auth guard + page shell)
-// Server component: requires Supabase auth. Redirects to /auth if unauthenticated.
-// The admin page (children) loads analytics server-side via a Server Component
-// that calls the shared Prisma query layer directly — the ADMIN_LICENSE_KEY and
-// all other secrets stay on the server and are never exposed to the client.
+// FRPB — Admin layout (access-aware shell).
+//
+// ACCESS: the route is reachable two ways — a verified owner key (via the
+// `?key=` hand-off or the HttpOnly cookie) or a signed-in Supabase user. See
+// lib/admin/access.ts.
+//
+// This layout deliberately NO LONGER redirects to /auth on an unauthenticated
+// visit. That redirect made /admin unusable for the owner holding the command
+// key and turned a missing session into a dead end; the page now renders an
+// in-place key entry form instead. It also no longer calls the throwing
+// `createClient()` — a missing Supabase config must not crash the console.
+//
+// Secrets (ADMIN_LICENSE_KEY) never reach the client; access is resolved
+// server-side and only a boolean crosses the boundary.
 
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { LayoutDashboard, BarChart3, ShieldCheck } from "lucide-react";
-import { createClient } from "@/lib/supabase/server";
+import { resolveAdminAccess } from "@/lib/admin/access";
 import SignOutButton from "@/components/dashboard/sign-out-button";
 import { pageMetadata } from "@/lib/seo";
 
@@ -22,14 +30,8 @@ export const metadata = {
 };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    redirect("/auth?returnTo=/admin");
-  }
+  // Never throws: falls back to `authorized: false` when auth is misconfigured.
+  const access = await resolveAdminAccess();
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -46,19 +48,23 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               Admin Panel
             </span>
           </div>
-          <nav className="flex items-center gap-4">
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
-            >
-              <LayoutDashboard className="h-3.5 w-3.5" />
-              Back to Dashboard
-            </Link>
-            <SignOutButton
-              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
-              label="Logout"
-            />
-          </nav>
+          {/* Dashboard/logout links only make sense for a signed-in Supabase
+              user; an owner-key session has no account to sign out of. */}
+          {access.via === "user" && (
+            <nav className="flex items-center gap-4">
+              <Link
+                href="/dashboard"
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+              >
+                <LayoutDashboard className="h-3.5 w-3.5" />
+                Back to Dashboard
+              </Link>
+              <SignOutButton
+                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+                label="Logout"
+              />
+            </nav>
+          )}
         </div>
       </header>
 

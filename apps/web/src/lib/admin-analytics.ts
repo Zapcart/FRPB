@@ -2,11 +2,13 @@
 // Reused by the API route and by the admin Server Component so both read the
 // same aggregates directly from the database.
 //
-// IMPORTANT: This module is imported ONLY by server code. It reads
-// `process.env.ADMIN_LICENSE_KEY` (a private secret) and must never be pulled
-// into a client bundle.
+// IMPORTANT: This module is imported ONLY by server code. Authorization for the
+// /admin console and the analytics API is decided by lib/admin/auth.ts (the
+// owner key) and lib/admin/access.ts — never here. This module is a pure query
+// layer and must never be pulled into a client bundle.
 
 import { prisma } from "@/lib/prisma";
+import { isAdminKeyConfigured } from "@/lib/admin/auth";
 import type {
   AdminAnalyticsResponse,
   CurrencyRevenue,
@@ -22,7 +24,12 @@ import type {
  * should fail closed rather than expose an unauthenticated endpoint.
  */
 export function isAdminAnalyticsConfigured(): boolean {
-  return Boolean(process.env.ADMIN_LICENSE_KEY);
+  // Delegates to the shared owner-key resolver, which falls back to the platform
+  // key. Previously this was `Boolean(process.env.ADMIN_LICENSE_KEY)`, so an
+  // unset env var made the feature "unconfigured" and every caller surfaced a
+  // 503 — the operator was locked out of their own dashboard. There is now always
+  // an owner key, so the console is reachable by default.
+  return isAdminKeyConfigured();
 }
 
 /**

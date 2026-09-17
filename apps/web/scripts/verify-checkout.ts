@@ -388,6 +388,90 @@ check(
   /20\/50\/100/.test(schemaSrc) && !/\(25\/60\/120\)/.test(schemaSrc)
 );
 
+// ─── 8. /admin direct accessibility ──────────────────────────────────────────
+console.log("\nFRPB — admin access\n");
+
+const adminPage = source("src/app/admin/page.tsx");
+const adminLayout = source("src/app/admin/layout.tsx");
+const adminActions = source("src/app/admin/actions.ts");
+const adminAuth = source("src/lib/admin/auth.ts");
+const adminAccess = source("src/lib/admin/access.ts");
+const middlewareSrc = source("src/middleware.ts");
+
+// 1. The dashboard must be rendered directly at /admin.
+check(
+  "admin page imports and renders ClientAdminShell",
+  /import\s+ClientAdminShell\s+from\s+"\.\/client-shell"/.test(adminPage) &&
+    /<ClientAdminShell\b/.test(adminPage)
+);
+// 2. Authorization accepts the literal query key OR the configured env key.
+check(
+  "PLATFORM_ADMIN_KEY is exactly FRPB-ADMIN-9960-8245",
+  /PLATFORM_ADMIN_KEY\s*=\s*"FRPB-ADMIN-9960-8245"/.test(adminAuth)
+);
+check(
+  "the configured ADMIN_LICENSE_KEY is honoured when set",
+  /process\.env\.ADMIN_LICENSE_KEY/.test(adminAuth)
+);
+check(
+  "?key= query parameter is read and promoted",
+  /searchParams\.get\("key"\)/.test(middlewareSrc)
+);
+check(
+  "?key= is verified with the shared constant-time helper",
+  /verifyAdminKey\(/.test(middlewareSrc)
+);
+check(
+  "?key= is stripped from the URL after promotion",
+  /searchParams\.delete\("key"\)/.test(middlewareSrc)
+);
+check(
+  "admin key is stored in an HttpOnly cookie",
+  /ADMIN_COOKIE/.test(middlewareSrc) && /httpOnly:\s*true/.test(adminAuth + adminActions)
+);
+// 3. Unauthorized visitors get a form — never a crash or a redirect.
+check(
+  "layout no longer redirects to /auth",
+  !/redirect\(/.test(adminLayout) && !/from\s+"next\/navigation"/.test(adminLayout)
+);
+check(
+  "layout no longer calls the throwing createClient()",
+  // Test CODE, not prose: the layout's header comment explains that it no longer
+  // calls createClient(), which would otherwise self-trip this assertion.
+  !/createClient\(/.test(code("src/app/admin/layout.tsx"))
+);
+check(
+  "unauthorized requests render the key entry form",
+  /AdminKeyGate/.test(adminPage) && /import\s+AdminKeyGate/.test(adminPage)
+);
+check(
+  "key form verifies server-side via the authorizeAdminKey action",
+  /authorizeAdminKey/.test(adminActions) && /verifyAdminKey\(/.test(adminActions)
+);
+check(
+  "key form never compares the key in the browser",
+  /authorizeAdminKey\(/.test(source("src/app/admin/key-gate.tsx")) &&
+    !/FRPB-ADMIN-9960-8245/.test(code("src/app/admin/key-gate.tsx"))
+);
+// 4. The 503 lockout path is gone: the feature is configured by default.
+check(
+  "admin analytics is configured by default (no env-only lockout)",
+  /isAdminKeyConfigured\(\)/.test(code("src/lib/admin-analytics.ts")) &&
+    !/return Boolean\(process\.env\.ADMIN_LICENSE_KEY\)/.test(code("src/lib/admin-analytics.ts"))
+);
+check(
+  "analytics API route uses the shared key verifier",
+  /verifyAdminKey\(/.test(code("src/app/api/v1/admin/analytics/route.ts"))
+);
+check(
+  "admin access falls back to Supabase without throwing",
+  /getOptionalUser/.test(adminAccess) && !/createClient\(\)/.test(code("src/lib/admin/access.ts"))
+);
+check(
+  "refresh allows a key session (not user-only)",
+  /resolveAdminAccess\(\)/.test(adminActions) && !/if\s*\(!user\)/.test(adminActions)
+);
+
 console.log("\n" + "-".repeat(56));
 console.log(`result: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

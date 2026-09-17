@@ -13,6 +13,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { ADMIN_COOKIE, ADMIN_COOKIE_MAX_AGE, verifyAdminKey } from "@/lib/admin/auth";
 
 export async function updateSession(request: NextRequest) {
   // Expose the original pathname downstream for post-auth redirect fidelity.
@@ -113,6 +114,44 @@ export async function updateSession(request: NextRequest) {
     // Carry any refreshed session cookies onto the redirect so the login hop
     // does not clobber a still-valid (just-renewed) session.
     return withRefreshedCookies(redirectResponse);
+  }
+
+  // ── Admin owner-key hand-off ─────────────────────────────────────────────
+  // Visiting /admin?key=<owner key> is a one-shot convenience link. We promote
+  // the key into an HttpOnly, SameSite=Lax cookie and REDIRECT to the clean
+  // /admin URL so the credential never lingers in browser history, the Referer
+  // header, or any copy-pasted address.
+  //
+  // The key is intentionally NOT stripped-and-served in a single hop: a cookie
+  // set on a normal 200 response is not guaranteed to be attached to that same
+  // request's server-render read. Bouncing through a redirect guarantees the
+  // server component sees the cookie on the very next request.
+  //
+  // NOTE: this branch is deliberately independent of Supabase — an owner holding
+  // the key must not be blocked by an auth outage. `/admin` is also not part of
+  // the protected `/dashboard` tree above.
+  if (pathname.startsWith("/admin")) {
+    const candidate = request.nextUrl.searchParams.get("key");
+    if (candidate) {
+      const cleanUrl = request.nextUrl.clone();
+      cleanUrl.searchParams.delete("key");
+
+      // A bad key lands on the clean URL and is shown the login form, rather
+      // than an error page that would confirm/deny key validity.
+      if (!verifyAdminKey(candidate)) {
+        return withRefreshedCookies(NextResponse.redirect(cleanUrl));
+      }
+
+      const response = NextResponse.redirect(cleanUrl);
+      response.cookies.set(ADMIN_COOKIE, candidate, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/admin",
+        maxAge: ADMIN_COOKIE_MAX_AGE,
+      });
+      return withRefreshedCookies(response);
+    }
   }
 
   return withRefreshedCookies(supabaseResponse);

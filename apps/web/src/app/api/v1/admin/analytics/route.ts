@@ -18,24 +18,11 @@ import {
   getAdminAnalytics,
   isAdminAnalyticsConfigured,
 } from "@/lib/admin-analytics";
+import { getAdminKey, verifyAdminKey } from "@/lib/admin/auth";
 import type { AdminQueryResult } from "@frpb/shared/analytics";
 
 export const dynamic = "force-dynamic";
 export const OPTIONS = preflight;
-
-/**
- * Constant-time string comparison to avoid leaking key length/prefix via
- * timing side channels. Length is compared first (which is not secret-dependent
- * in a meaningful way here) and the remainder uses a fixed-cost XOR scan.
- */
-function safeCompare(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < a.length; i += 1) {
-    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return mismatch === 0;
-}
 
 function extractBearerToken(req: NextRequest): string {
   const authHeader = req.headers.get("authorization") ?? "";
@@ -45,10 +32,9 @@ function extractBearerToken(req: NextRequest): string {
 async function handleAnalytics(
   req: NextRequest
 ): Promise<NextResponse<AdminQueryResult | { error: string }>> {
-  const ownerKey = process.env.ADMIN_LICENSE_KEY ?? "";
-
-  // Fail closed: an unconfigured owner key must never grant access.
-  if (!isAdminAnalyticsConfigured() || ownerKey.length === 0) {
+  // There is always an owner key now (configured or platform fallback), so the
+  // old "not configured → 503" lockout cannot occur. Kept as a defensive guard.
+  if (!isAdminAnalyticsConfigured() || getAdminKey().length === 0) {
     return NextResponse.json(
       { error: "Admin analytics is not configured" },
       { status: 503 }
@@ -56,7 +42,9 @@ async function handleAnalytics(
   }
 
   const token = extractBearerToken(req);
-  if (token.length === 0 || !safeCompare(token, ownerKey)) {
+  // Constant-time comparison, shared with the /admin console gate so the two
+  // surfaces can never drift apart.
+  if (token.length === 0 || !verifyAdminKey(token)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
