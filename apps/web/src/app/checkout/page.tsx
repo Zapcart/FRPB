@@ -1,13 +1,21 @@
-// FRPB — /checkout entry (authenticated purchase hand-off).
-// Server component: confirms the session, validates the requested plan, then
-// mounts the client that starts the gateway checkout. Unauthenticated users
-// are sent back to the login entry with the plan and this path preserved so
-// the purchase resumes automatically after sign-in.
+// FRPB — /checkout entry.
+//
+// Two rails, selected by currency:
+//   • INR → the SELF-HOSTED Direct UPI engine (zero-MDR): the customer pays
+//     straight to the merchant VPA via QR / native UPI app and the license is
+//     granted on UTR verification. No sign-in is required to pay — the license
+//     is bound to the email entered at checkout.
+//   • USD → the existing authenticated gateway hand-off (CheckoutClient), which
+//     redirects to the provider-hosted checkout and grants via webhook.
+//
+// The currency + selected plan are preserved across the auth hop for the USD
+// rail so the purchase resumes automatically after sign-in.
 
 import { redirect } from "next/navigation";
 import { PLANS, type PlanSlug } from "@frpb/shared";
 import { createClient } from "@/lib/supabase/server";
 import CheckoutClient from "@/components/checkout/checkout-client";
+import DirectUpiCheckout from "@/components/checkout/direct-upi-checkout";
 import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +34,7 @@ const PLAN_SLUGS = new Set<string>(PLANS.map((plan) => plan.slug));
 const CURRENCIES = new Set<string>(["USD", "INR"]);
 
 interface CheckoutPageProps {
-  searchParams?: { plan?: string; currency?: string };
+  searchParams?: { plan?: string; currency?: string; method?: string };
 }
 
 export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
@@ -40,11 +48,27 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   const currency: "USD" | "INR" =
     rawCurrency && CURRENCIES.has(rawCurrency) ? (rawCurrency as "USD" | "INR") : "USD";
 
+  // `?method=upi` forces the direct-UPI rail regardless of currency.
+  const wantsUpi = searchParams?.method === "upi" || currency === "INR";
+
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // ── Direct UPI rail (self-hosted, zero-MDR) ────────────────────────────────
+  // Deliberately NOT gated behind sign-in: a buyer can pay from a direct link
+  // and receive the license by email. The signed-in email (when present) is
+  // prefilled for convenience.
+  if (wantsUpi) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12">
+        <DirectUpiCheckout defaultEmail={user?.email ?? null} />
+      </main>
+    );
+  }
+
+  // ── Gateway rail (USD) — requires a signed-in account ──────────────────────
   // Not signed in → login, preserving the plan + currency + post-auth target.
   if (!user) {
     const query = new URLSearchParams({ redirectTo: "/checkout" });

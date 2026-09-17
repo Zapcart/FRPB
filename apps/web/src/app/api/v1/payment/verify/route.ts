@@ -1,0 +1,195 @@
+// FRPB — POST /api/v1/payment/verify
+//
+// Claims a direct-UPI order by submitting the customer's 12-digit UPI
+// reference (UTR/RRN). On success the order is marked PAID and a license is
+// minted exactly once.
+//
+// Security hardening:
+//   1. UTR STRUCTURE — must be exactly 12 numeric digits (spaces/dashes from a
+//      copied bank SMS are normalised away first).
+//   2. UTR UNIQUENESS  — `PaymentOrder.utr` carries a unique index, so the same
+//      reference can never be claimed twice (double-spend protection). We also
+//      pre-check for a friendly error instead of leaking a P2002 constraint.
+//   3. ORDER EXPIRY    — a PENDING order past its 10-minute window is EXPIRED
+//      and refuses the claim.
+//   4. IDEMPOTENT GRANT — an already-PAID order returns its existing license
+//      rather than minting a second key.
+
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import { preflight, withCorsResponse } from "@/lib/cors";
+import { isValidUtr, normalizeUtr } from "@/lib/upi";
+import {
+  grantLicenseForOrder,
+  planNameFor,
+  resolveOrderStatus,
+} from "@/lib/payment/orders";
+import type { PlanSlug } from "@frpb/shared";
+
+export const dynamic = "force-dynamic";
+export const OPTIONS = preflight;
+
+const VerifySchema = z.object({
+  orderId: z.string().min(3).max(64),
+  utrNumber: z.string().min(1).max(32),
+});
+
+export async function POST(req: NextRequest) {
+  return withCorsResponse(await handleVerify(req));
+}
+
+async function handleVerify(req: NextRequest) {
+  // 1. Parse + validate the payload.
+  let parsed: z.infer<typeof VerifySchema>;
+  try {
+    parsed = VerifySchema.parse(await req.json());
+  } catch (err) {
+    return NextResponse.json(
+      { success: false, message: "Invalid request", detail: (err as Error).message },
+      { status: 400 }
+    );
+  }
+
+  const orderId = parsed.orderId.trim();
+  const utr = normalizeUtr(parsed.utrNumber);
+
+  // 2. UTR STRUCTURE — exactly 12 numeric digits.
+  if (!isValidUtr(utr)) {
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "That UPI reference doesn't look right. Enter the 12-digit UTR/RRN number from your payment app.",
+      },
+      { status: 422 }
+    );
+  }
+
+  // 3. Load the order.
+  const order = await prisma.paymentOrder.findUnique({ where: { orderId } });
+  if (!order) {
+    return NextResponse.json(
+      { success: false, message: "Order not found. Please start a new checkout." },
+      { status: 404 }
+    );
+  }
+
+  // 4. Already paid → idempotent success (returns the same license).
+  if (order.status === "PAID") {
+    return NextResponse.json({
+      success: true,
+      alreadyVerified: true,
+      status: "PAID",
+      orderId: order.orderId,
+      planId: order.planId,
+      planName: planNameFor(order.planId as PlanSlug),
+      amount: order.amount,
+      utr: order.utr,
+      licenseId: order.licenseId,
+    });
+  }
+
+  // 5. ORDER EXPIRY — never accept a claim against a stale order.
+  const status = await resolveOrderStatus(order);
+  if (status === "EXPIRED") {
+    return NextResponse.json(
+      {
+        success: false,
+        status: "EXPIRED",
+        message: "This order expired after 10 minutes. Please start a new checkout.",
+      },
+      { status: 410 }
+    );
+  }
+  if (status === "FAILED") {
+    return NextResponse.json(
+      { success: false, status: "FAILED", message: "This order can no longer be verified." },
+      { status: 409 }
+    );
+  }
+
+  // 6. UTR UNIQUENESS — reject a reference already attached to another order.
+  const existingClaim = await prisma.paymentOrder.findUnique({ where: { utr } });
+  if (existingClaim && existingClaim.orderId !== order.orderId) {
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "This UPI reference has already been used for another order. Every payment can be claimed once.",
+      },
+      { status: 409 }
+    );
+  }
+
+  // 7. Mark PAID and claim the UTR. The unique index is the race-safe guard: if
+  //    a concurrent request binds the same UTR first, Prisma raises P2002 and we
+  //    surface the duplicate message rather than double-granting.
+  try {
+    const updated = await prisma.paymentOrder.updateMany({
+      where: { id: order.id, status: "PENDING", utr: null },
+      data: { status: "PAID", utr, paidAt: new Date() },
+    });
+    if (updated.count === 0) {
+      // Someone else already flipped it — re-read and report the real state.
+      const fresh = await prisma.paymentOrder.findUnique({ where: { id: order.id } });
+      if (fresh?.status === "PAID") {
+        return NextResponse.json({
+          success: true,
+          alreadyVerified: true,
+          status: "PAID",
+          orderId: fresh.orderId,
+          utr: fresh.utr,
+          licenseId: fresh.licenseId,
+        });
+      }
+      return NextResponse.json(
+        { success: false, message: "This order is no longer awaiting payment." },
+        { status: 409 }
+      );
+    }
+  } catch (err) {
+    const code = (err as { code?: string }).code;
+    if (code === "P2002") {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "This UPI reference has already been used for another order.",
+        },
+        { status: 409 }
+      );
+    }
+    console.error("[payment/verify] DB error while claiming UTR:", err);
+    return NextResponse.json(
+      { success: false, message: "We couldn't verify your payment right now. Please retry." },
+      { status: 503 }
+    );
+  }
+
+  // 8. Grant the license (idempotent — one key per order).
+  let licenseKey: string | undefined;
+  let licenseId: string | undefined;
+  try {
+    const granted = await grantLicenseForOrder(orderId);
+    licenseId = granted?.licenseId;
+    licenseKey = granted?.licenseKey;
+  } catch (err) {
+    // The payment is recorded; a grant failure must not lose it. The customer
+    // can re-verify (idempotent) or recover the key from the dashboard.
+    console.error("[payment/verify] license grant failed:", err);
+  }
+
+  return NextResponse.json({
+    success: true,
+    status: "PAID",
+    orderId: order.orderId,
+    planId: order.planId,
+    planName: planNameFor(order.planId as PlanSlug),
+    amount: order.amount,
+    utr,
+    licenseId,
+    /** Raw key returned once so the checkout can display it immediately. */
+    licenseKey,
+    message: "Payment verified — your license is active.",
+  });
+}
