@@ -68,7 +68,39 @@ async function handleVerify(req: NextRequest) {
   }
 
   // 3. Load the order.
-  const order = await prisma.paymentOrder.findUnique({ where: { orderId } });
+  //
+  //    GUARDED: an unhandled rejection here (pooler unreachable, PgBouncer
+  //    prepared-statement rejection, schema drift) escaped the handler as an
+  //    HTML 500. The client's `res.json()` then threw inside its catch-all and
+  //    told the customer "Verification failed. Please check your connection" —
+  //    the wrong diagnosis for a server-side DB fault, and invisible in logs.
+  let order;
+  try {
+    order = await prisma.paymentOrder.findUnique({ where: { orderId } });
+  } catch (err) {
+    const code = (err as { code?: string }).code;
+    console.error(
+      `[UTR_Verify_Error]: order lookup failed for orderId=${orderId} (code=${code ?? "NONE"}):`,
+      err
+    );
+    if (code === "P2002" || code === "P2021" || code === "P2022") {
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Payments are being reconciled — the payment database is not fully migrated. Please retry shortly.",
+        },
+        { status: 503 }
+      );
+    }
+    return NextResponse.json(
+      {
+        success: false,
+        message: "We couldn't reach the payment database. Please retry in a moment.",
+      },
+      { status: 503 }
+    );
+  }
   if (!order) {
     return NextResponse.json(
       { success: false, message: "Order not found. Please start a new checkout." },
@@ -201,14 +233,21 @@ async function handleVerify(req: NextRequest) {
   // 8. Grant the license (idempotent — one key per order).
   let licenseKey: string | undefined;
   let licenseId: string | undefined;
+  let grantFailed = false;
   try {
     const granted = await grantLicenseForOrder(orderId);
     licenseId = granted?.licenseId;
     licenseKey = granted?.licenseKey;
+    if (!granted) grantFailed = true;
   } catch (err) {
     // The payment is recorded; a grant failure must not lose it. The customer
     // can re-verify (idempotent) or recover the key from the dashboard.
-    console.error("[payment/verify] license grant failed:", err);
+    //
+    // `grantFailed` is surfaced to the client so it does not claim "your
+    // license is active" while no key was actually minted — a silent success
+    // that left paid customers with nothing.
+    grantFailed = true;
+    console.error("[UTR_Verify_Error]: license grant failed for orderId=" + orderId + ":", err);
   }
 
   return NextResponse.json({
@@ -222,6 +261,10 @@ async function handleVerify(req: NextRequest) {
     licenseId,
     /** Raw key returned once so the checkout can display it immediately. */
     licenseKey,
-    message: "Payment verified — your license is active.",
+    /** `true` when payment was claimed but minting the license failed. */
+    grantFailed,
+    message: grantFailed
+      ? "Payment verified — we're finalising your license. It will appear in your dashboard shortly."
+      : "Payment verified — your license is active.",
   });
 }

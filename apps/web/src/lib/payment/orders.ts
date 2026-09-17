@@ -60,22 +60,44 @@ export async function resolveOrderStatus(
   order: { id: string; status: string; expiresAt: Date },
   client: PrismaClient = prisma
 ): Promise<"PENDING" | "PAID" | "FAILED" | "EXPIRED"> {
-  if (isExpired(order)) {
-    try {
-      await client.paymentOrder.update({
-        where: { id: order.id },
-        data: { status: "EXPIRED" },
-      });
-    } catch {
-      // A concurrent claim may have flipped it to PAID — re-read and trust DB.
-    }
+  if (!isExpired(order)) {
+    return order.status as "PENDING" | "PAID" | "FAILED" | "EXPIRED";
+  }
+
+  // Expired: persist the terminal state, then re-read so a concurrent claim that
+  // flipped it to PAID wins. BOTH DB calls are individually guarded — this
+  // helper is called from the status poller and the UTR verifier, and a
+  // rejection escaping here (as the re-read previously did) surfaced as a bare
+  // 500: the tracker silently died and the UTR form reported a bogus
+  // "check your connection" instead of the real reason.
+  try {
+    await client.paymentOrder.update({
+      where: { id: order.id },
+      data: { status: "EXPIRED" },
+    });
+  } catch (err) {
+    // A concurrent claim may have flipped it to PAID, or the DB may be down.
+    console.warn(
+      "[payment/orders] could not persist EXPIRED (will re-read):",
+      (err as Error)?.message ?? err
+    );
+  }
+
+  try {
     const fresh = await client.paymentOrder.findUnique({
       where: { id: order.id },
       select: { status: true },
     });
     return (fresh?.status as "PENDING" | "PAID" | "FAILED" | "EXPIRED") ?? "EXPIRED";
+  } catch (err) {
+    // Unreachable DB: fall back to the locally computed expiry rather than
+    // throwing, so callers always receive a usable status.
+    console.error(
+      "[payment/orders] status re-read failed; reporting EXPIRED from local clock:",
+      (err as Error)?.message ?? err
+    );
+    return "EXPIRED";
   }
-  return order.status as "PENDING" | "PAID" | "FAILED" | "EXPIRED";
 }
 
 /**

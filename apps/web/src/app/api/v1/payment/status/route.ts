@@ -36,7 +36,12 @@ async function handleStatus(req: NextRequest) {
       include: { license: { select: { id: true, expiresAt: true } } },
     });
   } catch (err) {
-    console.error("[payment/status] DB error:", err);
+    // Structured code first — this is the line operators grep for when the
+    // checkout tracker reports "temporarily unavailable".
+    console.error(
+      `[payment/status] DB error (code=${(err as { code?: string }).code ?? "NONE"}):`,
+      err
+    );
     return NextResponse.json(
       { success: false, message: "We couldn't check the order right now. Please retry." },
       { status: 503 }
@@ -57,17 +62,25 @@ async function handleStatus(req: NextRequest) {
     Math.floor((order.expiresAt.getTime() - Date.now()) / 1000)
   );
 
-  return NextResponse.json({
-    success: true,
-    orderId: order.orderId,
-    status,
-    planId: order.planId as PlanSlug,
-    amount: order.amount,
-    currency: order.currency,
-    provider: order.provider,
-    utr: order.utr,
-    licenseId: order.licenseId,
-    expiresAt: order.expiresAt.toISOString(),
-    expiresInSeconds,
-  });
+  return NextResponse.json(
+    {
+      success: true,
+      orderId: order.orderId,
+      status,
+      planId: order.planId as PlanSlug,
+      amount: order.amount,
+      currency: order.currency,
+      provider: order.provider,
+      utr: order.utr,
+      licenseId: order.licenseId,
+      expiresAt: order.expiresAt.toISOString(),
+      expiresInSeconds,
+    },
+    {
+      // Explicitly uncacheable. Without this a CDN / intermediary can serve a
+      // stale PENDING snapshot to the 3-second poller, which presents as "live
+      // tracking is stuck" even though the order was already PAID server-side.
+      headers: { "Cache-Control": "no-store, max-age=0" },
+    }
+  );
 }

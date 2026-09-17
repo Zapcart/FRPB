@@ -101,6 +101,17 @@ export default function DirectUpiCheckout({
   const [isMobile, setIsMobile] = useState(false);
   const [copied, setCopied] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
+  /**
+   * Health of the live tracker. The payment step is rendered ONLY while this is
+   * "live": without a persisted order row there is nothing for the 3-second
+   * poller or the UTR verifier to resolve, so showing a QR would invite payments
+   * that can never be auto-verified.
+   */
+  const [tracking, setTracking] = useState<"idle" | "live" | "unavailable">("idle");
+  /** Transient poll failures — drives the degraded badge + retry backoff. */
+  const [trackingDegraded, setTrackingDegraded] = useState(false);
+  const pollFailuresRef = useRef(0);
+  const [pollFailures, setPollFailures] = useState(0);
 
   const plan = useMemo(() => PLANS.find((p) => p.planId === planId)!, [planId]);
 
@@ -118,6 +129,10 @@ export default function DirectUpiCheckout({
     setCreating(true);
     setUtr("");
     setCopied(false);
+    setTracking("idle");
+    setTrackingDegraded(false);
+    pollFailuresRef.current = 0;
+    setPollFailures(0);
     try {
       const res = await fetch("/api/v1/payment/create", {
         method: "POST",
@@ -142,20 +157,30 @@ export default function DirectUpiCheckout({
         setError(data.message ?? "Could not start the payment. Please try again.");
         return;
       }
+      // LIVE TRACKING IS A HARD REQUIREMENT, not a nice-to-have.
+      //
+      // A non-persisted order has no database row, so BOTH the status poller and
+      // POST /payment/verify are guaranteed to fail on it — verify returns 404
+      // ("Order not found"). Previously the QR was still rendered with a soft
+      // "you can still pay normally" notice, which produced the reported pair of
+      // errors: "Live order tracking is temporarily unavailable" next to a
+      // "Verification failed" on every UTR submit, after real money had moved.
+      // Refuse the step up front so no unverifiable payment can be initiated.
+      if (data.persisted === false) {
+        setTracking("unavailable");
+        setError(
+          "Live order tracking is temporarily unavailable, so we can't take a payment right now. " +
+            "No money has been sent — please retry in a moment."
+        );
+        return;
+      }
       setOrder(data.order);
       setUpiUri(data.upiUri);
       setIntentUrls(data.intentUrls ?? null);
       setSecondsLeft(data.order.expiresInSeconds);
-      // A non-persisted order still works — the payment settles to the VPA and
-      // the UTR verification reconciles it. Tell the customer so the missing
-      // live status polling is expected rather than looking like a stall.
-      if (data.persisted === false) {
-        setNotice(
-          "Live order tracking is temporarily unavailable — you can still pay normally. " +
-            "After paying, enter your UTR below to activate your license."
-        );
-      }
+      setTracking("live");
     } catch {
+      setTracking("idle");
       setError("Could not reach the payment service. Check your connection and retry.");
     } finally {
       setCreating(false);
@@ -174,17 +199,58 @@ export default function DirectUpiCheckout({
 
   const expired = Boolean(order) && secondsLeft <= 0 && !paid;
 
-  // ── Real-time status polling (every 3s) ───────────────────────────────────
+  // ── Real-time status polling (3s, exponential backoff under failure) ──────
+  //
+  // Previously a catch-all `catch {}` swallowed EVERY transport failure and a
+  // non-ok response was never inspected at all — `data.success` was simply
+  // undefined on a 404/500, so the tracker failed completely silently and the
+  // page sat on "waiting for payment" forever. Now: 404 is terminal and
+  // explicit, 5xx is counted and surfaces a visible degraded badge, and the
+  // interval backs off to 15s so a hard outage does not hammer the API.
   useEffect(() => {
-    if (!order || paid || expired) return;
+    if (!order || paid || expired || tracking !== "live") return;
     const orderId = order.orderId;
 
+    let timer: number | undefined;
+    let cancelled = false;
+
+    const schedule = () => {
+      // 3s while healthy; 6s → 12s → 15s (cap) as consecutive failures accrue.
+      const failures = pollFailuresRef.current;
+      const delay = failures === 0 ? 3000 : Math.min(3000 * 2 ** failures, 15000);
+      timer = window.setTimeout(() => void poll(), delay);
+    };
+
     const poll = async () => {
+      if (cancelled) return;
       try {
         const res = await fetch(
           `/api/v1/payment/status?orderId=${encodeURIComponent(orderId)}`,
           { cache: "no-store" }
         );
+
+        if (res.status === 404) {
+          // Terminal: the order row genuinely does not exist. Retrying forever
+          // only spun the UI.
+          setTracking("unavailable");
+          setError(
+            "We lost track of this order. Please start a new payment. If you have already paid, " +
+              "your UTR is recorded and support can activate the license for you."
+          );
+          return;
+        }
+
+        if (!res.ok) {
+          pollFailuresRef.current += 1;
+          setPollFailures(pollFailuresRef.current);
+          if (pollFailuresRef.current >= 2) setTrackingDegraded(true);
+          return;
+        }
+
+        pollFailuresRef.current = 0;
+        setPollFailures(0);
+        setTrackingDegraded(false);
+
         const data = (await res.json()) as {
           success?: boolean;
           status?: string;
@@ -210,14 +276,22 @@ export default function DirectUpiCheckout({
           setError("This order expired after 10 minutes. Please start a new payment.");
         }
       } catch {
-        // Transient network hiccup — the next tick retries.
+        // Transport-level failure (offline, DNS, aborted request). Count it so
+        // the badge appears and the interval backs off — never fail silently.
+        pollFailuresRef.current += 1;
+        setPollFailures(pollFailuresRef.current);
+        if (pollFailuresRef.current >= 2) setTrackingDegraded(true);
+      } finally {
+        if (!cancelled) schedule();
       }
     };
 
-    const timer = window.setInterval(() => void poll(), 3000);
     void poll();
-    return () => window.clearInterval(timer);
-  }, [order, paid, expired, router]);
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [order, paid, expired, tracking, router]);
 
   // ── Manual UTR verification ───────────────────────────────────────────────
   const verifyPayment = useCallback(async () => {
@@ -232,12 +306,39 @@ export default function DirectUpiCheckout({
         credentials: "include",
         body: JSON.stringify({ orderId: order.orderId, utrNumber: utr.trim() }),
       });
-      const data = (await res.json()) as {
+
+      // Parse defensively. An unhandled server exception returns an HTML 500
+      // body, and `res.json()` throwing here was swallowed by the outer catch —
+      // which is exactly what turned a server-side DB fault into the misleading
+      // "Verification failed. Please check your connection and retry."
+      let data: {
         success?: boolean;
         status?: string;
         message?: string;
         licenseKey?: string;
-      };
+        grantFailed?: boolean;
+      } = {};
+      try {
+        data = (await res.json()) as typeof data;
+      } catch {
+        setError(
+          "Verification failed on our side (server error). Your payment is not lost — please retry, " +
+            "or contact support with your UTR."
+        );
+        return;
+      }
+
+      // 404 = the order row is gone. Retrying cannot help; say so precisely
+      // instead of blaming the customer's connection.
+      if (res.status === 404) {
+        setTracking("unavailable");
+        setError(
+          data.message ??
+            "We couldn't find that order. Please start a new payment — if you have already paid, contact support with your UTR."
+        );
+        return;
+      }
+
       if (!res.ok || !data.success) {
         setError(data.message ?? "We couldn't verify that UPI reference.");
         return;
@@ -250,7 +351,13 @@ export default function DirectUpiCheckout({
         }
       }
       setPaid(true);
-      setNotice("Payment verified — your license is active. Redirecting…");
+      // Do not claim the license is active when minting failed on the server —
+      // the customer would be told to expect a key that never arrives.
+      setNotice(
+        data.grantFailed
+          ? "Payment verified — finalising your license. Redirecting to your dashboard…"
+          : "Payment verified — your license is active. Redirecting…"
+      );
       // Route through the unified callback so activation + redirect are shared
       // with the PayGlocal rail.
       window.setTimeout(
@@ -263,7 +370,11 @@ export default function DirectUpiCheckout({
         900
       );
     } catch {
-      setError("Verification failed. Please check your connection and retry.");
+      // Only reached for genuine transport failures now that the response body
+      // is parsed defensively above.
+      setError(
+        "We couldn't reach the server to verify this UTR. Check your connection and retry — your payment is safe."
+      );
     } finally {
       setVerifying(false);
     }
@@ -373,7 +484,9 @@ export default function DirectUpiCheckout({
       </section>
 
       {/* ── Step 2 — pay ───────────────────────────────────────────────────── */}
-      {order && upiUri && !paid && (
+      {/* Gate on `tracking === "live"`: never invite a payment that the poller
+          and the UTR verifier cannot resolve. */}
+      {order && upiUri && !paid && tracking === "live" && (
         <section className="card mt-5 p-6 sm:p-8">
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -478,6 +591,13 @@ export default function DirectUpiCheckout({
         <div className="mt-5 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
           <BadgeCheck className="h-4 w-4" />
           Payment confirmed — taking you to your dashboard…
+        </div>
+      )}
+
+      {trackingDegraded && !paid && (
+        <div className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+          Live tracking is having trouble reaching the server — retrying automatically
+          {pollFailures > 0 ? ` (attempt ${pollFailures})` : ""}.
         </div>
       )}
 
