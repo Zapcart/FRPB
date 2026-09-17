@@ -158,10 +158,20 @@ export default function DirectUpiCheckout({
         return;
       }
 
-      // A bare Vercel/Next 500 or 503 returns text/html. An unguarded
-      // res.json() throws a SyntaxError there, which the old catch-all then
-      // reported to the customer as a connectivity problem — masking a genuine
-      // server fault.
+      // Read the body as TEXT first — exactly once.
+      //
+      // A bare Vercel/Next 500 or 503 returns text/html, and calling res.json()
+      // on it throws a SyntaxError that surfaced to the customer as a
+      // connectivity problem, masking a genuine server fault. Reading text first
+      // means the precise server output is ALWAYS available for logging, even
+      // when it is an HTML error page, and the JSON parse becomes optional.
+      let rawText = "";
+      try {
+        rawText = await res.text();
+      } catch (err) {
+        console.error("[Checkout_Fetch_Error]: Status", res.status, "body read failed:", err);
+      }
+
       let data: {
         success?: boolean;
         message?: string;
@@ -171,20 +181,23 @@ export default function DirectUpiCheckout({
         intentUrls?: IntentUrls;
         persisted?: boolean;
       } = {};
-      let bodyWasJson = true;
+      let bodyWasJson = false;
       try {
-        data = await res.json();
+        data = JSON.parse(rawText);
+        bodyWasJson = true;
       } catch {
         bodyWasJson = false;
       }
 
       if (!res.ok || !bodyWasJson || !data.success || !data.order || !data.upiUri) {
+        // Exact status + raw server text, so a non-JSON platform page is not
+        // hidden behind an assumed connectivity failure.
+        console.error("[Checkout_Fetch_Error]: Status", res.status, rawText);
         console.error(
-          "[checkout/upi] HTTP failure creating order — " +
+          "[checkout/upi] payment/create failed — " +
             `status=${res.status} ` +
             `contentType=${res.headers.get("content-type") ?? "unknown"} ` +
-            `json=${bodyWasJson} code=${data.code ?? "none"}`,
-          data
+            `json=${bodyWasJson} code=${data.code ?? "none"}`
         );
         // Only ever surface a message the server actually authored.
         setError(

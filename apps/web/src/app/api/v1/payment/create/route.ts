@@ -46,6 +46,49 @@ const DB_UNAVAILABLE_MESSAGE =
 /** Returned when an error escapes `handleCreate` entirely. */
 const UNHANDLED_MESSAGE = "Database or payment service temporarily unavailable.";
 
+/**
+ * Reduce a Prisma error code to an operational action. Without this the log
+ * says only that the connection failed, which is true but not actionable.
+ */
+function prismaHint(code: string | null): string {
+  switch (code) {
+    case "P1000":
+      return "Authentication failed — verify the DB password in DATABASE_URL.";
+    case "P1001":
+      return "Database host unreachable — check the Supabase project is not paused and the host/port are correct.";
+    case "P1002":
+      return "Connection timed out — the host is reachable but not accepting connections.";
+    case "P1017":
+      return "Server closed the connection — on Supabase port 6543 this usually means `?pgbouncer=true` is missing from DATABASE_URL.";
+    case "P2021":
+    case "P2022":
+      return "Table/column missing — `prisma migrate deploy` has not been applied to this database.";
+    case "P1003":
+      return "Database does not exist — check the database name in the connection URL.";
+    default:
+      return "No recognised Prisma error code — inspect the message and stack above.";
+  }
+}
+
+/**
+ * Log the SHAPE of the connection URL without ever leaking the credential:
+ * driver, host, port, database and which tuning flags are present. Invaluable
+ * for spotting a pooler port with a missing `pgbouncer=true`, and safe to emit.
+ */
+function redactConnectionString(raw: string | undefined): string {
+  const url = raw?.trim();
+  if (!url) return "DATABASE_URL is not set";
+  try {
+    const u = new URL(url);
+    const params = [...u.searchParams.keys()].sort();
+    return `${u.protocol}//<redacted>@${u.hostname}:${u.port || "default"}${
+      u.pathname
+    }${params.length ? `?${params.join("&")}` : ""}`;
+  } catch {
+    return "DATABASE_URL is set but is not a parseable URL";
+  }
+}
+
 export async function POST(req: NextRequest) {
   // TOP-LEVEL SAFETY NET.
   //
@@ -193,11 +236,37 @@ async function handleCreate(req: NextRequest) {
       },
     });
   } catch (err) {
+    // This is THE failure behind the checkout banner: `prisma.paymentOrder.create`
+    // rejected. Prisma signals runtime connection faults with distinct codes that
+    // are otherwise invisible once the error is reduced to a friendly 503 —
+    // surfacing them here is what makes the incident diagnosable from logs.
+    //   P1000 auth failed · P1001 host unreachable · P1002 connect timeout
+    //   P1017 server closed the connection (typical pooler/prepared-statement
+    //         rejection when `?pgbouncer=true` is missing on port 6543)
+    //   P2021/P2022 table/column missing — migration never applied
+    const prismaCode = (err as { code?: string })?.code ?? null;
+    console.error("[PAYMENT_CREATE_CRASH]", err);
+
+    // Full stack + structured context. The raw object dump alone is not
+    // searchable in Vercel logs, and the stack is the only way to tell a pooler
+    // rejection apart from a schema/migration fault.
     console.error(
-      "[payment/create] order persistence failed — refusing to issue an " +
-        "unverifiable UPI QR:",
-      err
+      JSON.stringify({
+        tag: "PAYMENT_CREATE_CRASH",
+        event: "order_persistence_failed",
+        prismaCode,
+        name: err instanceof Error ? err.name : typeof err,
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : null,
+        hint: prismaHint(prismaCode),
+        // Connection shape only — never the credential itself.
+        dbUrl: redactConnectionString(process.env.DATABASE_URL),
+        hasDirectUrl: Boolean(process.env.DIRECT_URL?.trim()),
+      })
     );
+
+    // Safe fallback: structured JSON, never an HTML 500 page, so the client can
+    // parse it and show a real message instead of a connectivity guess.
     return NextResponse.json(
       { success: false, message: DB_UNAVAILABLE_MESSAGE, code: "DB_UNAVAILABLE" },
       { status: 503 }

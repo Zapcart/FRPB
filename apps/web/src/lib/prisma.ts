@@ -56,6 +56,23 @@ function resolveDatasourceUrl(): string | undefined {
     );
   }
 
+  // Unsubstituted copies of the template are the single most common cause of
+  // "auth failed" in a fresh deployment: the URL parses, the host resolves, and
+  // Postgres rejects the credentials. Detect it eagerly and name the fix, rather
+  // than letting it surface later as an opaque P1000 during checkout.
+  const PLACEHOLDER_MARKERS = ["YOUR_PROJECT", "PASSWORD", "your-project", "your_password", "changeme"];
+  const placeholder = PLACEHOLDER_MARKERS.find(
+    (marker) => runtimeUrl.includes(marker) || directUrl?.includes(marker)
+  );
+  if (placeholder) {
+    console.error(
+      `[prisma] DATABASE_URL/DIRECT_URL still contains the placeholder value ` +
+        `"${placeholder}". Replace it with the real Supabase connection string in ` +
+        `apps/web/.env.local (local) or the hosting provider's env settings ` +
+        `(production).`
+    );
+  }
+
   return runtimeUrl;
 }
 
