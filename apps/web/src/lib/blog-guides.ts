@@ -13,9 +13,15 @@
 //   3. `steps` powers the HowTo rich result and MUST mirror the visible
 //      procedure in `sections`. Do not pad one without the other.
 
-import type { BlogPost, BlogSection, FrpMethod } from "./blog";
+import type {
+  BlogCategory,
+  BlogPlatform,
+  BlogPost,
+  BlogSection,
+  FrpMethod,
+} from "./blog";
 
-interface GuideInput {
+export interface GuideInput {
   slug: string;
   title: string;
   description: string;
@@ -35,10 +41,27 @@ interface GuideInput {
   datePublished: string;
   dateModified: string;
   readingMinutes: number;
+  /** Filtering bucket for the /blog tabs. Derived when omitted. */
+  category?: BlogCategory;
+  /** "iOS" | "Android" badge. Derived when omitted. */
+  platform?: BlogPlatform;
+  /** OS versions verified, e.g. ["iOS 16", "iOS 17"] or ["14", "15"]. */
+  osVersions?: string[];
 }
 
-/** Build a BlogPost with the safety note appended consistently. */
-function modelGuide(input: GuideInput): BlogPost {
+/**
+ * Build a BlogPost with the safety note appended consistently.
+ *
+ * Exported so additional guide corpora (iPhone/iOS guides, regional Android
+ * guides) reuse the SAME builder — guaranteeing they carry the structured SEO
+ * fields and the mandated authorised-owner note rather than re-implementing it.
+ */
+export function modelGuide(input: GuideInput): BlogPost {
+  // True when the authored sections already render their own numbered list.
+  // If not, the canonical `input.steps` is appended as a section so the HowTo
+  // markup always matches visible content.
+  const rendersSteps = input.sections.some((s) => (s.steps?.length ?? 0) > 0);
+
   return {
     slug: input.slug,
     title: input.title,
@@ -55,8 +78,17 @@ function modelGuide(input: GuideInput): BlogPost {
     chipset: input.chipset,
     estimatedTime: input.estimatedTime,
     prerequisites: input.prerequisites,
+    category: input.category,
+    platform: input.platform,
+    osVersions: input.osVersions,
     sections: [
       ...input.sections,
+      // The canonical procedure is appended as a rendered section UNLESS the
+      // author already placed the same steps in a section (which every guide
+      // that powers the HowTo rich result does). Without this, a guide could
+      // declare HowTo steps that never appear on the page — a structured-data
+      // policy violation, and the reason this guard exists.
+      ...(rendersSteps ? [] : [canonicalStepSection(input.steps)]),
       {
         heading: "Safety, legality and when to stop",
         paragraphs: [
@@ -65,6 +97,21 @@ function modelGuide(input: GuideInput): BlogPost {
         ],
       },
     ],
+  };
+}
+
+/**
+ * Build the renderable section that carries the canonical procedure, so a
+ * guide's declared `steps` are always visible on the page (and therefore valid
+ * HowTo markup).
+ */
+function canonicalStepSection(steps: string[]): BlogSection {
+  return {
+    heading: "Step-by-step procedure",
+    paragraphs: [
+      "Follow the sequence below in order. Each step is also published as structured HowTo data, so search results can surface it as a step-by-step list.",
+    ],
+    steps,
   };
 }
 

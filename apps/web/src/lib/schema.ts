@@ -167,12 +167,21 @@ export function blogPostingSchema(post: {
   datePublished: string;
   dateModified?: string;
   keywords: string[];
+  /** Category / section name, e.g. "iPhone & iOS". */
+  articleSection?: string;
+  /** Word count of the rendered article. */
+  wordCount?: number;
+  /** Short summary shown as the article standfirst. */
+  abstract?: string;
+  /** Named author/brand (defaults to the FRPB organisation). */
+  authorName?: string;
 }): Record<string, unknown> {
   return {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
     headline: post.title,
     description: post.description,
+    ...(post.abstract ? { abstract: post.abstract } : {}),
     keywords: post.keywords.join(", "),
     url: absoluteUrl(post.path),
     mainEntityOfPage: { "@type": "WebPage", "@id": absoluteUrl(post.path) },
@@ -180,8 +189,15 @@ export function blogPostingSchema(post: {
     dateModified: post.dateModified ?? post.datePublished,
     inLanguage: "en",
     image: absoluteUrl(OG_IMAGE_PATH),
-    author: organizationSchema(),
+    ...(post.articleSection ? { articleSection: post.articleSection } : {}),
+    ...(post.wordCount ? { wordCount: post.wordCount } : {}),
+    author: post.authorName
+      ? { "@type": "Organization", name: post.authorName }
+      : organizationSchema(),
     publisher: organizationSchema(),
+    // Every guide page renders a numbered procedure, so the article doubles as
+    // a HowTo — declaring it here lets Google associate the two rich results.
+    ...(post.wordCount ? { isAccessibleForFree: true } : {}),
   };
 }
 

@@ -4,7 +4,7 @@
 
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/seo";
-import { BLOG_POSTS } from "@/lib/blog";
+import { BLOG_CATEGORY_TABS, BLOG_POSTS } from "@/lib/blog";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
@@ -60,12 +60,26 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
   ];
 
+  // Category-filtered index views are indexable landing pages in their own
+  // right for broad queries ("iPhone iCloud lock guides"), so they are listed
+  // alongside the articles.
+  const categoryPages: MetadataRoute.Sitemap = BLOG_CATEGORY_TABS.filter(
+    (tab) => tab.id !== "all"
+  ).map((tab) => ({
+    url: `${SITE_URL}/blog?category=${tab.id}`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.6,
+  }));
+
   const posts: MetadataRoute.Sitemap = BLOG_POSTS.map((post) => ({
     url: `${SITE_URL}/blog/${post.slug}`,
     lastModified: new Date(post.dateModified),
     changeFrequency: "monthly",
-    priority: 0.6,
+    // Model-specific guides target high-intent long-tail queries, so they rank
+    // slightly above the general index.
+    priority: 0.7,
   }));
 
-  return [...pages, ...posts];
+  return [...pages, ...categoryPages, ...posts];
 }

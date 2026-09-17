@@ -22,6 +22,20 @@ export type FrpMethod =
   | "mtp"
   | "manual"; // No automated transport — hardware/service path only
 
+/**
+ * Blog category used by the /blog index filtering tabs. Kept as a small closed
+ * union so a filter tab can never reference a category no post can carry.
+ */
+export type BlogCategory =
+  | "iphone" // iPhone / iOS activation lock
+  | "samsung" // Samsung Galaxy FRP
+  | "xiaomi" // Xiaomi / Redmi / POCO / HyperOS
+  | "android" // General Android FRP (Vivo, OPPO, Realme, Motorola, …)
+  | "qualcomm"; // Chipset-specific (Qualcomm EDL 9008, MediaTek BROM)
+
+/** Operating system a guide targets. Drives the platform badge and metadata. */
+export type BlogPlatform = "iOS" | "Android";
+
 export interface BlogPost {
   slug: string;
   title: string;
@@ -51,17 +65,37 @@ export interface BlogPost {
   estimatedTime?: string;
   /** Tools/conditions required — surfaced in HowTo `tool`/`supply`. */
   prerequisites?: string[];
+
+  // ── Category / platform metadata (drives filtering + badges) ──────────────
+  /** Filtering bucket shown as a tab on /blog. Derived when omitted. */
+  category?: BlogCategory;
+  /** "iOS" | "Android" — rendered as a badge on the card and the article. */
+  platform?: BlogPlatform;
+  /**
+   * OS versions this guide is verified against, e.g. ["14", "15"] for Android
+   * or ["iOS 17", "iOS 18"] for iPhone. Complements `androidVersions`.
+   */
+  osVersions?: string[];
 }
 
 /**
- * Model-specific, high-intent guides live in ./blog-guides so this file stays
- * readable. Merged below so the blog index, sitemap and dynamic route pick them
- * up with no further wiring.
+ * Model-specific, high-intent guides live in their own modules so this file
+ * stays readable and the corpora can be edited independently. All three are
+ * merged below so the blog index, category tabs, sitemap and dynamic route pick
+ * them up with no further wiring:
+ *
+ *   ./blog-guides         — the core FRP guide set (Samsung, Xiaomi, MediaTek…)
+ *   ./blog-android-guides — high-volume Android OEM/model guides
+ *   ./blog-iphone-guides  — iPhone / iCloud Activation Lock guides
  */
 import { MODEL_GUIDES } from "./blog-guides";
+import { ANDROID_MODEL_GUIDES } from "./blog-android-guides";
+import { IPHONE_GUIDES } from "./blog-iphone-guides";
 
 export const BLOG_POSTS: readonly BlogPost[] = [
   ...MODEL_GUIDES,
+  ...ANDROID_MODEL_GUIDES,
+  ...IPHONE_GUIDES,
   {
     slug: "how-to-bypass-samsung-frp-2026",
     title: "How to Bypass Samsung FRP in 2026: Step-by-Step Guide",
@@ -233,4 +267,160 @@ export const BLOG_POSTS: readonly BlogPost[] = [
 /** Look up a single post by slug. */
 export function getPost(slug: string): BlogPost | undefined {
   return BLOG_POSTS.find((post) => post.slug === slug);
+}
+
+/**
+ * Resolve a post's filtering category.
+ *
+ * An explicit `category` always wins (iPhone guides declare it, since "iPhone"
+ * cannot be inferred from an Android brand). Otherwise it is derived from the
+ * brand/chipset so every existing guide lands in a sensible tab without being
+ * hand-edited.
+ */
+export function categoryOf(post: BlogPost): BlogCategory {
+  if (post.category) return post.category;
+  const brand = (post.brand ?? "").toLowerCase();
+  const model = (post.model ?? "").toLowerCase();
+  const chipset = (post.chipset ?? "").toLowerCase();
+  if (brand.includes("apple") || model.includes("iphone")) return "iphone";
+  if (chipset.includes("qualcomm") || post.method === "edl") return "qualcomm";
+  if (brand.includes("samsung")) return "samsung";
+  if (
+    brand.includes("xiaomi") ||
+    brand.includes("redmi") ||
+    brand.includes("poco") ||
+    model.includes("hyperos")
+  ) {
+    return "xiaomi";
+  }
+  if (chipset.includes("mediatek") || post.method === "brom") return "qualcomm";
+  return "android";
+}
+
+/** Resolve the platform badge for a post. */
+export function platformOf(post: BlogPost): BlogPlatform {
+  if (post.platform) return post.platform;
+  return categoryOf(post) === "iphone" ? "iOS" : "Android";
+}
+
+/**
+ * Filter tabs shown on /blog. `all` is the implicit "no filter" tab.
+ *
+ * A tab may span MORE THAN ONE category: the "Xiaomi / Android" tab covers both
+ * `xiaomi` and the general `android` bucket, which is why the grouping logic
+ * lives on the tab rather than being inferred from the id.
+ */
+export interface BlogCategoryTab {
+  id: TabId;
+  label: string;
+  /** Categories this tab includes (ignored for the "all" tab). */
+  categories: readonly BlogCategory[];
+}
+
+export type TabId = BlogCategory | "all" | "android-all";
+
+export const BLOG_CATEGORY_TABS: readonly BlogCategoryTab[] = [
+  { id: "all", label: "All guides", categories: [] },
+  { id: "iphone", label: "iPhone / iOS", categories: ["iphone"] },
+  { id: "samsung", label: "Samsung", categories: ["samsung"] },
+  // "Xiaomi / Android" deliberately covers the general Android bucket too.
+  { id: "xiaomi", label: "Xiaomi / Android", categories: ["xiaomi", "android"] },
+  { id: "qualcomm", label: "Qualcomm EDL", categories: ["qualcomm"] },
+] as const;
+
+/** Posts belonging to a tab (or every post for the "all" tab). */
+export function postsByCategory(tabId: TabId): readonly BlogPost[] {
+  if (tabId === "all") return BLOG_POSTS;
+  const tab = BLOG_CATEGORY_TABS.find((t) => t.id === tabId);
+  if (!tab) return [];
+  const wanted = new Set(tab.categories);
+  return BLOG_POSTS.filter((post) => wanted.has(categoryOf(post)));
+}
+
+/** Count of posts per tab, used to render the tab labels. */
+export function categoryCounts(): Record<string, number> {
+  const counts: Record<string, number> = { all: BLOG_POSTS.length };
+  for (const tab of BLOG_CATEGORY_TABS) {
+    counts[tab.id] = postsByCategory(tab.id).length;
+  }
+  return counts;
+}
+
+/** Every category that appears in at least one tab (for validation). */
+export const COVERED_CATEGORIES: ReadonlySet<BlogCategory> = new Set(
+  BLOG_CATEGORY_TABS.flatMap((t) => [...t.categories])
+);
+
+/**
+ * The canonical ordered procedure for a post — the first section that actually
+ * renders a numbered list. Shared by the article body, the HowTo JSON-LD and the
+ * table of contents so the three can never drift apart.
+ */
+export function howToStepsFor(post: BlogPost): string[] {
+  return post.sections.find((s) => s.steps?.length)?.steps ?? [];
+}
+
+/** Every numbered step in the post, across all sections (the rendered set). */
+export function allStepsFor(post: BlogPost): string[] {
+  return post.sections.flatMap((s) => s.steps ?? []);
+}
+
+/**
+ * Turn a heading into a stable, URL-safe anchor id.
+ *
+ * Used by BOTH the table of contents links and the `<h2 id>` emitted in the
+ * article body — sharing one function is what guarantees a TOC link always
+ * resolves to the heading it names.
+ */
+export function slugifyHeading(heading: string): string {
+  return heading
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+export interface TocEntry {
+  id: string;
+  label: string;
+}
+
+/**
+ * Build the table of contents from a post's section headings.
+ *
+ * Duplicate headings are de-duplicated by suffixing the anchor, so two sections
+ * that share a title (or slugify to the same string) still get distinct,
+ * working links instead of one dead entry.
+ */
+export function tableOfContentsFor(post: BlogPost): TocEntry[] {
+  const seen = new Map<string, number>();
+  const entries: TocEntry[] = [];
+  for (const section of post.sections) {
+    if (!section.heading) continue;
+    const base = slugifyHeading(section.heading) || `section-${entries.length + 1}`;
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    const id = count === 0 ? base : `${base}-${count + 1}`;
+    entries.push({ id, label: section.heading });
+  }
+  return entries;
+}
+
+/**
+ * Approximate reading time in minutes from the rendered word count.
+ *
+ * `readingMinutes` is authored per post, but a long guide edited with new
+ * sections would silently keep a stale number. This recomputes from the actual
+ * prose and is used when the authored value looks out of date.
+ */
+export function computeReadingMinutes(post: BlogPost): number {
+  const words = post.sections.reduce((total, section) => {
+    const paragraphs = (section.paragraphs ?? []).join(" ").split(/\s+/).length;
+    const steps = (section.steps ?? []).join(" ").split(/\s+/).length;
+    const heading = (section.heading ?? "").split(/\s+/).length;
+    return total + paragraphs + steps + heading;
+  }, 0);
+  // ~200 words/minute, clamped to a sane floor so a short guide never reads "0".
+  return Math.max(1, Math.round(words / 200));
 }
