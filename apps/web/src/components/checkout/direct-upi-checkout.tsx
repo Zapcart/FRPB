@@ -134,27 +134,63 @@ export default function DirectUpiCheckout({
     pollFailuresRef.current = 0;
     setPollFailures(0);
     try {
-      const res = await fetch("/api/v1/payment/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          planId,
-          // Only sent for the buyer's convenience; the server re-derives the
-          // authoritative email from the session when one exists.
-          userEmail: email.trim() || undefined,
-        }),
-      });
-      const data = (await res.json()) as {
+      // Two DISTINCT failure classes, handled and logged separately so a
+      // production incident is unambiguous:
+      //   • NETWORK — offline / DNS / CORS: fetch() itself rejects.
+      //   • HTTP    — a 4xx/5xx arrives; the body may be JSON *or* a platform
+      //               HTML error page, so parsing must not be assumed to work.
+      let res: Response;
+      try {
+        res = await fetch("/api/v1/payment/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            planId,
+            // Only sent for the buyer's convenience; the server re-derives the
+            // authoritative email from the session when one exists.
+            userEmail: email.trim() || undefined,
+          }),
+        });
+      } catch (err) {
+        console.error("[checkout/upi] NETWORK failure creating order:", err);
+        setError("Could not reach the payment service. Check your connection and retry.");
+        return;
+      }
+
+      // A bare Vercel/Next 500 or 503 returns text/html. An unguarded
+      // res.json() throws a SyntaxError there, which the old catch-all then
+      // reported to the customer as a connectivity problem — masking a genuine
+      // server fault.
+      let data: {
         success?: boolean;
         message?: string;
+        code?: string;
         order?: CreatedOrder;
         upiUri?: string;
         intentUrls?: IntentUrls;
         persisted?: boolean;
-      };
-      if (!res.ok || !data.success || !data.order || !data.upiUri) {
-        setError(data.message ?? "Could not start the payment. Please try again.");
+      } = {};
+      let bodyWasJson = true;
+      try {
+        data = await res.json();
+      } catch {
+        bodyWasJson = false;
+      }
+
+      if (!res.ok || !bodyWasJson || !data.success || !data.order || !data.upiUri) {
+        console.error(
+          "[checkout/upi] HTTP failure creating order — " +
+            `status=${res.status} ` +
+            `contentType=${res.headers.get("content-type") ?? "unknown"} ` +
+            `json=${bodyWasJson} code=${data.code ?? "none"}`,
+          data
+        );
+        // Only ever surface a message the server actually authored.
+        setError(
+          (bodyWasJson ? data.message : undefined) ??
+            "We couldn't start the payment. Please try again in a moment."
+        );
         return;
       }
       // LIVE TRACKING IS A HARD REQUIREMENT, not a nice-to-have.
@@ -179,9 +215,13 @@ export default function DirectUpiCheckout({
       setIntentUrls(data.intentUrls ?? null);
       setSecondsLeft(data.order.expiresInSeconds);
       setTracking("live");
-    } catch {
+    } catch (err) {
+      // Should be unreachable — network and body-parse failures are handled
+      // above. Kept as a final net so an unexpected throw cannot leave the UI
+      // stuck on the "creating" spinner.
+      console.error("[checkout/upi] UNEXPECTED failure creating order:", err);
       setTracking("idle");
-      setError("Could not reach the payment service. Check your connection and retry.");
+      setError("Something went wrong starting the payment. Please retry.");
     } finally {
       setCreating(false);
     }

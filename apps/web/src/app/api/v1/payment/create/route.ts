@@ -43,8 +43,45 @@ const CreateSchema = z.object({
 const DB_UNAVAILABLE_MESSAGE =
   "We're having trouble reaching our payment system right now. Please try again in a moment.";
 
+/** Returned when an error escapes `handleCreate` entirely. */
+const UNHANDLED_MESSAGE = "Database or payment service temporarily unavailable.";
+
 export async function POST(req: NextRequest) {
-  return withCorsResponse(await handleCreate(req));
+  // TOP-LEVEL SAFETY NET.
+  //
+  // `withCorsResponse(await handleCreate(req))` evaluates the await BEFORE the
+  // call is made, so any rejection from handleCreate escaped this handler
+  // completely. Next.js then rendered a generic 500 **HTML** error page, which
+  // the checkout client could not parse — surfacing as the misleading
+  // "trouble reaching our payment system" banner with no actionable cause.
+  //
+  // Every failure now resolves to structured JSON. The catch block is itself
+  // guarded so a throw from `withCorsResponse` (CORS header construction) can
+  // never escape either.
+  try {
+    return withCorsResponse(await handleCreate(req));
+  } catch (err) {
+    console.error("[payment/create] UNHANDLED ROUTE ERROR:", err);
+    // Structured context alongside the raw object — the raw dump alone is hard
+    // to query in Vercel log search.
+    console.error(
+      JSON.stringify({
+        tag: "payment/create",
+        event: "unhandled_route_error",
+        name: err instanceof Error ? err.name : typeof err,
+        message: err instanceof Error ? err.message : String(err),
+        code: (err as { code?: string })?.code ?? null,
+      })
+    );
+
+    const body = { success: false, code: "DB_UNAVAILABLE", message: UNHANDLED_MESSAGE };
+    try {
+      return withCorsResponse(NextResponse.json(body, { status: 503 }));
+    } catch {
+      // Last resort: still JSON, just without CORS decoration.
+      return NextResponse.json(body, { status: 503 });
+    }
+  }
 }
 
 async function handleCreate(req: NextRequest) {
@@ -84,7 +121,19 @@ async function handleCreate(req: NextRequest) {
   //    500.
   let email = parsed.userEmail ?? null;
   let userId: string | null = null;
-  const user = await getOptionalUser();
+
+  // `getOptionalUser()` was previously OUTSIDE any guard, contradicting the
+  // contract documented above. It throws SYNCHRONOUSLY when the Supabase env
+  // vars are absent (createClient) and rejects when Supabase is unreachable —
+  // either way it produced an unhandled 500 before the order was ever touched.
+  // A session lookup is a convenience, never a precondition for paying.
+  let user: Awaited<ReturnType<typeof getOptionalUser>> = null;
+  try {
+    user = await getOptionalUser();
+  } catch (err) {
+    console.warn("[payment/create] session lookup failed; continuing as guest:", err);
+  }
+
   if (user) {
     email = user.email;
     try {
