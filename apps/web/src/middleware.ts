@@ -40,10 +40,36 @@ export async function updateSession(request: NextRequest) {
     return response;
   };
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
+  // `createServerClient` throws SYNCHRONOUSLY when the URL/key are absent or
+  // blank. Because this middleware's matcher covers essentially every route,
+  // an unguarded call would convert a single missing env var into a site-wide
+  // 500 — including on public marketing pages that need no auth at all.
+  // Resolve the credentials to plain strings and gate on their presence.
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+  const supabaseConfigured = supabaseUrl.length > 0 && supabaseAnonKey.length > 0;
+
+  // Distinguish three outcomes:
+  //   - an affirmative user            → authenticated
+  //   - an affirmative "no session"    → unauthenticated (bounce /dashboard)
+  //   - a TRANSIENT failure (network /   → unknown: never redirect, let the
+  //     5xx from the Supabase endpoint)     server component decide
+  //
+  // Collapsing the third case into "unauthenticated" is what turned a momentary
+  // Supabase blip into a spontaneous logout when the user clicked a nav link.
+  let user: { id: string } | null = null;
+  let verified = true;
+
+  if (!supabaseConfigured) {
+    // Missing configuration is treated exactly like a transient failure: never
+    // redirect. The /dashboard layout re-checks server-side, so no protected
+    // page is ever served to a guest — but public routes stay fully online.
+    console.warn(
+      "[middleware] Supabase env not configured (NEXT_PUBLIC_SUPABASE_URL/ANON_KEY) — skipping session refresh; auth is deferred to server components."
+    );
+    verified = false;
+  } else {
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -60,40 +86,30 @@ export async function updateSession(request: NextRequest) {
           );
         },
       },
-    }
-  );
+    });
 
-  // IMPORTANT: Do not run any code between createServerClient and
-  // supabase.auth.getUser(). A simple mistake could make it very hard to
-  // debug issues with users being randomly logged out.
-  // Distinguish three outcomes:
-  //   - an affirmative user            → authenticated
-  //   - an affirmative "no session"    → unauthenticated (bounce /dashboard)
-  //   - a TRANSIENT failure (network /   → unknown: never redirect, let the
-  //     5xx from the Supabase endpoint)     server component decide
-  //
-  // Collapsing the third case into "unauthenticated" is what turned a momentary
-  // Supabase blip into a spontaneous logout when the user clicked a nav link.
-  let user: { id: string } | null = null;
-  let verified = true;
-  try {
-    const { data, error } = await supabase.auth.getUser();
-    if (error) {
-      // A missing/expired session is an AFFIRMATIVE answer, not a failure.
-      // Supabase returns AuthSessionMissingError with status 400/401 in that
-      // case; anything else (5xx, fetch failure) is transient → unverified.
-      const status = (error as { status?: number }).status ?? 0;
-      user = data?.user ?? null;
-      if (!user && status >= 500) verified = false;
-      if (!user && status === 0 && /fetch|network|timeout/i.test(error.message ?? "")) {
-        verified = false;
+    // IMPORTANT: Do not run any code between createServerClient and
+    // supabase.auth.getUser(). A simple mistake could make it very hard to
+    // debug issues with users being randomly logged out.
+    try {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) {
+        // A missing/expired session is an AFFIRMATIVE answer, not a failure.
+        // Supabase returns AuthSessionMissingError with status 400/401 in that
+        // case; anything else (5xx, fetch failure) is transient → unverified.
+        const status = (error as { status?: number }).status ?? 0;
+        user = data?.user ?? null;
+        if (!user && status >= 500) verified = false;
+        if (!user && status === 0 && /fetch|network|timeout/i.test(error.message ?? "")) {
+          verified = false;
+        }
+      } else {
+        user = data.user ?? null;
       }
-    } else {
-      user = data.user ?? null;
+    } catch {
+      // Thrown fetch/network error → treat as unverified, never as "logged out".
+      verified = false;
     }
-  } catch {
-    // Thrown fetch/network error → treat as unverified, never as "logged out".
-    verified = false;
   }
 
   const { pathname } = request.nextUrl;

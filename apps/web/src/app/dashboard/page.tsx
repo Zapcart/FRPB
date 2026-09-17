@@ -112,7 +112,11 @@ export default function DashboardPage() {
 
   const loadDevices = async (licenseId: string): Promise<DashboardDeviceItem[]> => {
     try {
-      const res = await fetch(`/api/v1/license/devices?licenseId=${licenseId}`, {
+      // `licenseId` is interpolated into a query string — encode it so a
+      // malformed/crafted id cannot truncate the query or inject extra params.
+      const res = await fetch(
+        `/api/v1/license/devices?licenseId=${encodeURIComponent(licenseId)}`,
+        {
         cache: "no-store",
         credentials: "include",
       });

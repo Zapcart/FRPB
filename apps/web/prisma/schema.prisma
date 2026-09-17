@@ -8,7 +8,15 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Runtime connection. For Supabase this should target the transaction pooler
+  // (port 6543) WITH `?pgbouncer=true&connection_limit=1` appended, otherwise
+  // Prisma's prepared statements are rejected by PgBouncer/Supavisor and the
+  // app degrades intermittently ("Database connecting…").
+  url       = env("DATABASE_URL")
+  // Migration/DDL connection. Points at the DIRECT (session, port 5432) URL so
+  // `prisma migrate` never runs through the pooler. Without this, migrations
+  // are executed against 6543 and can hang or corrupt advisory-lock state.
+  directUrl = env("DIRECT_URL")
 }
 
 // ─── Enums ────────────────────────────────────────────────
