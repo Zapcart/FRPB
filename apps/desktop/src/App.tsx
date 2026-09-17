@@ -5,11 +5,11 @@ import MainDashboard from "./components/MainDashboard";
 import { RefreshCw, RotateCcw, Loader2 } from "lucide-react";
 
 /**
- * Root component. Every launch starts at the ActivationScreen (online
- * verification is the source of truth — the encrypted cached profile only
- * pre-fills the key as a convenience hint and never grants access by itself).
- * A successful verify() elevates the user into MainDashboard for the rest of
- * the session.
+ * Root component. An already-activated install restores its ENCRYPTED license
+ * session on launch and goes straight to the dashboard, so the user is not
+ * asked to re-verify every time. With no persisted session the ActivationScreen
+ * is shown; a successful verify() stores the session and elevates the user into
+ * MainDashboard for the rest of the session.
  */
 export default function App() {
   const [profile, setProfile] = useState<LicenseProfile | null>(null);
@@ -29,7 +29,23 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    void refreshCached();
+    // Restore the persisted session first so an activated install skips the
+    // activation screen entirely (the encrypted cache IS the login).
+    let restored = false;
+    window.frpb.license
+      .getSession()
+      .then((session) => {
+        if (session?.active && session.profile) {
+          restored = true;
+          setProfile(session.profile);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        // Only used for the "use previous key" hint on the activation screen.
+        if (!restored) void refreshCached();
+      });
+
     window.frpb.system
       .cacheInfo()
       .then((info) => setCachePath(info.cachePath))
@@ -61,7 +77,16 @@ export default function App() {
   return (
     <>
       {profile ? (
-        <MainDashboard profile={profile} onSignOut={() => setProfile(null)} />
+        <MainDashboard
+          profile={profile}
+          onSignOut={() => {
+            // Explicit sign-out must ALSO drop the persisted session, otherwise
+            // the next launch would silently log the user back in.
+            void window.frpb.license.clearSession().catch(() => {});
+            setCached(profile);
+            setProfile(null);
+          }}
+        />
       ) : (
         <ActivationScreen cached={cached} onActivated={setProfile} />
       )}

@@ -27,6 +27,7 @@ import type {
   FrpbBridge,
   HardwareSnapshot,
   LicenseProfile,
+  LicenseSession,
   LogEntry,
   ModelCatalogEntry,
   OperationEvent,
@@ -187,6 +188,33 @@ function createWebBridge(): FrpbBridge {
     }
   }
 
+  // Browser-preview activation session. Persisted to localStorage (the browser
+  // analogue of the Electron safeStorage cache) so a refresh keeps the user
+  // logged in, mirroring the desktop "stay activated" behaviour.
+  const WEB_SESSION_KEY = "frpb.license.session";
+
+  function readWebSession(): LicenseSession | null {
+    try {
+      const raw = window.localStorage.getItem(WEB_SESSION_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as LicenseSession;
+      return parsed?.profile ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function writeWebSession(profile: LicenseProfile): void {
+    try {
+      window.localStorage.setItem(
+        WEB_SESSION_KEY,
+        JSON.stringify({ profile, verifiedAt: new Date().toISOString(), active: true })
+      );
+    } catch {
+      // Storage may be unavailable under strict privacy settings.
+    }
+  }
+
   return {
     license: {
       verify: async (key: string): Promise<VerifyResponse> => {
@@ -202,11 +230,13 @@ function createWebBridge(): FrpbBridge {
             devicesUsed: 1,
             activatedAt: new Date().toISOString(),
           };
+          writeWebSession(profile);
           return {
             httpStatus: 200,
             success: true,
             status: "ACTIVE",
             license: profile,
+            isMasterTest: true,
             message: "Activated (web preview mode)",
           };
         }
@@ -217,7 +247,19 @@ function createWebBridge(): FrpbBridge {
           message: `Web preview mode: use the master test key ${MASTER_TEST_KEY} to explore the dashboard.`,
         };
       },
-      getCachedProfile: async (): Promise<LicenseProfile | null> => null,
+      getCachedProfile: async (): Promise<LicenseProfile | null> =>
+        readWebSession()?.profile ?? null,
+      getSession: async (): Promise<LicenseSession | null> => readWebSession(),
+      clearSession: async (): Promise<{ ok: boolean; removed: boolean }> => {
+        let removed = false;
+        try {
+          removed = window.localStorage.getItem(WEB_SESSION_KEY) !== null;
+          window.localStorage.removeItem(WEB_SESSION_KEY);
+        } catch {
+          // Storage may be unavailable.
+        }
+        return { ok: true, removed };
+      },
     },
     device: {
       status: async (): Promise<DeviceStatus> => ({

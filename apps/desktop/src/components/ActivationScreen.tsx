@@ -24,21 +24,56 @@ const STATUS_MESSAGES: Partial<Record<VerifyStatus, string>> = {
   SERVER_ERROR: "Our server hit an error. Please try again in a moment.",
 };
 
+/** Shown whenever activation cannot reach the verification server. */
+const OFFLINE_MESSAGE =
+  "Offline Mode: Please check your internet connection to verify your license key.";
+
+/** Branded copy for the license-key placeholder (never a hardcoded test key). */
+const LICENSE_PLACEHOLDER = "Enter your license key";
+
+/**
+ * True when text carries a raw technical API path / transport detail that must
+ * never be shown in the activation banner (e.g. the /api/v1/license/verify
+ * endpoint or an ECONNREFUSED code).
+ */
+function looksTechnical(text: string): boolean {
+  return (
+    /https?:\/\//i.test(text) ||
+    /\/api\//i.test(text) ||
+    /\bECONNREFUSED\b/i.test(text) ||
+    /\bENOTFOUND\b/i.test(text) ||
+    /\bETIMEDOUT\b/i.test(text) ||
+    /\bfetch failed\b/i.test(text) ||
+    /\bundici\b/i.test(text)
+  );
+}
+
+/**
+ * Final renderer-side guard: replace any message that leaks a raw API path or
+ * transport code with the friendly offline copy. The main process already
+ * sanitises its messages — this is defence in depth so the banner stays
+ * professional even if a raw error slips through IPC.
+ */
+function friendlyError(message: string | undefined | null): string {
+  if (!message) return OFFLINE_MESSAGE;
+  return looksTechnical(message) ? OFFLINE_MESSAGE : message;
+}
+
 interface ActivationScreenProps {
   cached: LicenseProfile | null;
   onActivated: (profile: LicenseProfile) => void;
 }
 
 /**
- * Entry screen shown before verification. Verifying is always online — the
- * encrypted cached profile never grants access by itself.
+ * Entry screen shown when this install has no persisted license session.
  *
- * The key field ALWAYS starts empty. Previously it was pre-filled from the
- * encrypted cache, which meant that after activating with the shared
- * FRPB-TEST-* key the published test string appeared in the box on every
- * subsequent launch — and (because that value is compiled into the app) it
- * looked like the field shipped hardcoded. The cached key is still available,
- * but only behind an explicit "use previous key" action the user has to click.
+ * The key field ALWAYS starts empty and shows the neutral
+ * "Enter your license key" placeholder. There is no hardcoded or pre-filled
+ * test key anywhere in the field: previously it was seeded from the encrypted
+ * cache, which meant that after activating with the shared FRPB-TEST-* key the
+ * published test string appeared in the box on every launch and looked
+ * hardcoded. A previously activated key is still offered, but only behind an
+ * explicit "use previous key" action the user has to click.
  */
 export default function ActivationScreen({ cached, onActivated }: ActivationScreenProps) {
   // Deliberately empty: never seeded from the cache, never hardcoded.
@@ -74,13 +109,19 @@ export default function ActivationScreen({ cached, onActivated }: ActivationScre
         setActivated(res.license);
         setTimeout(() => onActivated(res.license!), 650);
       } else {
-        setError(res.message ?? STATUS_MESSAGES[res.status] ?? "Activation failed.");
+        // Prefer the server's message but always route it through the
+        // technical-detail guard so a raw URL can never reach the banner.
+        setError(
+          friendlyError(
+            res.message ?? STATUS_MESSAGES[res.status] ?? "Activation failed."
+          )
+        );
       }
     } catch (err) {
+      // A thrown IPC error is almost always transport-level (offline). Show the
+      // user-friendly offline copy rather than the raw exception text.
       setError(
-        err instanceof Error && err.message
-          ? err.message
-          : "Could not reach the activation server. Check your connection."
+        err instanceof Error && err.message ? friendlyError(err.message) : OFFLINE_MESSAGE
       );
     } finally {
       setVerifying(false);
@@ -143,7 +184,7 @@ export default function ActivationScreen({ cached, onActivated }: ActivationScre
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleVerify();
                   }}
-                  placeholder="Enter your license key"
+                  placeholder={LICENSE_PLACEHOLDER}
                   autoCapitalize="characters"
                   autoCorrect="off"
                   spellCheck={false}

@@ -266,7 +266,7 @@ export default function ConnectionWizardModal({
                   ) : (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Executing handshake…
+                      Flashing in Progress...
                     </>
                   )}
                 </button>

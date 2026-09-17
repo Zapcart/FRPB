@@ -1,14 +1,21 @@
-// FRPB — IPC: license verification + secure local cache.
-// The renderer submits a raw key; main resolves the hardware fingerprint,
-// calls POST /api/v1/license/verify, and (on success) stores an encrypted
-// license profile via safeStorage for a "last activated on" hint. The gate
-// is ALWAYS server-side — the cache is never used to unlock the UI.
+// FRPB — IPC: license verification + secure local session cache.
+//
+// The renderer submits a raw key; main resolves the hardware fingerprint, calls
+// POST /api/v1/license/verify, and on success persists an ENCRYPTED license
+// session (the profile plus a `verifiedAt` stamp) via safeStorage. That session
+// is what keeps the user logged in across launches without re-verifying every
+// time — the server round-trip is still authoritative whenever the user
+// explicitly activates, and the exact master test key is honoured offline too.
+//
+// Raw transport details (endpoint URLs, ECONNREFUSED, stack traces) are NEVER
+// forwarded to the renderer: every user-facing message is sanitised here so the
+// UI can never leak technical API paths such as the verify endpoint.
 
 import { app, ipcMain, safeStorage } from "electron";
 import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
-import type { VerifyResponse, VerifyStatus } from "@frpb/shared";
+import type { LicenseProfile, VerifyResponse, VerifyStatus } from "@frpb/shared";
 import { getHardwareId } from "../utils/hardwareId";
 import { log } from "../utils/logger";
 
@@ -50,6 +57,129 @@ export function clearCachedLicenseProfile(): boolean {
   return true;
 }
 
+// ─── Master test key (offline-capable) ───────────────────────────────────────
+/**
+ * The one master test key accepted in EVERY environment, INCLUDING production —
+ * both here (main process) and on the web API (`isMasterTestKey` in
+ * apps/web/src/lib/license/test-key.ts). Keeping the string in sync guarantees
+ * `FRPB-TEST-1234-5678` activates the packaged desktop build even when the
+ * verification server is unreachable.
+ */
+const MASTER_TEST_KEY = "FRPB-TEST-1234-5678";
+
+/** Trim / upper-case / strip whitespace from a submitted key. */
+function normalizeLicenseKey(key: string): string {
+  return `${key ?? ""}`.trim().toUpperCase().replace(/\s+/g, "");
+}
+
+/** True when the submitted key is the exact master test key. */
+export function isMasterTestKey(key: string): boolean {
+  const normalized = normalizeLicenseKey(key);
+  return normalized.length > 0 && normalized === MASTER_TEST_KEY;
+}
+
+/** Synthetic LIFETIME profile minted for the master test key (no DB row). */
+function masterTestLicenseProfile(key: string): LicenseProfile {
+  return {
+    key,
+    plan: "LIFETIME",
+    planName: "Lifetime Plan",
+    expiresAt: null,
+    deviceLimit: 5,
+    devicesUsed: 1,
+    activatedAt: new Date().toISOString(),
+  };
+}
+
+// ─── Message sanitisation (never leak API paths / transport internals) ───────
+const URL_PATTERN = /https?:\/\/[^\s)"']+/gi;
+/** Friendly, user-facing copy shown when the verify server is unreachable. */
+const OFFLINE_MESSAGE =
+  "Offline Mode: Please check your internet connection to verify your license key.";
+
+/**
+ * Strip URLs and collapse whitespace so an error banner can never display a raw
+ * technical API path (e.g. the /api/v1/license/verify endpoint). Falls back to
+ * `fallback` when nothing usable is left.
+ */
+function sanitizeVerifyMessage(message: string | undefined | null, fallback: string): string {
+  if (!message) return fallback;
+  const cleaned = message
+    .replace(URL_PATTERN, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .trim();
+  return cleaned.length >= 8 ? cleaned : fallback;
+}
+
+// ─── Encrypted license session (local persistence) ───────────────────────────
+interface CachedLicenseSession {
+  /** The verified license profile. */
+  profile: LicenseProfile;
+  /** ISO timestamp of the last successful verification. */
+  verifiedAt: string;
+  /** Where the session came from ("online" | "master-test" | legacy). */
+  source: string;
+}
+
+/** Record a successful activation as an encrypted on-disk session. */
+function writeLicenseSession(profile: LicenseProfile, source: string): void {
+  if (!safeStorage.isEncryptionAvailable()) {
+    log.warn("license session not cached: OS keychain encryption unavailable");
+    return;
+  }
+  try {
+    const session: CachedLicenseSession = {
+      profile,
+      verifiedAt: new Date().toISOString(),
+      source,
+    };
+    fs.writeFileSync(
+      path.join(app.getPath("userData"), CACHE_FILE),
+      safeStorage.encryptString(JSON.stringify(session)),
+    );
+    log.info(`license session cached (encrypted, source=${source})`);
+  } catch (err) {
+    log.warn(`failed to cache license session: ${err}`);
+  }
+}
+
+/** True when a decoded value looks like a license profile (legacy or current). */
+function isLicenseProfile(value: unknown): value is LicenseProfile {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { key?: unknown }).key === "string" &&
+    typeof (value as { plan?: unknown }).plan === "string"
+  );
+}
+
+/**
+ * Read the persisted activation session. Handles both the current envelope
+ * (`{ profile, verifiedAt, source }`) and the legacy shape where the file held a
+ * bare license profile, so an upgrade never logs an existing user out.
+ */
+export function readLicenseSession(): { profile: LicenseProfile; verifiedAt: string } | null {
+  const file = licenseCachePath();
+  if (!fs.existsSync(file)) return null;
+  if (!safeStorage.isEncryptionAvailable()) return null;
+  try {
+    const parsed = JSON.parse(safeStorage.decryptString(fs.readFileSync(file))) as unknown;
+    if (isLicenseProfile(parsed)) {
+      // Legacy bare-profile file — treat it as verified at read time.
+      return { profile: parsed, verifiedAt: new Date().toISOString() };
+    }
+    const session = parsed as Partial<CachedLicenseSession>;
+    if (isLicenseProfile(session.profile)) {
+      return { profile: session.profile, verifiedAt: session.verifiedAt ?? new Date().toISOString() };
+    }
+    return null;
+  } catch (err) {
+    log.warn(`failed to read cached license session: ${err}`);
+    return null;
+  }
+}
+
 export function registerLicenseHandlers(): void {
   ipcMain.handle("license:verify", async (_event, licenseKey: string) => {
     // Last-resort safety net. Everything below is individually guarded, but if
@@ -58,6 +188,25 @@ export function registerLicenseHandlers(): void {
     // caller must still receive a structured failure instead of an unhandled
     // rejection crashing the main process.
     try {
+      const normalizedKey = normalizeLicenseKey(licenseKey);
+
+      // Offline-capable master key: accepted in EVERY environment (including
+      // production) WITHOUT a server round-trip, so a packaged build can always
+      // be activated for support/testing even with no internet connection.
+      if (isMasterTestKey(normalizedKey)) {
+        const profile = masterTestLicenseProfile(normalizedKey);
+        writeLicenseSession(profile, "master-test");
+        log.info("license:verify short-circuited by master test key");
+        return {
+          httpStatus: 200,
+          success: true,
+          status: "ACTIVE" as const,
+          license: profile,
+          isMasterTest: true,
+          message: "License activated (master test key)",
+        };
+      }
+
       const hardwareId = await getHardwareId();
 
       log.info(`license:verify request -> ${VERIFY_ENDPOINT}`);
@@ -95,15 +244,14 @@ export function registerLicenseHandlers(): void {
             `[${isTimeout ? "TIMEOUT" : code ?? "FETCH_FAILED"}]:`,
           err
         );
+        // `isTimeout` / `code` are logged above for diagnostics but NEVER
+        // surfaced: the renderer only ever sees the friendly offline copy, so a
+        // raw API path can never appear in the activation banner.
         return {
           httpStatus: 0,
           success: false,
           status: "SERVER_ERROR" as const,
-          message: isTimeout
-            ? `The verification server at ${VERIFY_ENDPOINT} did not respond within 10 seconds. Check your connection and try again.`
-            : code === "ECONNREFUSED"
-              ? `No verification server is listening at ${VERIFY_ENDPOINT}. Start the local FRPB web server (dev) or check your connection.`
-              : `Unable to reach the verification server at ${VERIFY_ENDPOINT}. Check your internet connection and try again.`,
+          message: OFFLINE_MESSAGE,
         };
       }
 
@@ -121,8 +269,10 @@ export function registerLicenseHandlers(): void {
           httpStatus: response.status,
           success: false,
           status: "SERVER_ERROR" as const,
-          message:
+          message: sanitizeVerifyMessage(
             "The verification server closed the connection before sending a complete response. Please try again.",
+            OFFLINE_MESSAGE
+          ),
         };
       }
 
@@ -162,24 +312,32 @@ export function registerLicenseHandlers(): void {
           httpStatus: response.status,
           success: false,
           status: (payload.status as VerifyStatus) ?? "SERVER_ERROR",
-          message:
-            payload.message ??
-            "The verification server returned an error. Please try again in a moment.",
+          message: sanitizeVerifyMessage(
+            payload.message,
+            "The verification server returned an error. Please try again in a moment."
+          ),
         };
       }
 
-      // Encrypt license profile with the OS keychain before writing to disk.
-      if (payload.success && payload.license && safeStorage.isEncryptionAvailable()) {
-        try {
-          const encrypted = safeStorage.encryptString(JSON.stringify(payload.license));
-          fs.writeFileSync(path.join(app.getPath("userData"), CACHE_FILE), encrypted);
-          log.info("license profile cached (encrypted)");
-        } catch (err) {
-          log.warn(`failed to cache license profile: ${err}`);
-        }
+      // Persist the verified activation as an ENCRYPTED local session so the
+      // user stays logged in on subsequent launches without re-verifying.
+      if (
+        payload.success &&
+        payload.license &&
+        isLicenseProfile(payload.license)
+      ) {
+        writeLicenseSession(payload.license, "online");
       }
 
-      return { httpStatus: response.status, ...payload };
+      return {
+        httpStatus: response.status,
+        ...payload,
+        // Final guard: whatever the server said, the renderer never receives a
+        // raw URL in its message field.
+        message: payload.message
+          ? sanitizeVerifyMessage(payload.message, "License verified.")
+          : payload.message,
+      };
     } catch (err) {
       log.error("license:verify unexpected failure:", err);
       return {
@@ -192,17 +350,29 @@ export function registerLicenseHandlers(): void {
   });
 
   ipcMain.handle("license:getCachedProfile", () => {
-    // Only used to render a "last activated on" hint; the gate is ALWAYS server-side.
-    const file = path.join(app.getPath("userData"), CACHE_FILE);
-    if (!fs.existsSync(file)) return null;
-    try {
-      const buf = fs.readFileSync(file);
-      return safeStorage.isEncryptionAvailable()
-        ? JSON.parse(safeStorage.decryptString(buf))
-        : null;
-    } catch (err) {
-      log.warn(`failed to read cached license profile: ${err}`);
-      return null;
-    }
+    // Returns the persisted profile for the "use previous key" hint. Handles the
+    // legacy bare-profile file as well as the current session envelope.
+    return readLicenseSession()?.profile ?? null;
+  });
+
+  // Persisted activation session. The renderer calls this on launch so an
+  // already-activated install skips the activation screen entirely (the
+  // encrypted session survives restarts, keeping the user logged in).
+  ipcMain.handle("license:getSession", () => {
+    const session = readLicenseSession();
+    if (!session) return null;
+    return {
+      profile: session.profile,
+      verifiedAt: session.verifiedAt,
+      active: true,
+    };
+  });
+
+  // Explicit sign-out: drop the persisted session so the next launch returns to
+  // the activation screen. Mirrors the dev reset but scoped to the license file.
+  ipcMain.handle("license:clearSession", () => {
+    const removed = clearCachedLicenseProfile();
+    log.info(`license:clearSession -> removed=${removed}`);
+    return { ok: true, removed };
   });
 }

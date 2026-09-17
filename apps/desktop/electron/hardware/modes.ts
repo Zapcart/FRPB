@@ -60,7 +60,9 @@ export const MODE_LABELS: Record<HardwareMode, string> = {
   mtp: "MTP / Media Device",
   serial: "Serial Port (COM)",
   adb: "ADB Session",
-  none: "No Device",
+  // Never "Connected" or a bare COM port — the absence of a mobile USB device
+  // is reported as an explicit wait, matching detector.ts WAITING_FOR_USB_LABEL.
+  none: "Waiting for USB Phone Connection...",
 };
 
 /**

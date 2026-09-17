@@ -27,15 +27,16 @@ const WINDOW_SECONDS = 60;
 const MAX_FAILURES = 5;
 const LOCKOUT_SECONDS = 60 * 60;
 
-// ─── Master test key (DEVELOPMENT ONLY) ────────────────────────────────
+// ─── Master test key ───────────────────────────────────────────────────
 // Returns a synthetic ACTIVE LIFETIME profile so the desktop app can run
-// through the full activate → dashboard flow locally without live payment
-// webhooks or a DB-backed license row.
+// through the full activate → dashboard flow without live payment webhooks or
+// a DB-backed license row.
 //
-// The `FRPB-TEST-*` key is PUBLISHED in this repository, so accepting it in
-// production would let anyone activate for free. `isMasterTestKey` is
-// therefore fail-closed: it returns false in production unless
-// ALLOW_DEV_TEST_KEYS=true was set deliberately.
+// The EXACT key `FRPB-TEST-1234-5678` is accepted in ALL environments,
+// INCLUDING production, by explicit operator decision — see the security
+// warning in @/lib/license/test-key.ts for the trade-off. Any OTHER
+// `FRPB-TEST-*` shaped key remains dev-gated (fail-closed), so the bypass is
+// one known string rather than an open-ended prefix backdoor.
 function masterTestProfile(key: string) {
   return {
     success: true,
@@ -104,10 +105,10 @@ async function verify(req: NextRequest) {
   //     curl probe) would get a 400 and never reach the bypass — the exact
   //     "can't activate locally" class of failure this exists to prevent.
   //
-  //     It remains strictly dev-gated: `isMasterTestKey` is fail-closed in
-  //     production unless ALLOW_DEV_TEST_KEYS=true was set deliberately (the
-  //     key is published in this repo, so accepting it in prod would hand out
-  //     free entitlements).
+  //     Acceptance tiers: the EXACT key FRPB-TEST-1234-5678 passes in every
+  //     environment including production (operator decision), while any other
+  //     FRPB-TEST-* shaped key stays fail-closed outside dev/test. See
+  //     @/lib/license/test-key.ts.
   //
   //     On success it bypasses the DB and rate-limiter entirely and returns a
   //     synthetic ACTIVE LIFETIME profile, so activation works even when the

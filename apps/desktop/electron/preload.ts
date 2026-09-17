@@ -14,6 +14,7 @@ import type {
   FrpbBridge,
   HardwareSnapshot,
   LicenseProfile,
+  LicenseSession,
   ModelCatalogEntry,
   OperationEvent,
   OperationKind,
@@ -40,6 +41,10 @@ const bridge: FrpbBridge = {
       ipcRenderer.invoke("license:verify", key),
     getCachedProfile: (): Promise<LicenseProfile | null> =>
       ipcRenderer.invoke("license:getCachedProfile"),
+    getSession: (): Promise<LicenseSession | null> =>
+      ipcRenderer.invoke("license:getSession"),
+    clearSession: (): Promise<{ ok: boolean; removed: boolean }> =>
+      ipcRenderer.invoke("license:clearSession"),
   },
   system: {
     reset: (): Promise<ResetResult> => ipcRenderer.invoke("app:reset"),

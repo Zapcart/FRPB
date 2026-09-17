@@ -19,7 +19,8 @@ import ModelPicker from "./ModelPicker";
 
 /** Connection state → small human-readable badge label + tone. */
 const CONNECTION_LABEL: Record<DeviceConnectionState, string> = {
-  disconnected: "No device",
+  // No phone → an explicit USB wait, never a bare "Connected" or COM port.
+  disconnected: "Waiting for USB Phone Connection...",
   adb: "Connected · ADB",
   fastboot: "Connected · Fastboot",
   mtp: "Connected · MTP",
@@ -157,7 +158,7 @@ export default function ActionScreen({
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-3 py-1.5 text-sm font-semibold text-rose-600">
               <XCircle className="h-4 w-4" />
-              Waiting for device — plug in your phone
+              Waiting for USB Phone Connection...
             </span>
           )}
           {detected && brand && (

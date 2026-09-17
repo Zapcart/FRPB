@@ -3,11 +3,59 @@
 //   node scripts/verify-port-filter.mjs
 //
 // Re-implements the EXACT predicates from electron/hardware/detector.ts
-// (isVirtualOrBluetoothPort / isValidMobileVid) and asserts the behaviour the
-// Bluetooth fix depends on. Kept dependency-free so it runs anywhere.
+// (isVirtualOrBluetoothPort / isValidMobileVid / isValidMobilePid) and asserts
+// the behaviour the Bluetooth fix depends on. Kept dependency-free so it runs
+// anywhere.
 //
-// If you change the patterns or the vendor allow-list in detector.ts, change
-// them here too — this file exists to make that breakage loud.
+// If you change the patterns or the vendor/product allow-lists in detector.ts,
+// change them here too — this file exists to make that breakage loud. It also
+// reads detector.ts to confirm the reject list (BTHENUM / BTH / Bluetooth /
+// com0com) is still present, so a well-meaning refactor cannot silently delete
+// the hardware filter while every local predicate here keeps passing.
+
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const DETECTOR_PATH = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "electron",
+  "hardware",
+  "detector.ts",
+);
+
+/** Assert the detector source still carries every required reject token. */
+function verifyDetectorSource() {
+  let source = "";
+  try {
+    source = readFileSync(DETECTOR_PATH, "utf8");
+  } catch (err) {
+    console.log(`FAIL | could not read detector.ts: ${String(err)}`);
+    return false;
+  }
+  const required = [
+    ["BTHENUM token", /bthEnum|BTHENUM/i],
+    ["BTH token", /\\bbth\\b/i],
+    ["Bluetooth token", /bluetooth/i],
+    ["com0com token", /com0com/i],
+    ["mobile VID allow-list", /VALID_MOBILE_VIDS/],
+    ["mobile PID allow-list", /VALID_MOBILE_PIDS/],
+    ["waiting label", /Waiting for USB Phone Connection\.\.\./],
+  ];
+  let ok = true;
+  for (const [name, re] of required) {
+    const present = re.test(source);
+    if (!present) ok = false;
+    console.log(`${present ? "PASS" : "FAIL"} | detector.ts contains ${name}`);
+  }
+  return ok;
+}
+
+console.log("FRPB — detector source guards\n");
+let sourceFail = 0;
+if (!verifyDetectorSource()) sourceFail = 1;
+console.log("");
 
 const VALID_MOBILE_VIDS = new Set([
   0x0e8d, // MediaTek
@@ -15,6 +63,21 @@ const VALID_MOBILE_VIDS = new Set([
   0x04e8, // Samsung
   0x1782, // UNISOC
   0x18d1, // Google ADB/Fastboot
+  0x2717, // Xiaomi
+  0x2e17, // Xiaomi (alt)
+  0x22b8, // Motorola
+  0x2a70, // OnePlus
+  0x2e40, // OPPO / Realme
+  0x2d95, // vivo
+  0x12d1, // Huawei / Honor
+]);
+
+// Mirrors VALID_MOBILE_PIDS in detector.ts.
+const VALID_MOBILE_PIDS = new Set([
+  0x9008, 0x900e, 0x901d, 0x9039, 0x9048, 0x9056, 0x9070, 0x9091,
+  0x685d, 0x6860, 0x6855, 0x685b, 0x6863, 0x685c,
+  0x4ee0, 0x4ee2, 0x4ee7, 0xd00d,
+  0x1782, 0x4d00,
 ]);
 
 const VIRTUAL_PORT_PATTERNS = [
@@ -31,14 +94,27 @@ const VIRTUAL_PORT_PATTERNS = [
 function isVirtualOrBluetoothPort(port) {
   const hay = [port.pnpId, port.path, port.friendlyName, port.manufacturer]
     .filter(Boolean)
-    .join(" ");
+    .join(" ")
+    .toLowerCase();
   if (!hay) return true;
   if (VIRTUAL_PORT_PATTERNS.some((re) => re.test(hay))) return true;
-  return /^BTH/i.test(port.path ?? "");
+  return /^bth/i.test(String(port.path ?? "").toLowerCase());
 }
 
 function isValidMobileVid(vid) {
   return typeof vid === "number" && VALID_MOBILE_VIDS.has(vid);
+}
+
+// Mirrors isValidMobilePid(): an unknown/zero PID defers to the VID evidence,
+// and MediaTek accepts any PID because its product ids are per-model.
+function isValidMobilePid(vid, pid) {
+  if (pid === null || pid === undefined || pid === 0) return true;
+  if (vid === 0x0e8d) return true;
+  return VALID_MOBILE_PIDS.has(pid);
+}
+
+function isMobilePortEvidence(vid, pid) {
+  return isValidMobileVid(vid) && isValidMobilePid(vid, pid);
 }
 
 function resolveVid(port) {
@@ -47,6 +123,15 @@ function resolveVid(port) {
     if (Number.isFinite(p)) return p;
   }
   const m = /VID_([0-9A-F]{4})/i.exec(port.pnpId ?? "");
+  return m ? Number.parseInt(m[1], 16) : null;
+}
+
+function resolvePid(port) {
+  if (port.productId) {
+    const p = Number.parseInt(String(port.productId).replace(/^0x/i, ""), 16);
+    if (Number.isFinite(p)) return p;
+  }
+  const m = /PID_([0-9A-F]{4})/i.exec(port.pnpId ?? "");
   return m ? Number.parseInt(m[1], 16) : null;
 }
 
@@ -107,6 +192,43 @@ const cases = [
     },
     false,
   ],
+  [
+    "Generic COM3 with no vendor metadata (was 'Connected')",
+    { path: "COM3", friendlyName: "Prolific USB-to-Serial Comm Port (COM3)" },
+    true,
+  ],
+  [
+    "Bluetooth token in manufacturer only",
+    {
+      pnpId: "USB\\VID_0A12&PID_0001\\5&2A3B",
+      path: "COM8",
+      friendlyName: "Serial Port (COM8)",
+      manufacturer: "Bluetooth Radio",
+    },
+    true,
+  ],
+  [
+    "Mobile VID but non-mobile PID (Samsung 05C6? no — 04E8:1234)",
+    {
+      pnpId: "USB\\VID_04E8&PID_1234\\7&3C4D",
+      path: "COM6",
+      friendlyName: "Generic USB Serial (COM6)",
+      vendorId: "04E8",
+      productId: "1234",
+    },
+    true,
+  ],
+  [
+    "MediaTek VID accepts any PID (per-model BROM ids)",
+    {
+      pnpId: "USB\\VID_0E8D&PID_FFFF\\5&1F2A",
+      path: "COM6",
+      friendlyName: "MediaTek USB Port (COM6)",
+      vendorId: "0E8D",
+      productId: "FFFF",
+    },
+    false,
+  ],
 ];
 
 let pass = 0;
@@ -114,19 +236,23 @@ let fail = 0;
 
 console.log("FRPB — COM port filter verification\n");
 
-for (const [name, port, expectVirtual] of cases) {
+for (const [name, port, expectAcceptedRaw] of cases) {
   const virtual = isVirtualOrBluetoothPort(port);
   const vid = resolveVid(port);
+  const pid = resolvePid(port);
   // A port is "accepted as a phone candidate" only when it is not virtual AND
-  // carries a valid mobile vendor id.
-  const accepted = !virtual && isValidMobileVid(vid);
-  const expectAccepted = !expectVirtual;
-  const ok = virtual === expectVirtual && accepted === expectAccepted;
+  // carries matching mobile VID + PID evidence. Note the expectations below are
+  // the ACCEPTED flag, not the virtual flag: a Bluetooth port is both virtual
+  // and rejected, while a generic COM3 is not "virtual" yet still rejected.
+  const accepted = !virtual && isMobilePortEvidence(vid, pid);
+  const expectAccepted = Boolean(expectAcceptedRaw) === false;
+  const ok = accepted === expectAccepted;
   if (ok) pass++;
   else fail++;
   console.log(
-    `${ok ? "PASS" : "FAIL"} | ${name.padEnd(33)} ` +
-      `virtual=${String(virtual).padEnd(5)} vid=${String(vid).padEnd(6)} accepted=${accepted}`
+    `${ok ? "PASS" : "FAIL"} | ${name.padEnd(46)} ` +
+      `virtual=${String(virtual).padEnd(5)} vid=${String(vid).padEnd(6)} ` +
+      `pid=${String(pid).padEnd(6)} accepted=${accepted}`
   );
 }
 

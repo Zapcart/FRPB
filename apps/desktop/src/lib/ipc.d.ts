@@ -27,6 +27,20 @@ export interface VerifyResponse {
   status: VerifyStatus;
   license?: LicenseProfile;
   message?: string;
+  /** True when the response came from the dev/test master-key shortcut. */
+  isMasterTest?: boolean;
+}
+
+/**
+ * Persisted activation session. Survives app restarts (encrypted via
+ * safeStorage) so an already-activated install stays logged in without
+ * re-verifying the license key every launch.
+ */
+export interface LicenseSession {
+  profile: LicenseProfile;
+  /** ISO timestamp of the last successful verification. */
+  verifiedAt: string;
+  active: boolean;
 }
 
 /** Result of a dev/test activation-state reset (see electron/ipc/reset.ts). */
@@ -367,6 +381,13 @@ export interface FrpbBridge {
   license: {
     verify: (key: string) => Promise<VerifyResponse>;
     getCachedProfile: () => Promise<LicenseProfile | null>;
+    /**
+     * The persisted activation session, or null when this install has never
+     * activated. Used on launch to skip the activation screen.
+     */
+    getSession: () => Promise<LicenseSession | null>;
+    /** Drop the persisted session so the next launch re-requires activation. */
+    clearSession: () => Promise<{ ok: boolean; removed: boolean }>;
   };
   /**
    * Developer/test utilities. `reset()` wipes the encrypted license cache plus

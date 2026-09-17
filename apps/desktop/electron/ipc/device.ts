@@ -1546,15 +1546,18 @@ async function buildInfoSnapshot(): Promise<DeviceInfoSnapshot> {
       : null;
 
   // Only expose a COM port when the transport is actually serial-like (BROM /
-  // VCOM / Download / Preloader) so an ADB/MTP phone never reports an unrelated
-  // Bluetooth or virtual COM port the machine happens to own.
+  // VCOM / Download / Preloader) AND the hardware detector confirmed a mobile
+  // transport, so an unattached machine never reports a Bluetooth headset's
+  // COM3 as the device port.
   const serialLike =
     usb !== null &&
     (vidNum === 0x0e8d ||
       vidNum === 0x05c6 ||
       /brom|vcom|download|serial|preloader/i.test(`${scan.mode ?? ""} ${usb.mode ?? ""}`));
   const port =
-    scan.connected && (scan.source === "usb" || serialLike) ? probeComPort() : null;
+    scan.connected && hw.connected && (scan.source === "usb" || serialLike)
+      ? probeComPort()
+      : null;
 
   const driverInstalled = !scan.connected
     ? false
@@ -1565,6 +1568,10 @@ async function buildInfoSnapshot(): Promise<DeviceInfoSnapshot> {
         : false;
 
   return {
+    // A generic COM port (COM3) must NEVER read as a connected phone. The
+    // snapshot is only "connected" when the unified scan succeeded OR the
+    // hardware detector matched a mobile VID/PID after filtering Bluetooth and
+    // virtual endpoints.
     connected: scan.connected || hw.connected,
     serial: scan.serial ?? null,
     model,
@@ -1572,7 +1579,9 @@ async function buildInfoSnapshot(): Promise<DeviceInfoSnapshot> {
     vendor: scan.vendor ?? null,
     vid: vidNum !== null ? vidNum.toString(16).padStart(4, "0") : hw.vidHex,
     pid: usb ? usb.pid.toString(16).padStart(4, "0") : hw.pidHex,
-    port: port ?? hw.port,
+    // Expose a COM port only alongside a proven low-level transport, otherwise
+    // an unrelated serial endpoint the machine owns would leak into the UI.
+    port: hw.connected ? port ?? hw.port : null,
     chipset: chipsetFor(model, vidNum) ?? (hw.chipset !== "Unknown" ? hw.chipset : null),
     mode,
     mtp,

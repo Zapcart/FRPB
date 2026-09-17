@@ -127,7 +127,11 @@ function describeHardwareLines(snap: HardwareSnapshot): string[] {
     case "mtp":
       return [`[INFO] MTP Device Found${port}`];
     case "serial":
-      return [`[INFO] Serial Port Found${port}`];
+      // A bare serial endpoint is NOT a phone — say so, so the console never
+      // implies a device was found while the wizard is still correctly waiting.
+      return [
+        `[INFO] Serial device detected${port} — not a recognised phone interface, still waiting`,
+      ];
     case "adb":
       return ["[INFO] ADB session present (not required)"];
     default:
@@ -153,9 +157,11 @@ function AutoReadPanel({ info }: { info: DeviceInfoSnapshot | null }) {
   const hwMode = info?.hardwareMode ?? "none";
   // Surface the classified low-level transport ("BROM Mode", "EDL 9008 Mode",
   // "Fastboot", "MTP") instead of a generic connected/disconnected warning.
+  // With no mobile device attached the panel states the explicit USB wait —
+  // never a bare "Connected" or a phantom COM port.
   const modeLabel = connected
     ? info?.hardwareLabel || info?.mode || "Connected"
-    : "No hardware interface";
+    : "Waiting for USB Phone Connection...";
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
       <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
