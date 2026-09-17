@@ -82,7 +82,7 @@ export async function processWebhook(
     // NOTE: /api/v1/checkout writes a PENDING row with the SAME providerTxnId
     // before the customer pays. Only a row that already carries a licenseId
     // means "already granted" — a bare PENDING row must be reconciled (updated)
-    // inside the transaction below, never mistaken for a duplicate.
+    // inside the transaction below, never mistaken as a duplicate.
     const existingPayment = await client.payment.findUnique({
       where: { providerTxnId: input.txnId },
     });
@@ -94,10 +94,53 @@ export async function processWebhook(
       return { outcome: "DUPLICATE", licenseId: existingPayment.licenseId };
     }
 
-    await client.webhookEvent.update({
-      where: { id: event.id },
+    // ── 2b. Cross-flow guard: has this ORDER/UTR already been granted? ──
+    // The Direct-UPI rail grants a license from its own flow (payment/verify +
+    // payment/callback) and records the orderId/UTR in the license metadata. A
+    // provider webhook for the SAME payment would otherwise mint a second key,
+    // because it reconciles through a different txn id. This checks the durable
+    // license metadata — which is the only cross-provider identity both flows
+    // share — and short-circuits to DUPLICATE when the order is already served.
+    const existingByOrder = await client.license.findFirst({
+      where: {
+        metadata: {
+          path: ["orderId"],
+          equals: input.txnId,
+        },
+      },
+      select: { id: true },
+    });
+    if (existingByOrder) {
+      await client.webhookEvent.update({
+        where: { id: event.id },
+        data: {
+          status: "IGNORED",
+          processedAt: new Date(),
+          licenseId: existingByOrder.id,
+        },
+      });
+      return { outcome: "DUPLICATE", licenseId: existingByOrder.id };
+    }
+
+    // ── 2c. Strict status lock before any write ─────────────────────────
+    // Flip RECEIVED → PROCESSING with a conditional updateMany. If another
+    // invocation already moved the row (count === 0) this request must NOT
+    // proceed to grant; it reports the in-flight/duplicate state instead. This
+    // is the race guard for two webhooks arriving concurrently.
+    const lock = await client.webhookEvent.updateMany({
+      where: { id: event.id, status: "RECEIVED" },
       data: { status: "PROCESSING" },
     });
+    if (lock.count === 0) {
+      const current = await client.webhookEvent.findUnique({
+        where: { id: event.id },
+        select: { status: true, licenseId: true },
+      });
+      if (current?.status === "PROCESSED") {
+        return { outcome: "DUPLICATE", licenseId: current.licenseId ?? undefined };
+      }
+      return { outcome: "FAILED", error: "Event already in-flight" };
+    }
 
     // ── 3. Plan + user resolution ──────────────────────────────────────
     const planDef = getPlanDefinition(input.planSlug);

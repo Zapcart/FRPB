@@ -12,8 +12,9 @@
 //   - requires a validated Supabase session (getUser, server-side JWT check)
 //   - ownership is enforced through the canonical Prisma user (supabaseId →
 //     normalized email), never a client-supplied id
-//   - every reveal is recorded in License.revealCount / lastRevealedAt so
-//     unusual access patterns are auditable
+//   - every reveal is recorded in License.revealCount / lastRevealedAt AND as a
+//     structured [audit] log line carrying the requester identity, so unusual
+//     access patterns are auditable after the fact
 //   - responses are never cached
 
 import { NextRequest, NextResponse } from "next/server";
@@ -84,13 +85,39 @@ async function handleReveal(req: NextRequest) {
       );
     }
 
-    // Audit trail — best-effort, never blocks the reveal.
+    // ── Audit trail ─────────────────────────────────────────────────────
+    // A revealed key is a credential disclosure, so it is recorded on the
+    // durable license row (count + timestamp) AND as a structured log line with
+    // the requester identity. The DB write is best-effort (never blocks the
+    // reveal); the log line is emitted either way.
+    const revealedAt = new Date();
     await prisma.license
       .update({
         where: { id: license.id },
-        data: { lastVerifiedAt: new Date() },
+        data: {
+          lastVerifiedAt: revealedAt,
+          revealCount: { increment: 1 },
+          lastRevealedAt: revealedAt,
+          metadata: {
+            // Merge, don't replace — license metadata already carries the
+            // orderId/UTR used for cross-flow duplicate detection.
+            ...((license.metadata as Record<string, unknown> | null) ?? {}),
+            lastReveal: {
+              at: revealedAt.toISOString(),
+              byUserId: appUser.id,
+              byEmail: appUser.email,
+            },
+          },
+        },
       })
-      .catch(() => {});
+      .catch((err) => {
+        console.warn("[license/reveal] audit write failed (non-fatal):", err);
+      });
+
+    console.info(
+      `[audit] license.reveal licenseId=${license.id} userId=${appUser.id} ` +
+        `email=${appUser.email} at=${revealedAt.toISOString()}`
+    );
 
     return NextResponse.json<RevealLicenseResponse>(
       {

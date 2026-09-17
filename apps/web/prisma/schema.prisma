@@ -100,6 +100,10 @@ model License {
   activatedAt    DateTime?
   expiresAt      DateTime?
   lastVerifiedAt DateTime?
+  /// Audit: how many times the full key has been revealed via /license/reveal.
+  revealCount    Int           @default(0)
+  /// Audit: timestamp of the most recent key reveal.
+  lastRevealedAt DateTime?
   revokedReason  String?
   metadata       Json? // orderId, promoCode etc.
   createdAt      DateTime      @default(now())

@@ -6,6 +6,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { processWebhook } from "@/lib/webhooks/processor";
+import {
+  WebhookSecretConfigError,
+  requireWebhookSecret,
+} from "@/lib/payments/webhook-secrets";
 import { isPlanSlug, type PlanSlug } from "@frpb/shared";
 
 interface CashfreeWebhook {
@@ -30,7 +34,8 @@ interface CashfreeWebhook {
   type?: string; // e.g. "PAYMENT_SUCCESS_WEBHOOK"
 }
 
-const webhookSecret = process.env.CASHFREE_CLIENT_SECRET;
+// Resolved per-request so a production misconfiguration fails this route loudly
+// (500) rather than silently accepting unauthenticated payment events.
 
 /**
  * Cashfree signs webhooks as HMAC-SHA256(clientSecret, `${timestamp}${rawBody}`),
@@ -55,7 +60,21 @@ export async function POST(req: NextRequest) {
   const signature = req.headers.get("x-webhook-signature");
   const timestamp = req.headers.get("x-webhook-timestamp");
 
-  // Verification is enforced whenever the secret is configured.
+  // The secret is MANDATORY in production — a missing one is a fatal config
+  // error, never a reason to skip verification.
+  let webhookSecret: string;
+  try {
+    webhookSecret = requireWebhookSecret("CASHFREE");
+  } catch (err) {
+    if (err instanceof WebhookSecretConfigError) {
+      console.error("[webhooks/cashfree] configuration error:", err.message);
+      return NextResponse.json({ error: "Webhook not configured" }, { status: 500 });
+    }
+    throw err;
+  }
+
+  // Verification runs whenever a secret exists. In development without one, the
+  // dev-only warning was already emitted by requireWebhookSecret().
   if (webhookSecret) {
     if (!signature || !timestamp) {
       return NextResponse.json(

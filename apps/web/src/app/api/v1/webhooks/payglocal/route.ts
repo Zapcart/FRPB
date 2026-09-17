@@ -10,6 +10,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { processWebhook } from "@/lib/webhooks/processor";
+import {
+  WebhookSecretConfigError,
+  requireWebhookSecret,
+} from "@/lib/payments/webhook-secrets";
 import { isPlanSlug, type PlanSlug } from "@frpb/shared";
 
 interface PayGlocalWebhook {
@@ -45,7 +49,9 @@ interface PayGlocalWebhook {
   status?: string;
 }
 
-const webhookSecret = process.env.PAYGLOCAL_MERCHANT_SECRET;
+// Resolved per-request via requireWebhookSecret() so a production
+// misconfiguration fails this route loudly instead of silently accepting
+// unauthenticated payment events.
 
 /** Timing-safe comparison of two signature strings. */
 function safeEqual(a: string, b: string): boolean {
@@ -79,7 +85,21 @@ export async function POST(req: NextRequest) {
     req.headers.get("x-webhook-signature") ??
     req.headers.get("x-signature");
 
-  // Verification is enforced whenever the secret is configured.
+  // The secret is MANDATORY in production — a missing one is a fatal config
+  // error, never a reason to skip verification.
+  let webhookSecret: string;
+  try {
+    webhookSecret = requireWebhookSecret("PAYGLOCAL");
+  } catch (err) {
+    if (err instanceof WebhookSecretConfigError) {
+      console.error("[webhooks/payglocal] configuration error:", err.message);
+      return NextResponse.json({ error: "Webhook not configured" }, { status: 500 });
+    }
+    throw err;
+  }
+
+  // Verification runs whenever a secret exists. In development without one, the
+  // dev-only warning was already emitted by requireWebhookSecret().
   if (webhookSecret) {
     if (!signature) {
       return NextResponse.json({ error: "Missing webhook signature header" }, { status: 400 });

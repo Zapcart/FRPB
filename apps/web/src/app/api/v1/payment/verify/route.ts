@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { preflight, withCorsResponse } from "@/lib/cors";
+import { sha256 } from "@/lib/crypto/sha256";
 import { isValidUtr, normalizeUtr } from "@/lib/upi";
 import {
   grantLicenseForOrder,
@@ -109,7 +110,14 @@ async function handleVerify(req: NextRequest) {
     );
   }
 
-  // 6. UTR UNIQUENESS — reject a reference already attached to another order.
+  // 6. UTR UNIQUENESS — two independent checks, because a reference can be
+  //    claimed through more than one flow:
+  //      (a) another PaymentOrder already bound to this UTR, and
+  //      (b) a License already granted for this UTR (written into its metadata
+  //          by the grant helper), which catches the case where the webhook
+  //          rail won the race and this UPI flow is now replaying the claim.
+  //    Checking only (a) is what previously allowed an overlapping UPI +
+  //    webhook flow to mint a duplicate key.
   const existingClaim = await prisma.paymentOrder.findUnique({ where: { utr } });
   if (existingClaim && existingClaim.orderId !== order.orderId) {
     return NextResponse.json(
@@ -117,6 +125,30 @@ async function handleVerify(req: NextRequest) {
         success: false,
         message:
           "This UPI reference has already been used for another order. Every payment can be claimed once.",
+      },
+      { status: 409 }
+    );
+  }
+
+  // Look up by the durable UTR hash recorded on the granted license. Using the
+  // hash (not the raw value) keeps the lookup index-friendly and avoids storing
+  // a plaintext reference in an easily-queried column.
+  const utrHash = sha256(utr);
+  const grantedForUtr = await prisma.license.findFirst({
+    where: {
+      OR: [
+        { metadata: { path: ["utrHash"], equals: utrHash } },
+        { metadata: { path: ["utr"], equals: utr } },
+      ],
+    },
+    select: { id: true, userId: true },
+  });
+  if (grantedForUtr && order.licenseId !== grantedForUtr.id) {
+    return NextResponse.json(
+      {
+        success: false,
+        message:
+          "This UPI reference has already been redeemed. Every payment can be claimed once.",
       },
       { status: 409 }
     );

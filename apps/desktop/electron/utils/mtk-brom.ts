@@ -437,9 +437,32 @@ export async function bromWipeFrp(
           onProgress({ stage: "wipe-persist", message: "Persist partition erased", pct: 85 });
         }
 
+        // Explicit hardware reboot. `bromReboot` issues the BROM_CMD_REBOOT
+        // control transfer; its result is checked so the log line and the
+        // return payload agree with what actually happened on the wire. A
+        // silently-ignored failure here would leave the device sitting in BROM
+        // while the UI reported "Device rebooting".
         onProgress({ stage: "reboot", message: "Rebooting device...", pct: 90 });
-        await bromReboot(device);
+        const rebooted = await bromReboot(device);
+        if (!rebooted) {
+          // The wipe itself succeeded — report success but be honest about the
+          // reboot so the operator knows to power-cycle manually.
+          log.warn("[mtk-brom] wipe succeeded but the reboot command did not confirm");
+          onProgress({
+            stage: "reboot",
+            message: "Wipe complete — reboot signal not acknowledged. Power-cycle the device manually.",
+            pct: 95,
+          });
+          return {
+            success: true,
+            message: "FRP lock removed (manual restart required)",
+            detail:
+              "MTK BROM FRP wipe complete, but the reboot command was not acknowledged. " +
+              "Disconnect and power the device on manually.",
+          };
+        }
 
+        onProgress({ stage: "reboot", message: "Reboot signal acknowledged", pct: 95 });
         onProgress({ stage: "done", message: "FRP bypass complete", pct: 100 });
         return {
           success: true,
@@ -458,7 +481,23 @@ export async function bromWipeFrp(
     const eraseResponse = await bulkTransfer(device, ifaceIdx, endpointOut, endpointIn, eraseCmd);
     if (eraseResponse.length >= 4 && eraseResponse.readUInt8(1) === 0) {
       onProgress({ stage: "wipe-alt", message: "Alternate erase successful", pct: 80 });
-      await bromReboot(device);
+
+      // Same explicit, verified reboot as the primary path — the alternate
+      // route must not leave the device in BROM with a success message.
+      onProgress({ stage: "reboot", message: "Rebooting device...", pct: 90 });
+      const rebooted = await bromReboot(device);
+      if (!rebooted) {
+        log.warn("[mtk-brom] alternate wipe succeeded but reboot was not acknowledged");
+        return {
+          success: true,
+          message: "FRP lock removed (manual restart required)",
+          detail:
+            "MTK BROM alternate erase complete, but the reboot command was not " +
+            "acknowledged. Disconnect and power the device on manually.",
+        };
+      }
+
+      onProgress({ stage: "reboot", message: "Reboot signal acknowledged", pct: 95 });
       return {
         success: true,
         message: "FRP lock removed (alternate method)",

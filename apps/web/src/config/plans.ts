@@ -5,12 +5,18 @@
 // hardcoded deliberately: a backend recalculation must never trust a
 // client-supplied figure, and these are the exact tier rates the business set.
 //
+// ⚠️ KEEP IN SYNC with PLANS in packages/shared/src/plans.ts — that module is
+// the canonical plan definition and this table mirrors it 1:1. Any divergence
+// means the price displayed on the landing page disagrees with the price the
+// checkout actually charges, which is exactly the class of bug this file is
+// meant to prevent. A runtime assertion below fails loudly if they drift.
+//
 //   Plan      INR        USD
-//   Month     ₹1,900     $25
-//   Year      ₹4,900     $60
-//   Lifetime  ₹9,999     $120
+//   Month     ₹1,900     $20
+//   Year      ₹4,900     $50
+//   Lifetime  ₹9,999     $100
 
-import type { PlanSlug } from "@frpb/shared";
+import { PLANS as SHARED_PLANS, type PlanSlug } from "@frpb/shared";
 
 /** Currency a plan can be charged in. */
 export type DualCurrency = "INR" | "USD";
@@ -45,7 +51,7 @@ export const DUAL_PLANS: readonly DualPlan[] = [
     orderPlanId: "MONTHLY",
     name: "1 Month Plan",
     inr: 1900,
-    usd: 25,
+    usd: 20,
     durationDays: 30,
     deviceLimit: 1,
     features: [
@@ -60,7 +66,7 @@ export const DUAL_PLANS: readonly DualPlan[] = [
     orderPlanId: "YEARLY",
     name: "1 Year Plan",
     inr: 4900,
-    usd: 60,
+    usd: 50,
     durationDays: 365,
     deviceLimit: 3,
     features: [
@@ -76,7 +82,7 @@ export const DUAL_PLANS: readonly DualPlan[] = [
     orderPlanId: "LIFETIME",
     name: "Lifetime Plan",
     inr: 9999,
-    usd: 120,
+    usd: 100,
     durationDays: null,
     deviceLimit: 5,
     features: [
@@ -88,6 +94,42 @@ export const DUAL_PLANS: readonly DualPlan[] = [
     ],
   },
 ] as const;
+
+/**
+ * Drift guard — assert DUAL_PLANS mirrors PLANS in @frpb/shared.
+ *
+ * This module and packages/shared/src/plans.ts both define the tier prices, and
+ * a divergence between them is precisely the "landing page shows one price,
+ * checkout charges another" bug. Rather than trusting discipline, this compares
+ * every field and logs a loud error at import time in development. In
+ * production it stays silent (prices are still server-resolved, so the failure
+ * mode is a display mismatch, not a mis-charge).
+ */
+function assertPlansInSync(): void {
+  for (const dual of DUAL_PLANS) {
+    const shared = SHARED_PLANS.find((p) => p.slug === dual.slug);
+    if (!shared) {
+      console.error(`[config/plans] ${dual.slug} missing from @frpb/shared PLANS`);
+      continue;
+    }
+    if (shared.usd !== dual.usd || shared.inr !== dual.inr) {
+      console.error(
+        `[config/plans] PRICE DRIFT for ${dual.slug}: ` +
+          `shared ₹${shared.inr}/$${shared.usd} vs config ₹${dual.inr}/$${dual.usd}`
+      );
+    }
+    if (shared.priceCents !== dual.usd * 100 || shared.priceInr !== dual.inr * 100) {
+      console.error(
+        `[config/plans] MINOR-UNIT DRIFT for ${dual.slug}: ` +
+          `priceCents=${shared.priceCents} priceInr=${shared.priceInr}`
+      );
+    }
+  }
+}
+
+if (process.env.NODE_ENV !== "production") {
+  assertPlansInSync();
+}
 
 /** Resolve a plan by shared slug (the canonical key). */
 export function getDualPlan(slug: string): DualPlan | null {

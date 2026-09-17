@@ -110,14 +110,38 @@ interface UsbDeviceLike {
 type OperationMode = "test-mode" | "brom" | "fastboot-recovery";
 
 /**
- * Per-invocation engine guidance passed through the preload bridge.
+ * The engine operation methods the FRP path can dispatch to.
+ * Also the value `sanitizeFrpOptions` maps a connection-guide key onto.
  */
-interface OperationOptions {
-  brand?: string | null;
-  mode?: OperationMode;
-  /** Optional model string typed by the user — fed to the chipset detector. */
-  model?: string | null;
+type FrpMethod =
+  | "setup-wizard"
+  | "download-mode"
+  | "edl-mode"
+  | "mtk-brom"
+  | "oem-service";
+
+/**
+ * Shared, sanitised renderer → engine payload.
+ *
+ * Both sanitizers (operations and FRP) produce this shape. They previously each
+ * declared their own ad-hoc return type, which meant a field added to one was
+ * silently absent from the other — the root cause of the FRP path dropping
+ * `model` while the flash-reset path kept it. One type, one coercion path.
+ */
+interface SanitizedDevicePayload {
+  brand: string | null;
+  mode: OperationMode | null;
+  /** Trimmed model string, or null when the renderer supplied nothing usable. */
+  model: string | null;
+  /** ISO/string Android version when the renderer supplied one. */
+  androidVersion: string | null;
 }
+
+/**
+ * Per-invocation engine guidance passed through the preload bridge.
+ * Kept as an alias for readability at the call sites that predate the merge.
+ */
+type OperationOptions = Readonly<Partial<SanitizedDevicePayload>>;
 
 /**
  * Human label + the transport(s) that count as "phone is ready" for a mode.
@@ -1348,14 +1372,41 @@ export function registerDeviceHandlers(): void {
   });
 }
 
-/** Coerce an untrusted renderer payload into a safe OperationOptions. */
-function sanitizeOperationOptions(raw: unknown): OperationOptions {
-  const o = (raw ?? {}) as Partial<OperationOptions>;
-  const brand = typeof o.brand === "string" ? o.brand : undefined;
-  const mode = o.mode === "test-mode" || o.mode === "brom" || o.mode === "fastboot-recovery" ? o.mode : undefined;
+/**
+ * Shared coercion of an untrusted renderer payload.
+ *
+ * EVERY field is validated by type and trimmed; anything unrecognised is
+ * dropped rather than forwarded to the engine. This is the single primitive
+ * both sanitizers below are built on, so they cannot drift apart again.
+ */
+function sanitizeDevicePayload(raw: unknown): SanitizedDevicePayload {
+  const o = (raw ?? {}) as Record<string, unknown>;
+
+  const brand = typeof o.brand === "string" && o.brand.trim() ? o.brand.trim() : null;
+
+  const mode =
+    o.mode === "test-mode" || o.mode === "brom" || o.mode === "fastboot-recovery"
+      ? o.mode
+      : null;
+
   // Retain the renderer-typed model so the chipset handshake can identify the
   // device before (or without) an authorized ADB `ro.product.model` readback.
-  const model = typeof o.model === "string" && o.model.trim() ? o.model.trim() : undefined;
+  const model = typeof o.model === "string" && o.model.trim() ? o.model.trim() : null;
+
+  const androidVersion =
+    (typeof o.androidVersion === "string" && o.androidVersion.trim()
+      ? o.androidVersion.trim()
+      : null) ??
+    (typeof o.androidVersion === "number" && Number.isFinite(o.androidVersion)
+      ? String(o.androidVersion)
+      : null);
+
+  return { brand, mode, model, androidVersion };
+}
+
+/** Coerce an untrusted renderer payload into a safe OperationOptions. */
+function sanitizeOperationOptions(raw: unknown): OperationOptions {
+  const { brand, mode, model } = sanitizeDevicePayload(raw);
   return { brand, mode, model };
 }
 
@@ -1366,46 +1417,62 @@ function sanitizeRebootMode(raw: unknown): RebootMode | null {
     : null;
 }
 
-/** Coerce an untrusted renderer payload into a safe FRP bypass options.
- *  The renderer sends { brand, mode } where `mode` is the locked-device
- *  connection-guide key ("test-mode" | "brom" | "fastboot-recovery"). We map
- *  that onto a concrete engine `method` and inject model/chipset fallbacks so
- *  the engine's Step-1 device-info validation never rejects a real device.
+/**
+ * Coerce an untrusted renderer payload into safe FRP bypass options.
+ *
+ * The renderer sends `{ brand, mode }` where `mode` is the locked-device
+ * connection-guide key. We map that onto a concrete engine `method` and supply
+ * model/chipset fallbacks so the engine's Step-1 device-info validation never
+ * rejects a real device.
+ *
+ * Built on {@link sanitizeDevicePayload} so the brand/mode/model/androidVersion
+ * fields are validated IDENTICALLY to the flash-reset path — the divergence
+ * that previously let one route accept a raw, untrimmed value the other
+ * rejected.
  */
 function sanitizeFrpOptions(raw: unknown): {
   brand: string;
   model: string;
   androidVersion?: string;
-  method: "setup-wizard" | "download-mode" | "edl-mode" | "mtk-brom" | "oem-service";
-  mode?: "test-mode" | "brom" | "fastboot-recovery";
+  method: FrpMethod;
+  mode?: OperationMode;
   chipset?: string;
   frpResetFile?: string;
 } {
+  const base = sanitizeDevicePayload(raw);
   const o = (raw ?? {}) as Record<string, unknown>;
+
+  // Method resolution: an explicit, recognised `method` wins; otherwise derive
+  // it from the connection-guide `mode`.
   const methodRaw = o.method;
-  const modeRaw = o.mode;
-  let method: "setup-wizard" | "download-mode" | "edl-mode" | "mtk-brom" | "oem-service" = "download-mode";
-  if (
-    methodRaw === "setup-wizard" || methodRaw === "download-mode" || methodRaw === "edl-mode" ||
-    methodRaw === "mtk-brom" || methodRaw === "oem-service"
-  ) {
-    method = methodRaw;
-  } else if (modeRaw === "test-mode") {
+  const recognized =
+    methodRaw === "setup-wizard" ||
+    methodRaw === "download-mode" ||
+    methodRaw === "edl-mode" ||
+    methodRaw === "mtk-brom" ||
+    methodRaw === "oem-service";
+
+  let method: FrpMethod;
+  if (recognized) {
+    method = methodRaw as FrpMethod;
+  } else if (base.mode === "test-mode") {
     method = "setup-wizard"; // Samsung test mode — setup-wizard / OEM dial codes
-  } else if (modeRaw === "brom") {
+  } else if (base.mode === "brom") {
     method = "mtk-brom";
-  } else if (modeRaw === "fastboot-recovery") {
+  } else if (base.mode === "fastboot-recovery") {
     method = "download-mode"; // recovery ADB / download-mode wipe
+  } else {
+    method = "download-mode";
   }
+
   return {
-    brand: typeof o.brand === "string" ? o.brand : "",
-    model: typeof o.model === "string" && o.model.trim() ? o.model.trim() : "Generic",
-    androidVersion: typeof o.androidVersion === "string" ? o.androidVersion : undefined,
+    // The engine requires concrete strings here (it interpolates them into
+    // user-facing messages), so the nullable base fields are coerced.
+    brand: base.brand ?? "",
+    model: base.model ?? "Generic",
+    androidVersion: base.androidVersion ?? undefined,
     method,
-    mode:
-      modeRaw === "test-mode" || modeRaw === "brom" || modeRaw === "fastboot-recovery"
-        ? modeRaw
-        : undefined,
+    mode: base.mode ?? undefined,
     chipset: typeof o.chipset === "string" && o.chipset.trim() ? o.chipset.trim() : "Auto-Detect",
     frpResetFile: typeof o.frpResetFile === "string" ? o.frpResetFile : undefined,
   };

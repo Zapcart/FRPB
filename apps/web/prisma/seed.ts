@@ -2,6 +2,7 @@
 // Run with: pnpm prisma:seed (uses apps/web/prisma/seed.ts)
 
 import { PrismaClient } from "@prisma/client";
+import { PLANS } from "@frpb/shared";
 import { sha256 } from "../src/lib/crypto/sha256";
 import { devTestKeysAllowed } from "../src/lib/license/test-key";
 
@@ -10,6 +11,15 @@ const prisma = new PrismaClient();
 // slug typed as the Prisma PlanType enum values via string literals
 type PlanSlug = "MONTH_1" | "YEAR_1" | "LIFETIME";
 
+/**
+ * Plan rows are DERIVED from the shared PLANS definition.
+ *
+ * This file previously held a third hardcoded copy of the prices, which had
+ * already drifted from the other two (it still carried the old 1999¢ / 4999¢ /
+ * 9999¢ rates after the storefront moved to $20 / $50 / $100). Deriving them
+ * means a price change is made in ONE place and the database, the storefront
+ * and the checkout payload can no longer disagree.
+ */
 const plans: Array<{
   slug: PlanSlug;
   name: string;
@@ -19,55 +29,16 @@ const plans: Array<{
   durationDays: number | null;
   deviceLimit: number;
   features: string[];
-}> = [
-  {
-    slug: "MONTH_1",
-    name: "1-Month Plan",
-    priceCents: 1999,
-    priceInr: 190000,
-    currency: "USD",
-    durationDays: 30,
-    deviceLimit: 1,
-    features: [
-      "Full device recovery toolkit",
-      "Driver Center + recovery guides",
-      "1 device activation",
-      "Email support",
-    ],
-  },
-  {
-    slug: "YEAR_1",
-    name: "1-Year Plan",
-    priceCents: 4999,
-    priceInr: 490000,
-    currency: "USD",
-    durationDays: 365,
-    deviceLimit: 3,
-    features: [
-      "Full device recovery toolkit",
-      "Driver Center + recovery guides",
-      "3 device activations",
-      "Priority email support",
-      "All feature updates",
-    ],
-  },
-  {
-    slug: "LIFETIME",
-    name: "Lifetime Plan",
-    priceCents: 9999,
-    priceInr: 999900,
-    currency: "USD",
-    durationDays: null,
-    deviceLimit: 5,
-    features: [
-      "Full device recovery toolkit",
-      "Driver Center + recovery guides",
-      "5 device activations",
-      "Priority email support",
-      "All feature updates forever",
-    ],
-  },
-];
+}> = PLANS.map((plan) => ({
+  slug: plan.slug,
+  name: plan.name,
+  priceCents: plan.priceCents,
+  priceInr: plan.priceInr,
+  currency: plan.currency,
+  durationDays: plan.durationDays,
+  deviceLimit: plan.deviceLimit,
+  features: plan.features,
+}));
 
 // Master test key — the same value the desktop activation screen accepts.
 //
@@ -93,7 +64,9 @@ async function main() {
       update: plan,
       create: plan,
     });
-    console.log(`  ✓ ${plan.name} (${plan.priceCents}¢, ${plan.deviceLimit} devices)`);
+    console.log(
+      `  ✓ ${plan.name} (${plan.priceCents}¢ / ₹${plan.priceInr / 100}, ${plan.deviceLimit} devices)`
+    );
   }
 
   // ── Test user + master licence: DEV/TEST ONLY ───────────────────────────

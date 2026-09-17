@@ -103,9 +103,44 @@ function isQualcomm(chipset: string): boolean {
 
 // ─── Transport Detection ────────────────────────────────────────────────────────
 
+/**
+ * True when the reported model/chipset is a generic emulator, Android-x86 or
+ * ChromeOS/ARC build rather than a physical handset.
+ *
+ * These targets have NO Samsung Download mode, NO Qualcomm EDL and NO MediaTek
+ * BROM — the previous fallback sent them to "download", which is not merely
+ * wrong but unreachable: there is no Odin transport on an x86 build, so the
+ * operation could only ever fail with a confusing low-level error. They are
+ * ADB-reachable (that is how emulators and ARC expose the device), so that is
+ * what they must resolve to.
+ */
+function isGenericOrVirtualTarget(chipset: string, brand: string, model: string): boolean {
+  const hay = `${chipset} ${brand} ${model}`.toLowerCase();
+  return (
+    /\bx86(_64)?\b/.test(hay) ||
+    hay.includes("android-x86") ||
+    hay.includes("chrome os") ||
+    hay.includes("chromeos") ||
+    hay.includes("arc ") ||
+    hay.includes("emulator") ||
+    hay.includes("sdk_gphone") ||
+    hay.includes("goldfish") ||
+    hay.includes("ranchu") ||
+    hay.includes("virtual device")
+  );
+}
+
 /** Device ka appropriate transport mode detect kare. */
 export function detectTransportMode(info: { chipset: string; brand: string; androidVersion: number; model: string }): OperationMode {
   const chipset = info.chipset.toLowerCase();
+  const brand = info.brand.toLowerCase();
+  const model = info.model ?? "";
+
+  // Generic/virtual x86 or ChromeOS targets are ADB-only — never "download".
+  // Checked FIRST so it cannot be shadowed by the vendor heuristics below.
+  if (isGenericOrVirtualTarget(chipset, brand, model)) {
+    return "adb";
+  }
 
   if (isQualcomm(chipset) && info.androidVersion <= 13) {
     return "edl"; // Qualcomm EDL mode available
@@ -115,16 +150,18 @@ export function detectTransportMode(info: { chipset: string; brand: string; andr
     return "brom";  // MTK BROM mode
   }
 
-  if (isSamsungExynos(chipset) || info.brand.toLowerCase().includes("samsung")) {
+  if (isSamsungExynos(chipset) || brand.includes("samsung")) {
     if (info.androidVersion >= 6 && info.androidVersion <= 14) {
       return "download"; // Samsung Download mode
     }
     return "adb";
   }
 
-  // Generic fallback
+  // Generic fallback. A physical handset at a supported Android version without
+  // a recognised chipset is most reliably driven over ADB — claiming "download"
+  // here would assert a transport we have no evidence exists for this device.
   if (info.androidVersion >= 6 && info.androidVersion <= 16) {
-    return "download";
+    return "adb";
   }
   return "adb";
 }
@@ -158,6 +195,54 @@ export function isAdbAvailable(): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * True when at least one device is visible to `adb devices`.
+ *
+ * ADB operations previously ran unconditionally, so a disconnected phone
+ * surfaced as a raw `adb: no devices/emulators found` exec error that looked
+ * like an engine failure. Callers use this to fail fast with an actionable
+ * message instead.
+ *
+ * `unauthorized`/`offline` entries still count as PRESENT: the device is
+ * connected and the correct next step is to accept the on-screen prompt, which
+ * is a different (and more helpful) message than "nothing is plugged in".
+ */
+export function hasAdbDevice(): boolean {
+  if (!isAdbAvailable()) return false;
+  try {
+    const { stdout } = adbExec(["devices"], 8000);
+    // Output looks like:
+    //   List of devices attached
+    //   R58M12345\tdevice
+    return stdout
+      .split(/\r?\n/)
+      .some((line) => /^\S+\s+(device|unauthorized|offline|recovery|sideload)$/.test(line.trim()));
+  } catch {
+    return false;
+  }
+}
+
+/** `{ connected, authorized }` for the first ADB-visible device. */
+export function adbDeviceState(): { connected: boolean; authorized: boolean; serial: string | null } {
+  if (!isAdbAvailable()) return { connected: false, authorized: false, serial: null };
+  try {
+    const { stdout } = adbExec(["devices"], 8000);
+    for (const line of stdout.split(/\r?\n/)) {
+      const match = /^(\S+)\s+(device|unauthorized|offline|recovery|sideload)$/.exec(line.trim());
+      if (match) {
+        return {
+          connected: true,
+          authorized: match[2] === "device",
+          serial: match[1] ?? null,
+        };
+      }
+    }
+  } catch {
+    // Fall through to the disconnected result.
+  }
+  return { connected: false, authorized: false, serial: null };
 }
 
 /** ADB ke through device info read kare (agar USB debugging on hai). */
@@ -241,18 +326,35 @@ export async function samsungOdinFrpRemove(options: BypassOptions, context: Bypa
     };
   }
 
-  context.progressCb("odin-flash", 50, "Flashing FRP remove package...");
-  // Actual flash operation would happen here
-  // Ye step UnlockTool proprietary firmware ke sath hota hai
+  // ── HONESTY GATE ────────────────────────────────────────────────────
+  // This flow previously reported `status: "success"` after emitting progress
+  // callbacks and performing NO flash at all — telling the user their phone was
+  // unlocked when nothing had been written. That is the most damaging possible
+  // failure mode for a recovery tool: the operator stops looking for a real
+  // solution because the UI said it worked.
+  //
+  // A real Odin FRP removal requires a signed, model-matched Odin package,
+  // which is proprietary and NOT bundled. Until such a package is supplied we
+  // report failure with the exact next step.
+  context.progressCb(
+    "odin-package",
+    50,
+    "No Odin flash package available for this model — a signed, model-matched package is required.",
+  );
 
-  context.progressCb("odin-verify", 80, "Verifying FRP removal...");
-  // FRP removal verify
+  context.progressCb(
+    "odin-guidance",
+    75,
+    "Connect the device in Download mode and supply the official firmware, or use the MediaTek BROM / Qualcomm EDL route instead.",
+  );
 
-  context.progressCb("done", 100, "FRP lock removed successfully");
   return {
-    status: "success",
-    detail: "Samsung Odin mode me FRP lock remove complete.",
-    timeTaken: 60000, // approximate
+    status: "failed",
+    error:
+      "Samsung Odin FRP removal needs a signed, model-specific Odin package, which is " +
+      "not bundled with FRPB. The device was NOT modified. Provide the correct official " +
+      "firmware for this exact model, or use the BROM / EDL / Recovery route instead.",
+    recoverable: true,
   };
 }
 
@@ -275,25 +377,44 @@ export async function qualcommEdlFrpRemove(options: BypassOptions, context: Bypa
     };
   }
 
-  context.progressCb("edl-detect", 20, "Detecting EDL mode...");
-  // Check if device is in EDL mode (USB endpoint 0x06 typically)
+  // ── HONESTY GATE ────────────────────────────────────────────────────
+  // Previously this emitted a Firehose/partition-flash narrative and returned
+  // `status: "success"` without opening the device or sending a single
+  // transfer. A FRP removal that never happened is worse than a clean failure:
+  // the operator believes the handset is unlocked and stops looking for a real
+  // solution.
+  //
+  // A Firehose-based FRP clear requires a signed, model-matched programmer
+  // (.mbn) plus patch XML. Those are proprietary per-model artefacts and are
+  // NOT bundled, so this path cannot honestly claim success.
+  //
+  // The MEASURED Qualcomm capability in this codebase is the EDL 9008 handshake
+  // and secure-wipe sequence in electron/ipc/device.ts
+  // (detectChipset → qualcommEdlHandshake), which is what the FRP Bypass button
+  // actually drives. Callers should use that, so this stub reports the real
+  // state instead of narrating work it never performed.
+  context.progressCb(
+    "edl-detect",
+    20,
+    "Checking for a Qualcomm EDL (9008) interface…",
+  );
 
-  context.progressCb("edl-programmer", 40, "Loading Firehose programmer...");
+  context.progressCb(
+    "edl-guidance",
+    60,
+    "EDL entry: power off, hold Volume Up + Volume Down (or use an EDL cable), " +
+      "connect the cable and keep holding until the screen stays black.",
+  );
 
-  // In real implementation:
-  // 1. Load Firehose programmer binary (pb programmer)
-  // 2. Send FIREHOSE_Rdy_to_switch state
-  // 3. Flash FRP-free partition image
-
-  context.progressCb("edl-flash", 70, "Flashing partition...");
-
-  context.progressCb("edl-verify", 90, "Verifying...");
-
-  context.progressCb("done", 100, "FRP lock removed via EDL");
   return {
-    status: "success",
-    detail: "Qualcomm EDL mode me FRP lock remove complete.",
-    timeTaken: 120000,
+    status: "failed",
+    error:
+      "Qualcomm EDL FRP removal requires a signed, model-matched Firehose " +
+      "programmer (.mbn) and patch XML, which are not bundled with FRPB. The " +
+      "device was NOT modified. Run the FRP Bypass action, which performs the " +
+      "measured EDL 9008 handshake and secure wipe, or supply the correct " +
+      "programmer for this exact model.",
+    recoverable: true,
   };
 }
 
@@ -385,22 +506,34 @@ export async function setupWizardFrpRemove(options: BypassOptions, context: Bypa
     };
   }
 
-  context.progressCb("sw-check", 10, "Checking Setup Wizard exploit availability...");
+  context.progressCb(
+    "sw-check",
+    10,
+    "Checking Setup Wizard exploit availability… (keyboard / Settings-app exploits are patched on modern security patches)",
+  );
 
-  // Ye method ke liye specific exploit tools chahiye
-  // Common exploits: Google Keyboard exploit, Settings app exploit, etc.
-  // Ye mostly patched ho chuke hain
+  // These exploits are per-build and patched en masse by Google's monthly
+  // security updates. There is no reliable, general implementation, so the
+  // honest answer is to redirect the operator to a transport that does work.
+  context.progressCb(
+    "sw-unavailable",
+    40,
+    "Setup Wizard exploits are patched on this build — switching guidance to a low-level transport.",
+  );
 
-  context.progressCb("sw-exploit", 30, "Attempting Setup Wizard exploit...");
-
-  // Implementation would require exploit-specific code
-  // Ye area high-risk hai aur device-specific hoti hai
-
-  context.progressCb("sw-fail", 50, "Setup Wizard exploit not available or failed");
+  context.progressCb(
+    "sw-guidance",
+    70,
+    "Connect the phone in a supported hardware mode: MediaTek BROM (hold Vol Up + Vol Down while plugging in), Qualcomm EDL 9008, or Samsung Download mode. Install the matching USB driver from the Driver Center first.",
+  );
 
   return {
     status: "failed",
-    error: "Setup Wizard exploit not available. This method is mostly patched on newer Android versions. Try MTK BROM or Download mode.",
+    error:
+      "Setup Wizard exploit is not available on this build (patched). The device was NOT " +
+      "modified. Connect the handset in MediaTek BROM, Qualcomm EDL (9008) or Samsung " +
+      "Download mode — install the matching USB driver from the FRPB Driver Center first — " +
+      "then re-run the operation.",
     recoverable: true,
   };
 }
@@ -431,21 +564,43 @@ export async function oemServiceFrpRemove(options: BypassOptions, context: Bypas
   if (codes.length === 0) {
     return {
       status: "failed",
-      error: `${context.brand} ke liye OEM service mode codes not found. Try alternative method.`,
+      error:
+        `No OEM service-mode codes are mapped for ${context.brand}. Connect the device in a ` +
+        "low-level mode (BROM / EDL / Download) instead, or select the correct brand.",
       recoverable: true,
     };
   }
 
-  context.progressCb("oem-dial", 20, `Dialing service code: ${codes[0]}...`);
+  context.progressCb(
+    "oem-dial",
+    20,
+    `${context.brand} service codes available: ${codes.join(", ")} — these must be dialled manually on the device.`,
+  );
 
-  // Ye step device ke dialer me code dial karta hai
-  // FRP bypass ke liye specific OEM commands hote hain
+  // The dial codes open a diagnostic surface; the FRP-clearing commands behind
+  // it are brand-proprietary and per-build. Driving them automatically is not
+  // implemented, so this reports the manual path rather than narrating a
+  // procedure it cannot perform.
+  context.progressCb(
+    "oem-guidance",
+    55,
+    "Open the dialer on the device and enter one of the service codes above, then follow the brand's diagnostic menu. Not all builds expose an FRP-clearing entry.",
+  );
 
-  context.progressCb("oem-fail", 50, `${context.brand} OEM service method not fully implemented`);
+  context.progressCb(
+    "oem-alt",
+    75,
+    "If the service menu offers no FRP option, use the MediaTek BROM / Qualcomm EDL / Samsung Download route — those are driven automatically by FRPB.",
+  );
 
   return {
     status: "failed",
-    error: `${context.brand} OEM service mode FRP removal not fully implemented. This requires brand-specific protocols.`,
+    error:
+      `${context.brand} OEM service-mode FRP removal is not automated — the diagnostic ` +
+      "commands behind those codes are brand-proprietary. The device was NOT modified. " +
+      `Dial ${codes[0]} manually to open the service menu, or connect the handset in a ` +
+      "MediaTek BROM / Qualcomm EDL / Samsung Download mode where FRPB can drive the " +
+      "operation end-to-end.",
     recoverable: true,
   };
 }
@@ -482,6 +637,42 @@ export async function runFrpBypass(
         status: "failed",
         error: "No device detected in the selected mode. Please connect your phone in " +
           (options.transport === "brom" ? "BROM" : "Download") + " mode and try again.",
+        recoverable: true,
+      };
+    }
+  }
+
+  // ── ADB presence gate ─────────────────────────────────────────────────
+  // The ADB-based methods (oem-service / setup-wizard / the ADB transport) used
+  // to run unconditionally. On a disconnected phone that produced a raw
+  // `adb: no devices/emulators found` exec failure, which read as an engine
+  // bug rather than "plug the phone in". Probe first and return a clean,
+  // actionable message.
+  if (options.transport === "adb" || options.transport === "usb") {
+    if (!isAdbAvailable()) {
+      return {
+        status: "failed",
+        error:
+          "ADB is not available. Bundled platform-tools are missing — reinstall " +
+          "FRPB or run the Driver Center setup, then retry.",
+        recoverable: true,
+      };
+    }
+    const adbState = adbDeviceState();
+    if (!adbState.connected) {
+      return {
+        status: "failed",
+        error: "No device connected via ADB. Connect the phone with a data cable and " +
+          "enable USB debugging (or use a low-level mode such as BROM / EDL / Download).",
+        recoverable: true,
+      };
+    }
+    if (!adbState.authorized) {
+      return {
+        status: "failed",
+        error:
+          "A device is connected via ADB but is not authorized. Accept the " +
+          "“Allow USB debugging” prompt on the phone screen, then retry.",
         recoverable: true,
       };
     }

@@ -45,6 +45,14 @@ import {
 } from "@/lib/seo";
 import { softwareApplicationSchema, websiteSchema, faqPageSchema } from "@/lib/schema";
 import { HOME_FAQ } from "@/lib/faq";
+import { homeMetrics, SUPPORTED_CHIPSETS, SUPPORTED_MODES } from "@/lib/home-metrics";
+
+/**
+ * Verifiable capability metrics derived from the shipped model catalog — see
+ * lib/home-metrics.ts. Replaces the previously hardcoded "120,000+ devices
+ * recovered" / "4.9/5 from 2,000+ reviews" social proof, which had no source.
+ */
+const HOME_METRICS = homeMetrics();
 
 const NAV_LINKS = [
   { label: "Features", href: "#features" },
@@ -57,14 +65,22 @@ const NAV_LINKS = [
 
 const BRANDS = ["Samsung", "Xiaomi", "Vivo", "OPPO", "OnePlus", "Google Pixel"];
 
-// Press / media outlets shown in the social-proof trust banner.
-const PRESS = [
-  "Cult of Mac",
-  "9to5Mac",
-  "TechRadar",
-  "Android Authority",
-  "Gizmodo",
-  "Forbes",
+/**
+ * Capability strip replacing the previous "As featured in" press banner.
+ *
+ * The old banner listed media outlets (Cult of Mac, Forbes, …) as though they
+ * had covered FRPB. We hold no such press coverage, so presenting those brands
+ * as an endorsement was a credibility (and trademark) problem. These tiles
+ * instead state capabilities we can demonstrate: the transports the engine
+ * drives and the vendors it supports.
+ */
+const CAPABILITIES = [
+  "MediaTek BROM",
+  "Qualcomm EDL 9008",
+  "Samsung Download Mode",
+  "Fastboot & Recovery",
+  "ADB Automation",
+  "Driver Auto-Install",
 ];
 
 /**
@@ -396,9 +412,11 @@ export default function HomePage() {
                 <BadgeCheck className="h-5 w-5 text-emerald-400" />
               </span>
               <div className="text-left">
-                <p className="text-sm font-extrabold leading-none text-white">120,000+</p>
+                <p className="text-sm font-extrabold leading-none text-white">
+                  {HOME_METRICS.supportedModels}
+                </p>
                 <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                  Devices recovered
+                  Models supported
                 </p>
               </div>
             </div>
@@ -409,9 +427,11 @@ export default function HomePage() {
                 <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
               </span>
               <div className="text-left">
-                <p className="text-sm font-extrabold leading-none text-white">4.9 / 5</p>
+                <p className="text-sm font-extrabold leading-none text-white">
+                  {HOME_METRICS.chipsetFamilies}
+                </p>
                 <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
-                  2,000+ reviews
+                  Chipset families
                 </p>
               </div>
             </div>
@@ -479,22 +499,29 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ================= PRESS / TRUST BANNER ================= */}
-      <section aria-label="As featured in" className="border-b border-white/10 bg-night-950">
+      {/* ================= CAPABILITY STRIP ================= */}
+      <section
+        aria-label="Supported recovery transports"
+        className="border-b border-white/10 bg-night-950"
+      >
         <div className="mx-auto max-w-7xl px-6 py-10">
           <p className="text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">
-            As featured in
+            Supported transports & tooling
           </p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-x-8 gap-y-4 sm:gap-x-12">
-            {PRESS.map((outlet) => (
+            {CAPABILITIES.map((capability) => (
               <span
-                key={outlet}
-                className="text-base font-bold tracking-tight text-slate-600 transition hover:text-slate-300 sm:text-lg"
+                key={capability}
+                className="text-sm font-bold tracking-tight text-slate-500 transition hover:text-slate-300 sm:text-base"
               >
-                {outlet}
+                {capability}
               </span>
             ))}
           </div>
+          <p className="mt-6 text-center text-[11px] text-slate-600">
+            {SUPPORTED_MODES.length} boot modes · {SUPPORTED_CHIPSETS.length} chipset
+            families · {HOME_METRICS.supportedModelCount}+ catalogued models
+          </p>
         </div>
       </section>
 
@@ -637,12 +664,19 @@ export default function HomePage() {
                   <h3 className="text-lg font-bold text-white">{plan.name}</h3>
                   <div className="mt-4 flex items-baseline gap-1.5">
                     <span className="text-4xl font-black tracking-tight text-white">
-                      ${(plan.priceCents / 100).toFixed(2)}
+                      {/* `plan.usd` is the canonical whole-dollar amount from
+                          @frpb/shared — the same value the checkout payload and
+                          the PayGlocal rail charge. Never a local calculation. */}
+                      ${plan.usd}
                     </span>
                     <span className="text-sm font-medium text-slate-500">
                       {PRICING_NOTES[plan.slug]}
                     </span>
                   </div>
+                  {/* Cross-currency hint so the INR price is never a surprise. */}
+                  <p className="mt-1 text-xs font-medium text-slate-500">
+                    or ₹{new Intl.NumberFormat("en-IN").format(plan.inr)} (UPI)
+                  </p>
                   <p className="mt-1 text-xs text-slate-500">
                     {plan.deviceLimit} device{plan.deviceLimit === 1 ? "" : "s"} ·{" "}
                     {plan.durationDays ? `${plan.durationDays} days` : "Lifetime access"}
@@ -723,7 +757,8 @@ export default function HomePage() {
               </Link>
             </div>
             <p className="mt-5 text-xs text-white/60">
-              4.9/5 average rating from 2,000+ technicians and service shops
+              {SUPPORTED_MODES.length} boot modes · {SUPPORTED_CHIPSETS.length} chipset
+              families · free to download and try
             </p>
           </div>
         </div>

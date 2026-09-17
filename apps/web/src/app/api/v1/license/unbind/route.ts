@@ -19,6 +19,15 @@ export const OPTIONS = preflight;
 const DB_UNAVAILABLE_MESSAGE =
   "We couldn't complete that right now. Please try again in a moment.";
 
+/** Rolling window for the unbind quota (30 days). */
+const UNBIND_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+/**
+ * Maximum self-service unbinds per licence per {@link UNBIND_WINDOW_MS}.
+ * Chosen to comfortably cover a genuine "I replaced my PC / reimaged Windows"
+ * case (the plan device limits are 1–5) while blocking seat-cycling abuse.
+ */
+const MAX_UNBINDS_PER_WINDOW = 3;
+
 export async function POST(req: NextRequest) {
   return withCorsResponse(await handleUnbind(req));
 }
@@ -77,7 +86,43 @@ async function handleUnbind(req: NextRequest) {
       );
     }
 
-    // 4. Mark UNBOUND (slot freed; same machine re-binds on next verify)
+    // 4. COOL-DOWN / QUOTA — self-service unbinding is a licence-shuffling lever:
+    //    repeatedly unbinding and re-activating lets one seat be cycled across
+    //    unlimited machines, which defeats the per-plan device limit. Cap it at
+    //    MAX_UNBINDS_PER_WINDOW per licence within a rolling 30-day window.
+    //
+    //    The count is derived from the durable `unboundAt` timestamps on the
+    //    licence's device rows rather than an in-memory counter, so it survives
+    //    a restart and cannot be reset by reconnecting.
+    const windowStart = new Date(Date.now() - UNBIND_WINDOW_MS);
+    const recentUnbinds = await prisma.licenseDevice.count({
+      where: {
+        licenseId: device.licenseId,
+        unboundAt: { gte: windowStart },
+      },
+    });
+    if (recentUnbinds >= MAX_UNBINDS_PER_WINDOW) {
+      const oldest = await prisma.licenseDevice.findFirst({
+        where: { licenseId: device.licenseId, unboundAt: { gte: windowStart } },
+        orderBy: { unboundAt: "asc" },
+        select: { unboundAt: true },
+      });
+      const nextAvailable = oldest?.unboundAt
+        ? new Date(oldest.unboundAt.getTime() + UNBIND_WINDOW_MS)
+        : undefined;
+      return NextResponse.json<UnbindResponse>(
+        {
+          success: false,
+          message:
+            `You have reached the limit of ${MAX_UNBINDS_PER_WINDOW} device unbinds per 30 days ` +
+            `for this license. Contact support if you need to move to another machine sooner.`,
+          data: { availableAt: nextAvailable?.toISOString() },
+        },
+        { status: 429 }
+      );
+    }
+
+    // 5. Mark UNBOUND (slot freed; same machine re-binds on next verify)
     await prisma.licenseDevice.update({
       where: { id: device.id },
       data: { status: "UNBOUND", unboundAt: new Date(), unbindCount: { increment: 1 } },

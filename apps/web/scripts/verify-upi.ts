@@ -119,9 +119,9 @@ check("normalized value is valid", isValidUtr(normalizeUtr("4123 4567 8901")));
 console.log("\nFRPB — Dual-currency plan config\n");
 
 const dualExpect: Array<[string, number, number]> = [
-  ["MONTH_1", 1900, 25],
-  ["YEAR_1", 4900, 60],
-  ["LIFETIME", 9999, 120],
+  ["MONTH_1", 1900, 20],
+  ["YEAR_1", 4900, 50],
+  ["LIFETIME", 9999, 100],
 ];
 for (const [slug, inr, usd] of dualExpect) {
   const plan = getDualPlan(slug);
@@ -132,7 +132,7 @@ for (const [slug, inr, usd] of dualExpect) {
   );
 }
 check("exactly three dual plans", DUAL_PLANS.length === 3);
-check("getDualPlan is case-insensitive", getDualPlan("year_1")?.usd === 60);
+check("getDualPlan is case-insensitive", getDualPlan("year_1")?.usd === 50);
 check("unknown dual plan rejected", getDualPlan("FREE") === null);
 
 // Strict amount locks — the ONLY figures each rail may charge.
@@ -144,11 +144,11 @@ check(
     isAllowedInrAmount(9999)
 );
 check(
-  "ALLOWED_USD_AMOUNTS = {25,60,120}",
+  "ALLOWED_USD_AMOUNTS = {20,50,100}",
   ALLOWED_USD_AMOUNTS.size === 3 &&
-    isAllowedUsdAmount(25) &&
-    isAllowedUsdAmount(60) &&
-    isAllowedUsdAmount(120)
+    isAllowedUsdAmount(20) &&
+    isAllowedUsdAmount(50) &&
+    isAllowedUsdAmount(100)
 );
 check("tampered INR amount rejected", !isAllowedInrAmount(1) && !isAllowedInrAmount(1901));
 check("tampered USD amount rejected", !isAllowedUsdAmount(1) && !isAllowedUsdAmount(99));
@@ -160,13 +160,32 @@ check("USD routes to PayGlocal", providerForDualCurrency("USD") === "PAYGLOCAL")
 // Formatting used by the modal / pricing grid.
 check("formatDualInr(1900) = ₹1,900", formatDualInr(1900) === "₹1,900", formatDualInr(1900));
 check("formatDualInr(9999) = ₹9,999", formatDualInr(9999) === "₹9,999", formatDualInr(9999));
-check("formatDualUsd(25) = $25", formatDualUsd(25) === "$25", formatDualUsd(25));
-check("formatDualUsd(120) = $120", formatDualUsd(120) === "$120", formatDualUsd(120));
+check("formatDualUsd(20) = $20", formatDualUsd(20) === "$20", formatDualUsd(20));
+check("formatDualUsd(100) = $100", formatDualUsd(100) === "$100", formatDualUsd(100));
 check(
   "formatDualPrice shows both currencies",
-  formatDualPrice(getDualPlan("MONTH_1")!) === "₹1,900 / $25",
+  formatDualPrice(getDualPlan("MONTH_1")!) === "₹1,900 / $20",
   formatDualPrice(getDualPlan("MONTH_1")!)
 );
+
+// ─── Shared ↔ web plan synchronization ───────────────────────────────────────
+// The storefront price MUST equal the amount the checkout charges. This is the
+// exact class of bug the audit flagged, so it is asserted explicitly.
+import { PLANS as SHARED_PLANS } from "@frpb/shared";
+console.log("\nFRPB — pricing synchronization\n");
+for (const dual of DUAL_PLANS) {
+  const shared = SHARED_PLANS.find((p) => p.slug === dual.slug);
+  check(
+    `${dual.slug}: shared PLANS matches web DUAL_PLANS`,
+    shared?.inr === dual.inr && shared?.usd === dual.usd,
+    `shared ₹${shared?.inr}/$${shared?.usd} vs web ₹${dual.inr}/$${dual.usd}`
+  );
+  check(
+    `${dual.slug}: minor units match whole units`,
+    shared?.priceCents === dual.usd * 100 && shared?.priceInr === dual.inr * 100,
+    `priceCents=${shared?.priceCents} priceInr=${shared?.priceInr}`
+  );
+}
 
 // The UPI engine's plan table must agree with the dual config.
 check(

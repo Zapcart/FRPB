@@ -296,9 +296,26 @@ function createWebBridge(): FrpbBridge {
         };
       },
       checkConsent: async (): Promise<ConsentState> => consent,
+      /**
+       * Mirrors electron/ipc/device.ts `device:acceptConsent` EXACTLY.
+       *
+       * The main process only accepts the consent-gated operations (see
+       * CONSENT_OPS there) and rejects anything else with
+       * `{ ok: false, error: "Unknown operation: X" }`. This mock previously
+       * accepted ANY OperationKind — including "reboot-mode", which is
+       * deliberately NOT consent-gated — so browser preview behaved more
+       * permissively than the shipped app and could mask a real bug.
+       */
       acceptConsent: async (
         operation: OperationKind
       ): Promise<AcceptConsentResult> => {
+        if (
+          operation !== "flash-reset" &&
+          operation !== "frp-bypass" &&
+          operation !== "unlock-screen"
+        ) {
+          return { ok: false, error: `Unknown operation: ${String(operation)}` };
+        }
         consent = {
           flashReset: consent.flashReset || operation === "flash-reset",
           frpBypass: consent.frpBypass || operation === "frp-bypass",

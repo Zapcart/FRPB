@@ -13,9 +13,13 @@ export type Currency = (typeof CURRENCY_VALUES)[number];
 export interface PlanDefinition {
   slug: PlanSlug;
   name: string;
-  priceCents: number;          // USD in cents ($19.99 = 1999)
+  priceCents: number;          // USD in cents ($20 = 2000)
   currency: string;            // "USD"
   priceInr: number;            // INR in paise (₹1,900 = 190000)
+  /** Whole US dollars — the value every storefront displays. */
+  usd: number;
+  /** Whole rupees — the value every storefront displays. */
+  inr: number;
   /** null = lifetime */
   durationDays: number | null;
   deviceLimit: number;
@@ -56,9 +60,11 @@ export const PLANS: readonly PlanDefinition[] = [
   {
     slug: "MONTH_1",
     name: "1-Month Plan",
-    priceCents: 1999,
+    priceCents: 2000,   // $20
     currency: "USD",
     priceInr: 190000,   // ₹1,900
+    usd: 20,
+    inr: 1900,
     durationDays: 30,
     deviceLimit: 1,
     features: [
@@ -71,9 +77,11 @@ export const PLANS: readonly PlanDefinition[] = [
   {
     slug: "YEAR_1",
     name: "1-Year Plan",
-    priceCents: 4999,
+    priceCents: 5000,   // $50
     currency: "USD",
     priceInr: 490000,   // ₹4,900
+    usd: 50,
+    inr: 4900,
     durationDays: 365,
     deviceLimit: 3,
     features: [
@@ -87,9 +95,11 @@ export const PLANS: readonly PlanDefinition[] = [
   {
     slug: "LIFETIME",
     name: "Lifetime Plan",
-    priceCents: 9999,
+    priceCents: 10000,  // $100
     currency: "USD",
     priceInr: 999900,   // ₹9,999
+    usd: 100,
+    inr: 9999,
     durationDays: null,
     deviceLimit: 5,
     features: [

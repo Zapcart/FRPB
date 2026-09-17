@@ -189,6 +189,10 @@ export async function grantLicenseForOrder(
         provider: "DIRECT_UPI",
         orderId: order.orderId,
         utr: order.utr,
+        // Hashed copy for an index-friendly cross-flow duplicate lookup: the
+        // webhook rail can find a license already granted for this UTR without
+        // scanning plaintext metadata.
+        utrHash: order.utr ? sha256(order.utr) : null,
         planSlug,
         amount: order.amount,
       },
