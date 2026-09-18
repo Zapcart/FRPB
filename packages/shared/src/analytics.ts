@@ -57,6 +57,25 @@ export interface AdminAnalyticsResponse {
     createdAt: string;
   }[];
   revenue: RevenueMetrics;
+  pendingUpiOrders: {
+    id: string;
+    orderId: string;
+    email: string;
+    planId: string;
+    planName: string;
+    amount: number;
+    currency: string;
+    status: string;
+    utr: string | null;
+    /** Set once the order is promoted to PAID (null while PENDING_VERIFICATION). */
+    paidAt: string | null;
+    paymentConfirmed: boolean;
+    utrSuspicious: boolean;
+    createdAt: string;
+    expiresAt: string;
+    /** License key, when one has already been minted for the order. */
+    licenseKey: string | null;
+  }[];
 }
 
 /**

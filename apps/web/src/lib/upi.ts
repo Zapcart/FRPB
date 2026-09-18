@@ -242,7 +242,9 @@ export function isSuspiciousUtr(utr: string): boolean {
   // Sequential (ascending or descending)
   let sequential = true;
   for (let i = 1; i < digits.length; i++) {
-    const diff = (parseInt(digits[i]) - parseInt(digits[i - 1])) % 10;
+    // `i` is within bounds by construction; the index accesses are asserted to
+    // satisfy noUncheckedIndexedAccess without a runtime null check.
+    const diff = (parseInt(digits[i]!) - parseInt(digits[i - 1]!)) % 10;
     if (diff !== 1 && diff !== -9) { // -9 handles 9→0 wrap
       sequential = false;
       break;

@@ -1,8 +1,9 @@
 // FRPB — POST /api/v1/payment/verify
 //
 // Claims a direct-UPI order by submitting the customer's 12-digit UPI
-// reference (UTR/RRN). On success the order is marked PAID and a license is
-// minted exactly once.
+// reference (UTR/RRN). On success the order is moved to PENDING_VERIFICATION
+// and NO license is minted — a license is only granted once an admin manually
+// approves the payment.
 //
 // Security hardening:
 //   1. RATE LIMITING — prevents brute-force UTR guessing attacks.
@@ -13,12 +14,12 @@
 //      pre-check for a friendly error instead of leaking a P2002 constraint.
 //   4. ORDER EXPIRY    — a PENDING order past its 10-minute window is EXPIRED
 //      and refuses the claim.
-//   5. PAYMENT CONFIRMATION — for self-hosted UPI, the license is ONLY granted
-//      when paymentConfirmed=true (admin verified bank statement). This prevents
-//      random/fake UTR abuse — the order is marked PAID but NO license until
-//      admin confirms the actual bank transfer.
-//   6. IDEMPOTENT GRANT — an already-PAID order returns its existing license
-//      rather than minting a second key.
+//   5. MANUAL APPROVAL — the order is marked PENDING_VERIFICATION (never PAID)
+//      when a UTR validates. The license is ONLY granted after an admin confirms
+//      the bank transfer (paymentConfirmed=true). This prevents random/fake UTR
+//      abuse because the customer never receives a key from a guessed reference.
+//   6. IDEMPOTENT SUBMIT — an order already PENDING_VERIFICATION or PAID returns
+//      its current state rather than re-claiming the UTR.
 //
 // NOTE ON UTR VALIDATION:
 //   The self-hosted Direct UPI engine accepts a UPI reference (UTR/RRN) from
@@ -26,21 +27,18 @@
 //   claim per reference). True bank-side verification requires NPCI/bank API
 //   access which is NOT available in a self-hosted zero-MDR model.
 //
-//   The solution: order is marked PAID when UTR validates, but license is ONLY
-//   granted when paymentConfirmed=true (set by admin after bank statement match,
-//   or automatically by hosted gateway webhook for PayGlocal orders).
+//   The solution: the order is marked PENDING_VERIFICATION when the UTR
+//   validates, and a license is only granted after an admin manually matches
+//   the reference against the bank statement (or automatically by a hosted
+//   gateway webhook for PayGlocal orders).
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { preflight, withCorsResponse } from "@/lib/cors";
 import { sha256 } from "@/lib/crypto/sha256";
-import { isValidUtr, normalizeUtr } from "@/lib/upi";
-import {
-  grantLicenseForOrder,
-  planNameFor,
-  resolveOrderStatus,
-} from "@/lib/payment/orders";
+import { isValidUtr, normalizeUtr, isSuspiciousUtr } from "@/lib/upi";
+import { planNameFor, resolveOrderStatus } from "@/lib/payment/orders";
 import type { PlanSlug } from "@frpb/shared";
 import { rateLimit, checkLockout, recordFailure, clearFailures } from "@/lib/rate-limit";
 
@@ -171,13 +169,15 @@ async function handleVerify(req: NextRequest) {
     );
   }
 
-  // 3. Already paid → idempotent success.
-  if (order.status === "PAID") {
+  // 3. Already submitted → idempotent success. A PAID order is done; a
+  //    PENDING_VERIFICATION order has its UTR recorded and is awaiting admin.
+  if (order.status === "PAID" || order.status === "PENDING_VERIFICATION") {
     await clearFailures([rateKeyIp]);
+    const alreadyPaid = order.status === "PAID";
     return NextResponse.json({
       success: true,
       alreadyVerified: true,
-      status: "PAID",
+      status: order.status,
       orderId: order.orderId,
       planId: order.planId,
       planName: planNameFor(order.planId as PlanSlug),
@@ -185,6 +185,10 @@ async function handleVerify(req: NextRequest) {
       utr: order.utr,
       licenseId: order.licenseId,
       paymentConfirmed: order.paymentConfirmed,
+      paymentPendingConfirmation: !alreadyPaid,
+      message: alreadyPaid
+        ? "Payment already verified."
+        : "UTR submitted successfully! Verification pending by admin.",
     });
   }
 
@@ -257,24 +261,34 @@ async function handleVerify(req: NextRequest) {
     );
   }
 
-  // 6. Mark PAID and claim the UTR.
+  // 6. Move PENDING → PENDING_VERIFICATION and claim the UTR. The order is
+  //    deliberately NOT marked PAID and NO license is minted here.
+  const utrSuspicious = isSuspiciousUtr(utr);
   try {
     const updated = await prisma.paymentOrder.updateMany({
       where: { id: order.id, status: "PENDING", utr: null },
-      data: { status: "PAID", utr, paidAt: new Date() },
+      data: { status: "PENDING_VERIFICATION", utr, utrSuspicious },
     });
     if (updated.count === 0) {
+      // Lost the race (or the order was already claimed). Re-read and report the
+      // settled state: a PAID order is done, a PENDING_VERIFICATION order is
+      // awaiting admin, anything else is no longer claimable.
       const fresh = await prisma.paymentOrder.findUnique({ where: { id: order.id } });
-      if (fresh?.status === "PAID") {
+      if (fresh?.status === "PAID" || fresh?.status === "PENDING_VERIFICATION") {
         await clearFailures([rateKeyIp]);
         return NextResponse.json({
           success: true,
           alreadyVerified: true,
-          status: "PAID",
+          status: fresh.status,
           orderId: fresh.orderId,
           utr: fresh.utr,
           licenseId: fresh.licenseId,
           paymentConfirmed: fresh.paymentConfirmed,
+          paymentPendingConfirmation: fresh.status === "PENDING_VERIFICATION",
+          message:
+            fresh.status === "PAID"
+              ? "Payment already verified."
+              : "UTR submitted successfully! Verification pending by admin.",
         });
       }
       await recordFailure([rateKeyIp], 2, 60);
@@ -302,57 +316,21 @@ async function handleVerify(req: NextRequest) {
     );
   }
 
-  // 7. PAYMENT CONFIRMATION CHECK (self-hosted UPI fraud protection).
-  if (order.provider === "UPI" && !order.paymentConfirmed) {
-    await clearFailures([rateKeyIp]);
-    return NextResponse.json({
-      success: true,
-      status: "PAID",
-      orderId: order.orderId,
-      planId: order.planId,
-      planName: planNameFor(order.planId as PlanSlug),
-      amount: order.amount,
-      utr,
-      licenseId: null,
-      paymentConfirmed: false,
-      paymentPendingConfirmation: true,
-      message:
-        "Payment reference recorded successfully. Your payment is pending admin confirmation. " +
-        "To activate your license, please share your bank statement (showing this UTR: " +
-        `${utr}) with support. This usually takes 1-2 hours during business hours. ` +
-        "Your money has NOT been charged to us — we are verifying the bank transfer.",
-    });
-  }
-
-  // 8. Grant the license (idempotent — one key per order).
-  let licenseKey: string | undefined;
-  let licenseId: string | undefined;
-  let grantFailed = false;
-  try {
-    const granted = await grantLicenseForOrder(orderId);
-    licenseId = granted?.licenseId;
-    licenseKey = granted?.licenseKey;
-    if (!granted) grantFailed = true;
-  } catch (err) {
-    grantFailed = true;
-    console.error("[UTR_Verify_Error]: license grant failed for orderId=" + orderId + ":", err);
-  }
-
+  // 7. MANUAL APPROVAL — never grant a license from this route. The order now
+  //    awaits an admin who matches the UTR against the bank statement; the
+  //    admin confirm route grants the license once paymentConfirmed=true.
   await clearFailures([rateKeyIp]);
-
   return NextResponse.json({
     success: true,
-    status: "PAID",
+    status: "PENDING_VERIFICATION",
     orderId: order.orderId,
     planId: order.planId,
     planName: planNameFor(order.planId as PlanSlug),
     amount: order.amount,
     utr,
-    licenseId,
-    licenseKey,
-    grantFailed,
-    message: grantFailed
-      ? "Payment verified — we're finalising your license. It will appear in your dashboard shortly."
-      : "Payment verified — your license is active.",
+    licenseId: null,
+    paymentConfirmed: false,
+    paymentPendingConfirmation: true,
+    message: "UTR submitted successfully! Verification pending by admin.",
   });
 }

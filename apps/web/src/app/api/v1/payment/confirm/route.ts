@@ -12,9 +12,10 @@
 //     via bank statement → license granted
 
 import { NextRequest, NextResponse } from "next/server";
+import type { UpiOrderStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { preflight, withCorsResponse } from "@/lib/cors";
-import { safeCompare } from "@/lib/admin/access";
+import { constantTimeEqual } from "@/lib/admin/auth";
 import { grantLicenseForOrder } from "@/lib/payment/orders";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -65,7 +66,7 @@ async function authenticateAdmin(req: NextRequest): Promise<{ authenticated: boo
   }
 
   // Timing-safe comparison to prevent timing attacks
-  if (!safeCompare(providedKey, configuredKey)) {
+  if (!constantTimeEqual(providedKey, configuredKey)) {
     // Log failed attempts for security monitoring
     const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
       ?? req.headers.get("x-real-ip")
@@ -186,16 +187,26 @@ async function handleConfirm(req: NextRequest) {
     });
   }
 
-  // Mark as payment confirmed.
+  // Mark as payment confirmed and promote the order to PAID. A customer who
+  // submitted a UTR sits in PENDING_VERIFICATION until an admin approves it here;
+  // `grantLicenseForOrder` refuses UPI orders whose `paymentConfirmed` is still
+  // false, so the confirmation and the PAID transition must land before the grant.
+  let finalStatus: UpiOrderStatus = order.status;
   try {
-    await prisma.paymentOrder.update({
+    const updated = await prisma.paymentOrder.update({
       where: { id: order.id },
       data: {
         paymentConfirmed: true,
         // Clear suspicious flag if it was set (admin reviewed and confirmed).
         utrSuspicious: false,
+        // Promote a submitted UTR to PAID now that the admin has verified it.
+        ...(order.status === "PENDING_VERIFICATION"
+          ? { status: "PAID" as const, paidAt: new Date() }
+          : {}),
       },
+      select: { status: true },
     });
+    finalStatus = updated.status;
   } catch (err) {
     console.error("[payment/confirm] Failed to mark payment as confirmed:", err);
     return NextResponse.json(
@@ -204,11 +215,11 @@ async function handleConfirm(req: NextRequest) {
     );
   }
 
-  // If the order is already PAID, grant the license now.
+  // Grant the license now that the payment is confirmed and the order is PAID.
   let licenseKey: string | null = null;
   let licenseId: string | null = null;
 
-  if (order.status === "PAID") {
+  if (finalStatus === "PAID") {
     try {
       const granted = await grantLicenseForOrder(order.orderId);
       if (granted) {
@@ -231,7 +242,7 @@ async function handleConfirm(req: NextRequest) {
       customerEmail: order.email,
       amount: order.amount,
       currency: order.currency,
-      status: order.status,
+      status: finalStatus,
       licenseGranted: licenseId !== null,
       licenseId: licenseId,
       confirmedBy: auth.adminKey?.slice(0, 8) + "...",
@@ -244,7 +255,7 @@ async function handleConfirm(req: NextRequest) {
   return NextResponse.json({
     success: true,
     orderId: order.orderId,
-    status: order.status,
+    status: finalStatus,
     utr: order.utr,
     customerEmail: order.email,
     amount: order.amount,

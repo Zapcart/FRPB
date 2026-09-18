@@ -20,6 +20,7 @@ import {
 } from "@/lib/admin/auth";
 import { resolveAdminAccess } from "@/lib/admin/access";
 import type { AdminAnalyticsResponse } from "@frpb/shared/analytics";
+import { confirmUpiPayment as confirmPayment } from "@/lib/payment/orders";
 
 export interface RefreshAnalyticsResult {
   ok: boolean;
@@ -30,6 +31,32 @@ export interface RefreshAnalyticsResult {
 export interface AuthorizeAdminKeyResult {
   ok: boolean;
   error?: string;
+}
+
+export interface ConfirmUpiPaymentResult {
+  ok: boolean;
+  error?: string;
+  orderId?: string;
+}
+
+/**
+ * Mark a UPI payment as confirmed by admin.
+ * Called after admin verifies customer's bank statement matches the UTR.
+ */
+export async function confirmUpiPayment(
+  orderId: string
+): Promise<ConfirmUpiPaymentResult> {
+  const access = await resolveAdminAccess();
+  if (!access.authorized) {
+    return { ok: false, error: "Unauthorized" };
+  }
+
+  const ok = await confirmPayment(orderId);
+  if (!ok) {
+    return { ok: false, error: "Failed to confirm payment. Order may not exist." };
+  }
+
+  return { ok: true, orderId };
 }
 
 /**

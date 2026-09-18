@@ -168,6 +168,8 @@ model License {
 
 enum UpiOrderStatus {
   PENDING
+  /// Customer submitted a UTR; awaiting manual admin verification + approval.
+  PENDING_VERIFICATION
   PAID
   FAILED
   EXPIRED

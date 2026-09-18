@@ -21,9 +21,12 @@ import {
   ExternalLink,
   Loader2,
   AlertTriangle,
+  CheckCircle2,
+  ShieldCheck,
+  Copy,
 } from "lucide-react";
 import type { AdminAnalyticsResponse } from "@frpb/shared/analytics";
-import { refreshAdminAnalytics } from "./actions";
+import { refreshAdminAnalytics, confirmUpiPayment } from "./actions";
 
 function StatCard({ title, value, subtitle, icon, color, bgColor }: {
   title: string; value: string | number; subtitle?: string;
@@ -92,6 +95,132 @@ function formatDate(iso: string): string {
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+/**
+ * A single row in the "Pending UPI Payments" approval table.
+ *
+ * Hoisted to module scope (it must NOT be declared inside the parent's JSX
+ * return): a function declaration is not a valid JSX child, and defining a
+ * component inline would remount it on every parent render, wiping the local
+ * confirm/toast state. Renders a fragment so the toast can sit on its own row
+ * beneath the data row.
+ */
+function PendingUpiRow({
+  order,
+  onConfirm,
+  onRefresh,
+}: {
+  order: AdminAnalyticsResponse["pendingUpiOrders"][0];
+  onConfirm: (orderId: string) => Promise<{ ok: boolean; error?: string }>;
+  onRefresh: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [confirmDisabled, setConfirmDisabled] = useState(false);
+
+  const handleConfirm = async () => {
+    if (confirmDisabled) return;
+    setConfirming(true);
+    setToast(null);
+    try {
+      const result = await onConfirm(order.orderId);
+      if (result.ok) {
+        setToast("✅ Payment confirmed — license activated");
+        onRefresh();
+        window.setTimeout(() => setToast(null), 3000);
+      } else {
+        setToast(`❌ ${result.error ?? "Confirmation failed"}`);
+        setConfirmDisabled(true);
+      }
+    } catch (err) {
+      console.error("[admin] confirmUpiPayment threw:", err);
+      setToast("❌ Unexpected error");
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const utrDisplay = order.utr ?? "—";
+
+  return (
+    <>
+      <tr className="bg-white">
+        <td className="px-4 py-3 font-mono text-xs text-slate-600">{order.orderId}</td>
+        <td className="px-4 py-3 text-sm text-slate-800">{order.email}</td>
+        <td className="px-4 py-3 text-sm text-slate-800">{order.planName}</td>
+        <td className="px-4 py-3 text-sm font-semibold text-slate-900">
+          {order.currency === "INR" ? "₹" : "$"}
+          {order.amount.toLocaleString("en-IN")}
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-1">
+            <code className="inline-flex max-w-[160px] flex-1 truncate rounded-md bg-slate-100 px-2 py-1 font-mono text-[11px] text-slate-700">
+              {utrDisplay}
+            </code>
+            <button
+              type="button"
+              onClick={() => {
+                if (order.utr) {
+                  navigator.clipboard.writeText(order.utr).catch((err) => {
+                    console.error("[admin] failed to copy UTR:", err);
+                  });
+                }
+              }}
+              disabled={!order.utr}
+              className="inline-flex shrink-0 items-center rounded-md border border-slate-200 bg-white px-1.5 py-1 text-[11px] text-slate-500 transition hover:bg-slate-50 disabled:opacity-40"
+              title="Copy UTR"
+            >
+              <Copy className="h-3 w-3" />
+            </button>
+          </div>
+        </td>
+        <td className="px-4 py-3">
+          {order.utrSuspicious ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700">
+              <AlertTriangle className="h-3 w-3" /> Suspicious
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+              Normal
+            </span>
+          )}
+        </td>
+        <td className="px-4 py-3 text-xs text-slate-500">
+          {order.paidAt ? formatDateTime(order.paidAt) : "—"}
+        </td>
+        <td className="px-4 py-3">
+          <button
+            type="button"
+            onClick={() => void handleConfirm()}
+            disabled={confirming || confirmDisabled}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {confirming ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Confirming…
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Confirm Payment
+              </>
+            )}
+          </button>
+        </td>
+      </tr>
+      {toast && (
+        <tr>
+          <td colSpan={8} className="px-4 py-2">
+            <div className="rounded-lg bg-slate-800 px-4 py-2 text-xs text-white">
+              {toast}
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
 }
 
 export default function ClientAdminShell({
@@ -461,6 +590,48 @@ export default function ClientAdminShell({
           </div>
         )}
       </div>
+
+      {/* Pending UPI Payments — admin approval */}
+      {d.pendingUpiOrders.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+          <div className="mb-4 flex items-center gap-2">
+            <ShieldCheck className="h-4 w-4 text-amber-600" />
+            <h2 className="text-sm font-semibold text-slate-900">Pending UPI Payments — Awaiting Admin Approval</h2>
+            <span className="ml-auto inline-flex items-center rounded-full bg-amber-200 px-2 py-0.5 text-xs font-semibold text-amber-800">
+              {d.pendingUpiOrders.length} pending
+            </span>
+          </div>
+          <div className="overflow-hidden rounded-lg border border-amber-200 bg-white">
+            <table className="w-full divide-y divide-amber-100">
+              <thead className="bg-amber-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-amber-700 uppercase tracking-wide">Order</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-amber-700 uppercase tracking-wide">Email</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-amber-700 uppercase tracking-wide">Plan</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-amber-700 uppercase tracking-wide">Amount</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-amber-700 uppercase tracking-wide">UTR</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-amber-700 uppercase tracking-wide">Suspicious</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-amber-700 uppercase tracking-wide">Paid At</th>
+                  <th className="px-4 py-2 text-left text-xs font-semibold text-amber-700 uppercase tracking-wide">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-amber-100 bg-white">
+                {d.pendingUpiOrders.map((order) => (
+                  <PendingUpiRow
+                    key={order.id}
+                    order={order}
+                    onConfirm={confirmUpiPayment}
+                    onRefresh={() => void fetchAnalytics()}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-xs text-amber-700">
+            These payments have been made but not yet verified. Confirm only after checking the customer's bank statement matches the UTR.
+          </p>
+        </div>
+      )}
 
       {/* Traffic note */}
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

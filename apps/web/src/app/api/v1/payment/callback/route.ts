@@ -6,10 +6,15 @@
 //   • PAYMENT_SUCCESS webhook (POST) — PayGlocal server-to-server notification
 //   • provider=upi (GET/POST)   — the Direct-UPI engine's post-verification hop
 //
-// On success it marks the PaymentOrder PAID, grants/activates the license
-// idempotently and redirects the browser to /dashboard?status=success. Provider
-// webhooks (POST with JSON) receive a JSON acknowledgement instead of a redirect
-// so PayGlocal does not retry a successfully processed event.
+// For PayGlocal the callback settles the order (marks it PAID), grants/activates
+// the license idempotently and redirects the browser to /dashboard?status=success.
+// Provider webhooks (POST with JSON) receive a JSON acknowledgement instead of a
+// redirect so PayGlocal does not retry a successfully processed event.
+//
+// Direct-UPI is MANUAL-APPROVAL: a customer-submitted UTR parks the order in
+// PENDING_VERIFICATION and NO license is minted. The browser is sent to
+// /dashboard?status=pending until an admin confirms the transfer out-of-band
+// (POST /api/v1/payment/confirm), which promotes the order to PAID and grants.
 //
 // SECURITY:
 //   - UPI callback: requires VALID orderId that exists in the database.
@@ -21,7 +26,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 import { preflight, withCorsResponse } from "@/lib/cors";
-import { isValidUtr } from "@/lib/upi";
+import { isValidUtr, isSuspiciousUtr } from "@/lib/upi";
 import {
   grantLicenseForOrder,
   markPayGlocalOrderPaid,
@@ -36,6 +41,8 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "https://frpb.in";
 
 /** Where the customer lands once the order is confirmed. */
 const SUCCESS_REDIRECT = `${APP_URL}/dashboard?status=success`;
+/** Where a Direct-UPI order lands while it awaits manual admin approval. */
+const PENDING_REDIRECT = `${APP_URL}/dashboard?status=pending`;
 /** Where an unresolved order sends them. */
 const FAILURE_REDIRECT = `${APP_URL}/pricing?checkout=incomplete`;
 
@@ -149,16 +156,17 @@ async function handleCallback(req: NextRequest, method: "GET" | "POST") {
       return redirectTo(FAILURE_REDIRECT);
     }
 
-    // If a UTR is supplied and the order is still PENDING, claim it here — this
-    // is the same uniqueness-guarded transition the verify endpoint performs.
-    if (order.status !== "PAID" && utr && isValidUtr(utr)) {
+    // If a UTR is supplied and the order is still PENDING, claim it here into
+    // PENDING_VERIFICATION — the same uniqueness-guarded transition the verify
+    // endpoint performs. No license is minted; admin approval does that.
+    if (order.status === "PENDING" && utr && isValidUtr(utr)) {
       // Duplicate UTR check — must not already be claimed by another order.
       const existing = await prisma.paymentOrder.findUnique({ where: { utr } });
       if (!existing || existing.orderId === order.orderId) {
         try {
           const updated = await prisma.paymentOrder.updateMany({
             where: { id: order.id, status: "PENDING", utr: null },
-            data: { status: "PAID", utr, paidAt: new Date() },
+            data: { status: "PENDING_VERIFICATION", utr, utrSuspicious: isSuspiciousUtr(utr) },
           });
           if (updated.count === 0) {
             // Concurrent claim — fall through and re-read below.
@@ -182,6 +190,14 @@ async function handleCallback(req: NextRequest, method: "GET" | "POST") {
     }
 
     const status = await resolveOrderStatus(fresh);
+
+    // A UTR is on file but the transfer is unverified → send the customer to the
+    // "pending" dashboard state. We deliberately do NOT grant a license here.
+    if (status === "PENDING_VERIFICATION") {
+      await rateLimit(rateKey, CALLBACK_RATE_MAX * 2, CALLBACK_RATE_WINDOW); // reset
+      return redirectTo(PENDING_REDIRECT);
+    }
+
     if (status !== "PAID") {
       await recordFailure([rateKey], 1, 30);
       return redirectTo(FAILURE_REDIRECT);

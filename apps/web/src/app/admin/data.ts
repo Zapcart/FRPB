@@ -52,6 +52,9 @@ export function emptyAdminAnalytics(): AdminAnalyticsResponse {
     frpByAndroidVersion: [],
     recentFrp: [],
     recentLicenses: [],
+    // No orders have been submitted for admin review in the empty/fallback
+    // payload; the pending-UPI panel simply does not render.
+    pendingUpiOrders: [],
     revenue: {
       inr: {
         currency: "INR",

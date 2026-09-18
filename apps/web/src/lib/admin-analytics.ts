@@ -44,7 +44,7 @@ export async function getAdminAnalytics(): Promise<AdminAnalyticsResponse | null
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const [visitors, logins, licenses, frp, frpByBrand, frpByAndroid, recentFrp, recentLicenses, revenue] =
+  const [visitors, logins, licenses, frp, frpByBrand, frpByAndroid, recentFrp, recentLicenses, revenue, pendingUpiOrders] =
     await Promise.all([
       getVisitors(thirtyDaysAgo),
       getLogins(thirtyDaysAgo),
@@ -55,6 +55,7 @@ export async function getAdminAnalytics(): Promise<AdminAnalyticsResponse | null
       getRecentFrp(),
       getRecentLicenses(),
       getRevenue(),
+      getPendingUpiOrders(),
     ]);
 
   return {
@@ -67,7 +68,8 @@ export async function getAdminAnalytics(): Promise<AdminAnalyticsResponse | null
     recentFrp,
     recentLicenses,
     revenue,
-  };
+    pendingUpiOrders,
+    };
 }
 
 // ─── Individual query helpers ───
@@ -243,6 +245,55 @@ async function getRecentLicenses(limit = 10) {
     status: l.status,
     userEmail: l.user.email,
     createdAt: l.createdAt.toISOString(),
+  }));
+}
+
+async function getPendingUpiOrders() {
+  // Manual-approval queue: a customer-submitted UTR parks the order in
+  // PENDING_VERIFICATION until an admin matches it against the bank statement.
+  // Legacy PAID-but-unconfirmed orders are retained for backwards compatibility.
+  const orders = await prisma.paymentOrder.findMany({
+    where: {
+      provider: "UPI",
+      status: { in: ["PENDING_VERIFICATION", "PAID"] },
+      paymentConfirmed: false,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: {
+      id: true,
+      orderId: true,
+      email: true,
+      planId: true,
+      amount: true,
+      currency: true,
+      status: true,
+      utr: true,
+      paidAt: true,
+      paymentConfirmed: true,
+      utrSuspicious: true,
+      createdAt: true,
+      expiresAt: true,
+      license: { select: { id: true, key: true } },
+    },
+  });
+
+  return orders.map((o) => ({
+    id: o.id,
+    orderId: o.orderId,
+    email: o.email,
+    planId: o.planId,
+    planName: PLAN_NAMES[o.planId] ?? o.planId,
+    amount: o.amount,
+    currency: o.currency,
+    status: o.status,
+    utr: o.utr,
+    paidAt: o.paidAt ? o.paidAt.toISOString() : null,
+    paymentConfirmed: o.paymentConfirmed,
+    utrSuspicious: o.utrSuspicious,
+    createdAt: o.createdAt.toISOString(),
+    expiresAt: o.expiresAt.toISOString(),
+    licenseKey: o.license?.key ?? null,
   }));
 }
 

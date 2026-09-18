@@ -2,13 +2,16 @@
 //
 // The customer experience for the direct-UPI rail:
 //   1. Pick one of the three fixed plans (₹1,900 / ₹4,900 / ₹9,999).
-//   2. Desktop → a dynamic QR code encoding the NPCI UPI URI + a 10-minute
-//      countdown. Mobile web → "Pay with PhonePe / Google Pay / Paytm" buttons
-//      that fire the matching native app intent URL.
+//   2. A dynamic QR code encoding the NPCI UPI URI is shown on EVERY viewport —
+//      mobile included. UPI intent deep-links (`phonepe://`, `gpay://upi/pay`,
+//      `paytmmp://`) are deliberately NOT offered: some Android/iOS UPI apps
+//      decline the app hand-off for security, which stranded mobile buyers. The
+//      QR can be saved as a PNG ("Save QR Image") or the merchant VPA copied.
 //   3. Pay, then paste the 12-digit UPI reference (UTR/RRN) and hit
 //      "Verify Payment".
-//   4. A 3-second status poll redirects to /dashboard?payment=success the moment
-//      the backend confirms PAID.
+//   4. The UTR is recorded as PENDING_VERIFICATION — NO license is minted until
+//      an admin matches the reference against the bank statement and approves it.
+//      The UI shows an orange "Verification Pending (Admin Reviewing)" state.
 //
 // The amount is NEVER sent from here in a way the server trusts — the create
 // endpoint resolves the price from its own plan table.
@@ -23,6 +26,7 @@ import {
   CheckCircle2,
   Clock,
   Copy,
+  Download,
   Loader2,
   ShieldCheck,
   Smartphone,
@@ -62,23 +66,11 @@ interface CreatedOrder {
   expiresInSeconds: number;
 }
 
-interface IntentUrls {
-  generic: string;
-  phonepe: string;
-  gpay: string;
-  paytm: string;
-}
-
 interface DirectUpiCheckoutProps {
   /** Buyer email when the visitor is signed in (prefills the field). */
   defaultEmail?: string | null;
   /** Plan to pre-select, when arriving from the payment-method modal. */
   initialPlanId?: UpiPlanId | null;
-}
-
-/** Mobile-browser detection (client only) — decides QR vs intent buttons. */
-function detectMobile(ua: string): boolean {
-  return /android|iphone|ipad|ipod|mobile|phonepe|paytm|tez/i.test(ua);
 }
 
 export default function DirectUpiCheckout({
@@ -91,16 +83,19 @@ export default function DirectUpiCheckout({
   const [email, setEmail] = useState(defaultEmail ?? "");
   const [order, setOrder] = useState<CreatedOrder | null>(null);
   const [upiUri, setUpiUri] = useState<string | null>(null);
-  const [intentUrls, setIntentUrls] = useState<IntentUrls | null>(null);
   const [utr, setUtr] = useState("");
   const [creating, setCreating] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [paid, setPaid] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  /** UTR recorded but awaiting manual admin approval (no license issued yet). */
+  const [pendingVerification, setPendingVerification] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [savingQr, setSavingQr] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
+  /** Wraps the rendered QR SVG so it can be rasterised to PNG on demand. */
+  const qrWrapRef = useRef<HTMLDivElement | null>(null);
   /**
    * Health of the live tracker. The payment step is rendered ONLY while this is
    * "live": without a persisted order row there is nothing for the 3-second
@@ -115,13 +110,6 @@ export default function DirectUpiCheckout({
 
   const plan = useMemo(() => PLANS.find((p) => p.planId === planId)!, [planId]);
 
-  // Detect mobile after mount to avoid an SSR/client hydration mismatch.
-  useEffect(() => {
-    if (typeof navigator !== "undefined") {
-      setIsMobile(detectMobile(navigator.userAgent));
-    }
-  }, []);
-
   // ── Create the order + build the UPI URI ──────────────────────────────────
   const createOrder = useCallback(async () => {
     setError(null);
@@ -129,6 +117,8 @@ export default function DirectUpiCheckout({
     setCreating(true);
     setUtr("");
     setCopied(false);
+    // A fresh payment request clears any prior admin-review state.
+    setPendingVerification(false);
     setTracking("idle");
     setTrackingDegraded(false);
     pollFailuresRef.current = 0;
@@ -178,7 +168,6 @@ export default function DirectUpiCheckout({
         code?: string;
         order?: CreatedOrder;
         upiUri?: string;
-        intentUrls?: IntentUrls;
         persisted?: boolean;
       } = {};
       let bodyWasJson = false;
@@ -225,7 +214,6 @@ export default function DirectUpiCheckout({
       }
       setOrder(data.order);
       setUpiUri(data.upiUri);
-      setIntentUrls(data.intentUrls ?? null);
       setSecondsLeft(data.order.expiresInSeconds);
       setTracking("live");
     } catch (err) {
@@ -370,6 +358,8 @@ export default function DirectUpiCheckout({
         message?: string;
         licenseKey?: string;
         grantFailed?: boolean;
+        /** True when the UTR parked the order in PENDING_VERIFICATION. */
+        paymentPendingConfirmation?: boolean;
       } = {};
       try {
         data = (await res.json()) as typeof data;
@@ -403,15 +393,16 @@ export default function DirectUpiCheckout({
           // Session storage may be unavailable; the key is also emailed.
         }
       }
-      setPaid(true);
-      // Handle admin-pending confirmation state (self-hosted UPI fraud protection).
+
+      // MANUAL APPROVAL (self-hosted fraud protection): a freshly-submitted UTR
+      // parks the order in PENDING_VERIFICATION — NO license is minted until an
+      // admin matches the reference against the bank statement. Surface the
+      // orange "admin reviewing" state and hand off to the unified callback,
+      // which lands the buyer on /dashboard?status=pending.
       if (data.paymentPendingConfirmation) {
-        setNotice(
-          data.message ??
-            "Payment reference recorded — pending admin confirmation. " +
-              "Share your bank statement with support to activate your license."
-        );
-        // Still redirect to dashboard so customer can see order status.
+        setPendingVerification(true);
+        // The orange "Verification Pending (Admin Reviewing)" badge carries the
+        // message; no green success notice (the license is NOT issued yet).
         window.setTimeout(
           () =>
             router.push(
@@ -419,12 +410,15 @@ export default function DirectUpiCheckout({
                 order.orderId
               )}&utr=${encodeURIComponent(utr.trim())}`
             ),
-          900
+          1200
         );
         return;
       }
-      // Route through the unified callback so activation + redirect are shared
-      // with the PayGlocal rail.
+
+      // Otherwise the order was already PAID (idempotent re-check) — complete
+      // through the unified callback so activation + redirect are shared with
+      // the PayGlocal rail.
+      setPaid(true);
       window.setTimeout(
         () =>
           router.push(
@@ -454,6 +448,72 @@ export default function DirectUpiCheckout({
       // Clipboard can be blocked; the VPA is always visible on screen.
     }
   }, []);
+
+  /**
+   * Rasterise the rendered QR (an inline SVG from qrcode.react) to a PNG and
+   * trigger a download. This is what lets a mobile buyer save the QR to their
+   * gallery instead of relying on a UPI intent deep-link, which several
+   * Android/iOS UPI apps decline for security.
+   */
+  const saveQrImage = useCallback(async () => {
+    const svg = qrWrapRef.current?.querySelector("svg");
+    if (!svg) {
+      setError(
+        "We couldn't find the QR image to save. You can screenshot it instead."
+      );
+      return;
+    }
+    setSavingQr(true);
+    setError(null);
+    try {
+      const serialized = new XMLSerializer().serializeToString(svg);
+      const svgBlob = new Blob([serialized], { type: "image/svg+xml;charset=utf-8" });
+      const svgUrl = URL.createObjectURL(svgBlob);
+
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      const loaded = new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("QR image failed to decode"));
+      });
+      img.src = svgUrl;
+      await loaded;
+
+      const size = 512;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas 2D context unavailable");
+      // White background — UPI scanners need quiet-zone contrast around modules.
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, size, size);
+      ctx.drawImage(img, 0, 0, size, size);
+      URL.revokeObjectURL(svgUrl);
+
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob((b) => resolve(b), "image/png")
+      );
+      if (!blob) throw new Error("PNG export failed");
+
+      const pngUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = pngUrl;
+      link.download = `frpb-upi-${order?.orderId ?? "payment"}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(pngUrl), 1000);
+    } catch (err) {
+      console.error("[checkout/upi] failed to save QR image:", err);
+      setError(
+        "We couldn't generate the QR image. You can still scan it on screen or " +
+          "copy the VPA to pay."
+      );
+    } finally {
+      setSavingQr(false);
+    }
+  }, [order]);
 
   const mmss = `${String(Math.floor(secondsLeft / 60)).padStart(2, "0")}:${String(
     secondsLeft % 60
@@ -486,9 +546,9 @@ export default function DirectUpiCheckout({
                   setPlanId(p.planId);
                   setOrder(null);
                   setUpiUri(null);
-                  setIntentUrls(null);
                   setError(null);
                   setNotice(null);
+                  setPendingVerification(false);
                 }}
                 disabled={creating || paid}
                 className={`rounded-2xl border p-4 text-left transition disabled:opacity-60 ${
@@ -584,28 +644,47 @@ export default function DirectUpiCheckout({
             </div>
           </div>
 
-          {/* Desktop → dynamic QR. Mobile → native app intent buttons. */}
-          {isMobile ? (
-            <div className="mt-5 grid gap-2.5 sm:grid-cols-3">
-              {intentUrls && (
+          {/* Dynamic QR — forced for EVERY viewport (mobile, tablet, desktop).
+              UPI intent deep-links (`phonepe://`, `gpay://upi/pay`,
+              `paytmmp://`) were removed: several Android/iOS UPI apps decline the
+              app hand-off for security, stranding mobile buyers. The QR can be
+              saved as a PNG below, or the VPA copied. */}
+          <div className="mt-5 flex flex-col items-center">
+            <div
+              ref={qrWrapRef}
+              className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+            >
+              <QRCodeSVG value={upiUri} size={208} level="M" includeMargin />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void saveQrImage()}
+              disabled={savingQr}
+              className="mt-3 inline-flex items-center justify-center gap-2 rounded-xl border border-brand-200 bg-brand-50 px-4 py-2 text-xs font-bold text-brand-700 transition hover:bg-brand-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {savingQr ? (
                 <>
-                  <IntentButton href={intentUrls.phonepe} label="PhonePe" tone="purple" />
-                  <IntentButton href={intentUrls.gpay} label="Google Pay" tone="blue" />
-                  <IntentButton href={intentUrls.paytm} label="Paytm" tone="sky" />
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Preparing image…
+                </>
+              ) : (
+                <>
+                  <Download className="h-3.5 w-3.5" />
+                  Save QR Image
                 </>
               )}
-            </div>
-          ) : (
-            <div className="mt-5 flex flex-col items-center">
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                <QRCodeSVG value={upiUri} size={208} level="M" includeMargin />
-              </div>
-              <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
-                <Smartphone className="h-3.5 w-3.5" />
-                Scan with any UPI app — PhonePe, Google Pay, Paytm, BHIM.
-              </p>
-            </div>
-          )}
+            </button>
+
+            <p className="mx-auto mt-3 flex max-w-sm items-start gap-1.5 text-center text-xs text-slate-500">
+              <Smartphone className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                Scan with any UPI app — PhonePe, Google Pay, Paytm, BHIM. Save the QR
+                or copy the VPA to pay via GPay/PhonePe/Paytm. After payment, enter
+                your 12-digit UTR / Ref No below.
+              </span>
+            </p>
+          </div>
 
           {/* Manual UTR verification */}
           <div className="mt-6 border-t border-slate-100 pt-5">
@@ -645,8 +724,8 @@ export default function DirectUpiCheckout({
 
           <p className="mt-4 inline-flex items-start gap-1.5 text-[11px] text-slate-400">
             <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            Your license activates automatically the moment your UPI reference is
-            confirmed. Every payment can be claimed exactly once.
+            Your license key is generated as soon as an admin verifies your payment
+            reference. Every payment can be claimed exactly once.
           </p>
         </section>
       )}
@@ -656,6 +735,20 @@ export default function DirectUpiCheckout({
         <div className="mt-5 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
           <BadgeCheck className="h-4 w-4" />
           Payment confirmed — taking you to your dashboard…
+        </div>
+      )}
+
+      {/* Orange state — UTR recorded, awaiting manual admin approval. */}
+      {pendingVerification && !paid && (
+        <div className="mt-5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <div className="flex items-center gap-2 font-semibold">
+            <Clock className="h-4 w-4" />
+            Verification Pending (Admin Reviewing)
+          </div>
+          <p className="mt-1 text-xs text-amber-700">
+            Your license key will be generated as soon as the admin verifies your
+            payment reference.
+          </p>
         </div>
       )}
 
@@ -684,28 +777,3 @@ export default function DirectUpiCheckout({
   );
 }
 
-/** A single native-app payment button. */
-function IntentButton({
-  href,
-  label,
-  tone,
-}: {
-  href: string;
-  label: string;
-  tone: "purple" | "blue" | "sky";
-}) {
-  const tones: Record<typeof tone, string> = {
-    purple: "border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100",
-    blue: "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100",
-    sky: "border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100",
-  };
-  return (
-    <a
-      href={href}
-      className={`inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold transition ${tones[tone]}`}
-    >
-      <Wallet className="h-4 w-4" />
-      Pay with {label}
-    </a>
-  );
-}

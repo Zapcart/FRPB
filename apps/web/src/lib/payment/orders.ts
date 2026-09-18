@@ -62,9 +62,9 @@ export function isExpired(order: { status: string; expiresAt: Date }): boolean {
 export async function resolveOrderStatus(
   order: { id: string; status: string; expiresAt: Date },
   client: PrismaClient = prisma
-): Promise<"PENDING" | "PAID" | "FAILED" | "EXPIRED"> {
+): Promise<"PENDING" | "PENDING_VERIFICATION" | "PAID" | "FAILED" | "EXPIRED"> {
   if (!isExpired(order)) {
-    return order.status as "PENDING" | "PAID" | "FAILED" | "EXPIRED";
+    return order.status as "PENDING" | "PENDING_VERIFICATION" | "PAID" | "FAILED" | "EXPIRED";
   }
 
   // Expired: persist the terminal state, then re-read so a concurrent claim that
@@ -91,7 +91,7 @@ export async function resolveOrderStatus(
       where: { id: order.id },
       select: { status: true },
     });
-    return (fresh?.status as "PENDING" | "PAID" | "FAILED" | "EXPIRED") ?? "EXPIRED";
+    return (fresh?.status as "PENDING" | "PENDING_VERIFICATION" | "PAID" | "FAILED" | "EXPIRED") ?? "EXPIRED";
   } catch (err) {
     // Unreachable DB: fall back to the locally computed expiry rather than
     // throwing, so callers always receive a usable status.
@@ -354,6 +354,21 @@ export async function createPayGlocalOrder(input: {
   });
 
   return { orderId, amount: plan.usd, expiresAt };
+}
+
+/**
+ * Bind a PayGlocal provider transaction id to an order so the webhook/callback
+ * can resolve it back to the order.
+ *
+ * `providerTxnId` is `@unique`: if the reference already belongs to a different
+ * order the update rejects with Prisma P2002, which the init route translates
+ * into a fail-closed 409. The throw is therefore intentional and un-swallowed.
+ */
+export async function attachPayGlocalTxn(orderId: string, providerTxnId: string): Promise<void> {
+  await prisma.paymentOrder.update({
+    where: { orderId },
+    data: { providerTxnId },
+  });
 }
 
 /**
