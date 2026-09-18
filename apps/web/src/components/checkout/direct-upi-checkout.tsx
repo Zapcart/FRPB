@@ -399,7 +399,11 @@ export default function DirectUpiCheckout({
       // admin matches the reference against the bank statement. Surface the
       // orange "admin reviewing" state and hand off to the unified callback,
       // which lands the buyer on /dashboard?status=pending.
-      if (data.paymentPendingConfirmation) {
+      // Treat the order as pending-admin when EITHER signal is present: the
+      // explicit `paymentPendingConfirmation` flag, or the settled `status`.
+      // Belt-and-braces so a payload carrying only the status still renders the
+      // amber "Admin Reviewing" card rather than a red error banner.
+      if (data.paymentPendingConfirmation || data.status === "PENDING_VERIFICATION") {
         setPendingVerification(true);
         // The orange "Verification Pending (Admin Reviewing)" badge carries the
         // message; no green success notice (the license is NOT issued yet).

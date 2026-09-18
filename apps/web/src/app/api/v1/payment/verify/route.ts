@@ -309,6 +309,29 @@ async function handleVerify(req: NextRequest) {
         { status: 409 }
       );
     }
+    // DB enum still behind the schema: Postgres rejects the write with SQLSTATE
+    // 22P02 ("invalid input value for enum \"UpiOrderStatus\""), surfaced by
+    // Prisma as P2010. This is an infra/deploy-ordering fault, NOT a customer
+    // input error, so it is logged with the exact remediation and returned as a
+    // "reconciling" 503 instead of the generic message that read as a red error.
+    const errMessage = (err as Error)?.message ?? "";
+    if (code === "P2010" || /invalid input value for enum/i.test(errMessage)) {
+      console.error(
+        "[UTR_Verify_Error]: UpiOrderStatus enum is missing PENDING_VERIFICATION. " +
+          "Apply prisma/migrations/20260918000000_add_pending_verification_status " +
+          "(`ALTER TYPE \"UpiOrderStatus\" ADD VALUE IF NOT EXISTS 'PENDING_VERIFICATION'`).",
+        err
+      );
+      return NextResponse.json(
+        {
+          success: false,
+          code: "DB_UNAVAILABLE",
+          message:
+            "Payments are being reconciled — the payment database is not fully migrated. Please retry shortly.",
+        },
+        { status: 503 }
+      );
+    }
     console.error("[payment/verify] DB error while claiming UTR:", err);
     return NextResponse.json(
       { success: false, message: "We couldn't verify your payment right now. Please retry." },
