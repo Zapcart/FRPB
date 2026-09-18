@@ -32,6 +32,7 @@ import {
   Cable,
   Cpu,
   Activity,
+  type LucideIcon,
 } from "lucide-react";
 import { PLANS } from "@frpb/shared";
 import SmoothScrollLink from "@/components/smooth-scroll-link";
@@ -83,11 +84,28 @@ const CAPABILITIES = [
   "Driver Auto-Install",
 ];
 
+/** Optional inline preview: `devices` renders brand tiles, `terminal` a console. */
+type BentoVisual = "devices" | "terminal" | null;
+
+interface BentoFeature {
+  icon: LucideIcon;
+  title: string;
+  desc: string;
+  span: string;
+  accent: string;
+  visual: BentoVisual;
+  /**
+   * Lightweight capability chips shown when a card has no richer visual, so the
+   * tile reads as complete instead of trailing off into empty space.
+   */
+  tags?: readonly string[];
+}
+
 /**
  * Bento grid capabilities. `span` drives the asymmetric bento layout on lg+.
  * USB Detection · One-Click FRP · Live Logging · Driver Center are the anchors.
  */
-const BENTO = [
+const BENTO: readonly BentoFeature[] = [
   {
     icon: Usb,
     title: "USB Device Detection",
@@ -103,6 +121,7 @@ const BENTO = [
     span: "lg:col-span-2",
     accent: "from-accent-500 to-brand-600",
     visual: null,
+    tags: ["Samsung", "Xiaomi", "Vivo", "OPPO", "Pixel"],
   },
   {
     icon: Terminal,
@@ -119,6 +138,7 @@ const BENTO = [
     span: "lg:col-span-2",
     accent: "from-violet-500 to-brand-500",
     visual: null,
+    tags: ["MediaTek", "Qualcomm", "OEM USB", "Auto-Install"],
   },
   {
     icon: Cpu,
@@ -127,6 +147,7 @@ const BENTO = [
     span: "lg:col-span-2",
     accent: "from-amber-500 to-rose-500",
     visual: null,
+    tags: ["EDL", "Download", "Recovery", "Fastboot"],
   },
 ];
 
@@ -552,11 +573,11 @@ export default function HomePage() {
           </p>
         </div>
 
-        <div className="mt-14 grid auto-rows-fr gap-5 lg:grid-cols-6">
+        <div className="mt-14 grid gap-5 sm:auto-rows-fr lg:grid-cols-6">
           {BENTO.map((feature) => (
             <div
               key={feature.title}
-              className={`card-dark card-dark-hover group relative overflow-hidden p-6 ${feature.span}`}
+              className={`card-dark card-dark-hover group relative overflow-hidden p-5 sm:p-6 ${feature.span}`}
             >
               {/* hover gradient bloom */}
               <div
@@ -613,6 +634,25 @@ export default function HomePage() {
                         <span className="text-slate-600">›</span>
                         <span className="truncate">{line.t}</span>
                       </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {/*
+                 * Capability chips. `mt-auto` anchors them to the bottom so equal-
+                 * height desktop rows read as intentional; on mobile the card is
+                 * content-sized (grid rows are only equalised at sm+), so the chips
+                 * simply sit under the copy with no blank gap beneath them.
+                 */}
+                {feature.tags ? (
+                  <div className="mt-auto flex flex-wrap gap-1.5 pt-5">
+                    {feature.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-medium text-slate-400"
+                      >
+                        {tag}
+                      </span>
                     ))}
                   </div>
                 ) : null}

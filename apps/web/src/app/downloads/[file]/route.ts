@@ -33,17 +33,12 @@ const PUBLIC_DIR = path.join(process.cwd(), "public", "downloads");
 
 const GITHUB_RELEASES_BASE = "https://github.com/Zapcart/FRPB/releases/latest/download";
 
-/**
- * Friendly request name → actual asset name on the GitHub "latest release".
- * electron-builder publishes the installer as
- * `win.artifactName = "FRPB-Recovery-Setup-${version}.${ext}"`, while the site
- * publicly advertises `FRPB-Setup.exe`. Without this translation the GitHub
- * fallback (step 5) would 404 for the canonical name.
- */
-const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION?.trim() || "1.0.1";
-
+// Canonical installer asset name served from GitHub Releases.
+// electron-builder is configured with a fixed artifactName ("FRPB-Setup.exe"),
+// so the public alias and the real asset name match.
 const GITHUB_ASSET_ALIASES: Record<string, string> = {
-  "frpb-setup.exe": `FRPB-Recovery-Setup-${APP_VERSION}.exe`,
+  "frpb-setup.exe": "FRPB-Setup.exe",
+  "frpb-setup.dmg": "FRPB-Setup.dmg",
 };
 
 /** Installer assets we are willing to serve; anything else is a 404. */
