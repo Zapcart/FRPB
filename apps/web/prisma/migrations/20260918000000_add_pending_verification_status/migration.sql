@@ -9,4 +9,9 @@
 -- value must be appended with `ALTER TYPE ... ADD VALUE`.
 
 -- AlterEnum
-ALTER TYPE "UpiOrderStatus" ADD VALUE 'PENDING_VERIFICATION';
+--
+-- `IF NOT EXISTS` keeps this script idempotent: it is safe to re-run against a
+-- database where the value was already added (e.g. a retried or partially
+-- applied deploy), which would otherwise abort with
+-- "enum label \"PENDING_VERIFICATION\" already exists".
+ALTER TYPE "UpiOrderStatus" ADD VALUE IF NOT EXISTS 'PENDING_VERIFICATION';

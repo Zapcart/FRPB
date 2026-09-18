@@ -133,12 +133,14 @@ function isRejectedPnpRow(row: PnpDevice): boolean {
   const hay = `${row.instanceId} ${row.friendlyName}`.toLowerCase();
   return (
     hay.includes("bthenum") ||
+    hay.includes("btheun") ||
     /\bbth\b/.test(hay) ||
     hay.includes("bluetooth") ||
     hay.includes("com0com") ||
     hay.startsWith("root\\") ||
     hay.startsWith("swd\\") ||
-    hay.includes("virtual serial")
+    hay.includes("virtual serial") ||
+    hay.includes("localmfg")
   );
 }
 

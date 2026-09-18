@@ -142,19 +142,29 @@ export default function ConnectionWizardModal({
                     {detected ? hardware?.label : guide.modeChip}
                   </span>
                 </div>
-                {detected ? (
-                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] sm:grid-cols-3">
-                    <Detail label="VID:PID" value={`${hardware?.vidHex ?? "—"}:${hardware?.pidHex ?? "—"}`} />
-                    <Detail label="COM Port" value={hardware?.port ?? "—"} />
-                    <Detail label="Chipset" value={hardware?.chipset ?? "—"} />
-                    <Detail
-                      label="Instance ID"
-                      value={hardware?.deviceInstanceId ?? "—"}
-                      wide
-                    />
+                {detected && hardware?.mode !== "none" ? (
+                  <>
+                    <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] sm:grid-cols-3">
+                      <Detail label="VID:PID" value={`${hardware?.vidHex ?? "—"}:${hardware?.pidHex ?? "—"}`} />
+                      <Detail label="COM Port" value={hardware?.port ?? "—"} />
+                      <Detail label="Chipset" value={hardware?.chipset ?? "—"} />
+                      <Detail
+                        label="Instance ID"
+                        value={hardware?.deviceInstanceId ?? "—"}
+                        wide
+                      />
+                    </div>
+                  </>
+                ) : detected && hardware?.mode === "none" ? (
+                  <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    <AlertTriangle className="inline h-3.5 w-3.5 shrink-0" />
+                    <span className="ml-1.5">
+                      A port was detected ({hardware.port}) but it is not a phone interface.
+                      Make sure your {brand || "device"} is connected in {guide.title} mode.
+                    </span>
                   </div>
                 ) : (
-                  <p className="mt-1.5 text-xs text-slate-500">
+                  <p className="mt-2 text-xs text-slate-500">
                     {listening
                       ? guide.listeningLabel
                       : "Follow the steps below, then start the hardware listen."}

@@ -8,14 +8,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  // Runtime connection. For Supabase this should target the transaction pooler
-  // (port 6543) WITH `?pgbouncer=true&connection_limit=1` appended, otherwise
-  // Prisma's prepared statements are rejected by PgBouncer/Supavisor and the
-  // app degrades intermittently ("Database connecting…").
   url       = env("DATABASE_URL")
-  // Migration/DDL connection. Points at the DIRECT (session, port 5432) URL so
-  // `prisma migrate` never runs through the pooler. Without this, migrations
-  // are executed against 6543 and can hang or corrupt advisory-lock state.
   directUrl = env("DIRECT_URL")
 }
 
@@ -34,29 +27,6 @@ enum LicenseStatus {
   PENDING
 }
 
-// Provider of record for a settled transaction.
-//
-// ── ACTIVE RAILS (the only ones any code path may construct) ────────────────
-//   PAYGLOCAL — international / USD card rail (hosted checkout). The sole live
-//               gateway; the ONLY member `lib/payments/gateway.ts`
-//               (PaymentProviderName) permits.
-//
-// Direct UPI is intentionally NOT a member here: it is self-hosted (no gateway
-// account) and is tracked on `PaymentOrder.provider = "UPI"` instead. See the
-// PaymentOrder model below.
-//
-// ── DEPRECATED / HISTORICAL (must NOT be used for new orders) ───────────────
-//   STRIPE, RAZORPAY, CASHFREE
-//
-// These are retained solely so historical `Payment` / `WebhookEvent` rows keep
-// validating. The Cashfree adapter and its webhook route were DELETED, and INR
-// now settles exclusively through the self-hosted Direct UPI engine, so no
-// runtime code can produce these values (see lib/payments/index.ts and
-// lib/webhooks/processor.ts `LegacyPaymentProvider`).
-//
-// ENFORCEMENT: the live route code is strictly typed to `"PAYGLOCAL"`; this enum
-// is intentionally WIDER than the live union so legacy rows never break. Drop a
-// deprecated value ONLY after confirming zero rows reference it.
 enum PaymentProvider {
   STRIPE // DEPRECATED — historical rows only
   RAZORPAY // DEPRECATED — historical rows only
@@ -99,13 +69,13 @@ model User {
 model Plan {
   id           String    @id @default(cuid())
   slug         PlanType  @unique
-  name         String // "1-Month Plan", "1-Year Plan", "Lifetime Plan"
-  priceCents   Int // USD price in cents ($19.99 = 1999)
-  priceInr     Int       @default(0) // INR price in paise (₹1,900 = 190000)
+  name         String
+  priceCents   Int
+  priceInr     Int       @default(0)
   currency     String    @default("USD")
-  durationDays Int? // null = lifetime
-  deviceLimit  Int // 1 / 3 / 5
-  features     String[] // feature list displayed on pricing cards
+  durationDays Int?
+  deviceLimit  Int
+  features     String[]
   createdAt    DateTime  @default(now())
 
   licenses License[]
@@ -115,24 +85,22 @@ model Plan {
 
 model License {
   id             String        @id @default(cuid())
-  key            String        @unique // "FRPB-XXXX-XXXX-XXXX"
-  keySha256      String        @unique // hashed for lookup + raw stored encrypted
+  key            String        @unique
+  keySha256      String        @unique
   userId         String
   user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   planId         String
   plan           Plan          @relation(fields: [planId], references: [id])
   status         LicenseStatus @default(ACTIVE)
-  deviceLimit    Int // snapshot of plan.deviceLimit at purchase time
-  maxActivations Int           @default(1) // 1 activation per machine at a time
+  deviceLimit    Int
+  maxActivations Int           @default(1)
   activatedAt    DateTime?
   expiresAt      DateTime?
   lastVerifiedAt DateTime?
-  /// Audit: how many times the full key has been revealed via /license/reveal.
   revealCount    Int           @default(0)
-  /// Audit: timestamp of the most recent key reveal.
   lastRevealedAt DateTime?
   revokedReason  String?
-  metadata       Json? // orderId, promoCode etc.
+  metadata       Json?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -143,81 +111,47 @@ model License {
 
   @@index([userId])
   @@index([status])
-  @@index([metadata]) // GIN index for JSON metadata queries (UTR lookup etc.)
+  @@index([metadata])
 }
 
-// ─── Dual-rail Payment Orders (Direct UPI + PayGlocal) ────
-//
-// One row per customer-initiated payment intent, covering BOTH rails:
-//   • provider UPI       — Direct UPI (zero-MDR), amount in INR rupees
-//   • provider PAYGLOCAL — international card, amount in whole USD dollars
-//
-// The amount is ALWAYS resolved server-side from config/plans.ts and is never
-// taken from the client, so a tampered payload cannot under-pay. `utr` and
-// `providerTxnId` each carry a unique index so a reference can never be claimed
-// twice (double-spend / duplicate-claim protection). Orders expire after 10
-// minutes.
-//
-// FRAUD PROTECTION FIELDS:
-//   - paymentConfirmed: When true, the payment has been verified by admin
-//     (bank statement match) or by a hosted gateway webhook. When false,
-//     the license is NOT granted even if UTR is structurally valid.
-//   - utrSuspicious: When true, the UTR passed format check but has suspicious
-//     patterns (all same digits, sequential, repeated pairs). Admin review
-//     recommended before granting license.
+// ─── Dual-rail Payment Orders ─────────────────────────────
 
 enum UpiOrderStatus {
   PENDING
-  /// Customer submitted a UTR; awaiting manual admin verification + approval.
-  PENDING_VERIFICATION
   PAID
   FAILED
   EXPIRED
+  PENDING_VERIFICATION
 }
 
 model PaymentOrder {
   id        String         @id @default(cuid())
-  orderId   String         @unique // public order reference (UPI `tr` field)
+  orderId   String         @unique
   userId    String?
   user      User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
   email     String
   planId    PlanType
-  // Whole major units in `currency`: INR rupees (1900/4900/9999) for the UPI
-  // rail, or whole USD dollars (20/50/100) for the PayGlocal rail. Always
-  // resolved server-side from config/plans.ts — never taken from the client.
   amount    Float
-  /// "INR" (Direct UPI) | "USD" (PayGlocal card).
   currency  String         @default("INR")
-  /// "UPI" (Direct UPI, self-hosted) | "PAYGLOCAL" (card) — which rail created
-  /// this order. This is the LIVE rail ledger; `PaymentProvider` above is the
-  /// hosted-gateway enum used by the legacy `Payment` table.
   provider  String         @default("UPI")
   status    UpiOrderStatus @default(PENDING)
-  utr       String?        @unique // 12-digit UPI reference; unique = no double-claim
-  /// PayGlocal order/txn id — unique so a webhook cannot double-grant.
+  utr       String?        @unique
   providerTxnId String?    @unique
   licenseId String?        @unique
   license   License?       @relation(fields: [licenseId], references: [id])
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
-  expiresAt DateTime // createdAt + 10 minutes
+  expiresAt DateTime
   paidAt    DateTime?
 
-  // FRAUD PROTECTION: When true, payment has been manually confirmed by admin
-  // (bank statement verified) or by hosted gateway webhook. When false, the
-  // self-hosted UPI rail has NOT confirmed the actual bank transfer — only
-  // structural UTR validation has been done.
   paymentConfirmed Boolean @default(false)
-
-  // FRAUD PROTECTION: When true, the UTR looks suspicious (all same digits,
-  // sequential, repeated pairs). Admin should review before confirming payment.
   utrSuspicious    Boolean @default(false)
 
   @@index([status, expiresAt])
   @@index([email])
   @@index([provider, status])
-  @@index([paymentConfirmed, status]) // Find unconfirmed payments for admin review
-  @@index([utrSuspicious]) // Find suspicious UTRs for admin review
+  @@index([paymentConfirmed, status])
+  @@index([utrSuspicious])
 }
 
 // ─── Hardware-bound devices ───────────────────────────────
@@ -226,12 +160,12 @@ model LicenseDevice {
   id          String       @id @default(cuid())
   licenseId   String
   license     License      @relation(fields: [licenseId], references: [id], onDelete: Cascade)
-  hardwareId  String // machine fingerprint
-  deviceName  String // hostname / OS label reported by client
+  hardwareId  String
+  deviceName  String
   status      DeviceStatus @default(CONNECTED)
   lastSeenAt  DateTime     @default(now())
-  unboundAt   DateTime? // last time user unbound this machine (self-service reset)
-  unbindCount Int          @default(0) // total unbind operations for this device
+  unboundAt   DateTime?
+  unbindCount Int          @default(0)
   createdAt   DateTime     @default(now())
 
   @@unique([licenseId, hardwareId])
@@ -247,8 +181,8 @@ model Payment {
   licenseId        String?         @unique
   license          License?        @relation(fields: [licenseId], references: [id])
   provider         PaymentProvider
-  providerTxnId    String          @unique // PayGlocal order id (hosted-gateway rail)
-  providerEventId  String? // webhook event id for idempotency
+  providerTxnId    String          @unique
+  providerEventId  String?
   amountCents      Int
   currency         String          @default("USD")
   status           PaymentStatus   @default(PENDING)
@@ -264,40 +198,37 @@ model Payment {
 
 model WebhookEvent {
   id          String          @id @default(cuid())
-  provider    PaymentProvider // PAYGLOCAL live (STRIPE/RAZORPAY/CASHFREE deprecated)
-  eventId     String          @unique // provider event id (e.g., evt_..., event_...)
-  eventType   String // payment_intent.succeeded / payment.captured
-  payload     Json // raw provider payload for audit + replay
-  status      String          @default("RECEIVED") // RECEIVED | PROCESSING | PROCESSED | FAILED | IGNORED
+  provider    PaymentProvider
+  eventId     String          @unique
+  eventType   String
+  payload     Json
+  status      String          @default("RECEIVED")
   processedAt DateTime?
   licenseId   String?
-  error       String? // error message if processing failed
+  error       String?
   createdAt   DateTime        @default(now())
 
   @@index([provider, status])
   @@index([licenseId])
 }
 
-// ─── Email Delivery Log (Resend / SendGrid) ──────────────
+// ─── Email Delivery Log ───────────────────────────────────
 
 model EmailLog {
   id            String    @id @default(cuid())
-  to            String // recipient email
-  template      String // "license-delivered" | "quick-start"
+  to            String
+  template      String
   licenseId     String?
   license       License?  @relation(fields: [licenseId], references: [id])
-  providerMsgId String? // Resend message id / SendGrid message id
-  status        String    @default("QUEUED") // QUEUED | SENT | FAILED
+  providerMsgId String?
+  status        String    @default("QUEUED")
   error         String?
   sentAt        DateTime?
   createdAt     DateTime  @default(now())
-  // Delivery attempts, incremented by the retry pass. Bounded so a permanently
-  // bad address is never hammered (see retryFailedEmails in lib/email/resend.ts).
   attempts      Int       @default(0)
 
   @@index([to])
   @@index([licenseId])
-  // Supports the retry backlog query: status IN (QUEUED, FAILED) + createdAt.
   @@index([status, createdAt])
 }
 
@@ -315,19 +246,19 @@ model FrpUnlockRequest {
   id             String           @id @default(cuid())
   brand          String
   model          String
-  androidVersion String?          // e.g. "13", "14", "15"
-  imeiHash       String?          // salted SHA-256 of IMEI for privacy-safe dedupe/lookup
-  method         String           // setup-wizard | download-mode | edl-mode | mtk-brom | oem-service
+  androidVersion String?
+  imeiHash       String?
+  method         String
   ipAddress      String
   status         FrpRequestStatus @default(PENDING)
-  statusMessage  String?          // human-readable status / result message
-  result         Json?            // bypass result details (device info, bypassed account type, etc.)
-  userId         String?          // if authenticated
+  statusMessage  String?
+  result         Json?
+  userId         String?
   user           User?            @relation(fields: [userId], references: [id])
   requestedAt    DateTime         @default(now())
   startedAt      DateTime?
   completedAt    DateTime?
-  refundAmountCents Int?          // if refunded
+  refundAmountCents Int?
 
   @@index([status])
   @@index([userId])

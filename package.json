@@ -29,6 +29,7 @@
   },
   "packageManager": "pnpm@9.9.0",
   "dependencies": {
-    "posthog-node": "^5.52.1"
+    "posthog-node": "^5.52.1",
+    "socket.io": "^4.8.3"
   }
 }
