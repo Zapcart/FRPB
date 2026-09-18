@@ -73,6 +73,22 @@ interface DirectUpiCheckoutProps {
   initialPlanId?: UpiPlanId | null;
 }
 
+/**
+ * Shown when POST /payment/create returns a DEGRADED order (HTTP 200 with
+ * `persisted === false`). The QR is still payable, but there is no database row
+ * to poll or verify against, so the buyer keeps the UTR and support reconciles
+ * it manually rather than the checkout failing with a 503.
+ */
+const DEGRADED_UTR_NOTICE =
+  "Live order tracking is temporarily unavailable, so this payment can't be auto-verified. " +
+  "Your QR is still payable — keep your 12-digit UTR and contact support with the order ID " +
+  "shown above so we can activate your license manually.";
+
+/** Confirmation shown after a degraded-order UTR is captured locally. */
+const DEGRADED_UTR_CAPTURED =
+  "Reference noted. Our team will match your UTR against the bank statement manually — " +
+  "keep it safe and email support if your license isn't activated shortly.";
+
 export default function DirectUpiCheckout({
   defaultEmail = null,
   initialPlanId = null,
@@ -97,12 +113,20 @@ export default function DirectUpiCheckout({
   /** Wraps the rendered QR SVG so it can be rasterised to PNG on demand. */
   const qrWrapRef = useRef<HTMLDivElement | null>(null);
   /**
-   * Health of the live tracker. The payment step is rendered ONLY while this is
-   * "live": without a persisted order row there is nothing for the 3-second
-   * poller or the UTR verifier to resolve, so showing a QR would invite payments
-   * that can never be auto-verified.
+   * Health of the live tracker:
+   *   • "live"        — order persisted; the 3s poller + UTR verifier resolve it.
+   *   • "degraded"    — the create endpoint could NOT persist the row, but it DID
+   *                     return a payable QR + static merchant VPA. The poller and
+   *                     POST /payment/verify are meaningless here (guaranteed
+   *                     404), so the QR is shown with an explicit manual-
+   *                     reconciliation path instead of a hard 503.
+   *   • "unavailable" — no order exists; refuse to invite a payment.
    */
-  const [tracking, setTracking] = useState<"idle" | "live" | "unavailable">("idle");
+  const [tracking, setTracking] = useState<"idle" | "live" | "degraded" | "unavailable">("idle");
+  /** True when the order was returned un-persisted (degraded create response). */
+  const [degraded, setDegraded] = useState(false);
+  /** Server-authored copy explaining the degraded (manual) path. */
+  const [degradedMessage, setDegradedMessage] = useState<string | null>(null);
   /** Transient poll failures — drives the degraded badge + retry backoff. */
   const [trackingDegraded, setTrackingDegraded] = useState(false);
   const pollFailuresRef = useRef(0);
@@ -117,8 +141,10 @@ export default function DirectUpiCheckout({
     setCreating(true);
     setUtr("");
     setCopied(false);
-    // A fresh payment request clears any prior admin-review state.
+    // A fresh payment request clears any prior admin-review / degraded state.
     setPendingVerification(false);
+    setDegraded(false);
+    setDegradedMessage(null);
     setTracking("idle");
     setTrackingDegraded(false);
     pollFailuresRef.current = 0;
@@ -169,6 +195,8 @@ export default function DirectUpiCheckout({
         order?: CreatedOrder;
         upiUri?: string;
         persisted?: boolean;
+        /** True when the server returned an un-persisted (manual) order. */
+        degraded?: boolean;
       } = {};
       let bodyWasJson = false;
       try {
@@ -195,26 +223,29 @@ export default function DirectUpiCheckout({
         );
         return;
       }
-      // LIVE TRACKING IS A HARD REQUIREMENT, not a nice-to-have.
-      //
-      // A non-persisted order has no database row, so BOTH the status poller and
-      // POST /payment/verify are guaranteed to fail on it — verify returns 404
-      // ("Order not found"). Previously the QR was still rendered with a soft
-      // "you can still pay normally" notice, which produced the reported pair of
-      // errors: "Live order tracking is temporarily unavailable" next to a
-      // "Verification failed" on every UTR submit, after real money had moved.
-      // Refuse the step up front so no unverifiable payment can be initiated.
-      if (data.persisted === false) {
-        setTracking("unavailable");
-        setError(
-          "Live order tracking is temporarily unavailable, so we can't take a payment right now. " +
-            "No money has been sent — please retry in a moment."
-        );
-        return;
-      }
       setOrder(data.order);
       setUpiUri(data.upiUri);
       setSecondsLeft(data.order.expiresInSeconds);
+
+      // DEGRADED CREATE RESPONSE — the endpoint persisted NOTHING (DB error) but
+      // still returned a scannable QR + the static merchant VPA. Render the QR and
+      // route the buyer to MANUAL reconciliation instead of failing with a 503.
+      //
+      // We deliberately do NOT start the live poller (no row exists to poll) and we
+      // bypass POST /payment/verify for these orders (it would 404 "Order not
+      // found"). That prevents the reported contradiction where real money moved
+      // and the buyer saw "Verification failed" on every UTR submit — instead the
+      // UTR is captured client-side and support reconciles it against the bank.
+      if (data.persisted === false) {
+        setTracking("degraded");
+        setDegraded(true);
+        setDegradedMessage(data.message ?? DEGRADED_UTR_NOTICE);
+        setNotice(null);
+        return;
+      }
+
+      setDegraded(false);
+      setDegradedMessage(null);
       setTracking("live");
     } catch (err) {
       // Should be unreachable — network and body-parse failures are handled
@@ -339,6 +370,33 @@ export default function DirectUpiCheckout({
     if (!order) return;
     setError(null);
     setNotice(null);
+
+    // DEGRADED ORDER (no row persisted): POST /payment/verify would 404, so do
+    // not call it and never surface a contradictory "Verification failed" after
+    // the buyer has paid. Capture the reference locally and hand off to manual
+    // review instead.
+    if (degraded) {
+      const cleanUtr = utr.replace(/\D/g, "");
+      if (cleanUtr.length < 12) {
+        setError("Please enter the full 12-digit UPI reference (UTR / Ref No).");
+        return;
+      }
+      try {
+        window.sessionStorage.setItem(
+          "frpb.degradedUtr",
+          JSON.stringify({
+            orderId: order.orderId,
+            utr: cleanUtr,
+            at: new Date().toISOString(),
+          })
+        );
+      } catch {
+        // Session storage may be blocked; the on-screen instruction still holds.
+      }
+      setNotice(DEGRADED_UTR_CAPTURED);
+      return;
+    }
+
     setVerifying(true);
     try {
       const res = await fetch("/api/v1/payment/verify", {
@@ -441,7 +499,7 @@ export default function DirectUpiCheckout({
     } finally {
       setVerifying(false);
     }
-  }, [order, utr, router]);
+  }, [order, utr, router, degraded]);
 
   const copyVpa = useCallback(async () => {
     try {
@@ -553,6 +611,10 @@ export default function DirectUpiCheckout({
                   setError(null);
                   setNotice(null);
                   setPendingVerification(false);
+                  setDegraded(false);
+                  setDegradedMessage(null);
+                  setTracking("idle");
+                  setTrackingDegraded(false);
                 }}
                 disabled={creating || paid}
                 className={`rounded-2xl border p-4 text-left transition disabled:opacity-60 ${
@@ -613,9 +675,10 @@ export default function DirectUpiCheckout({
       </section>
 
       {/* ── Step 2 — pay ───────────────────────────────────────────────────── */}
-      {/* Gate on `tracking === "live"`: never invite a payment that the poller
-          and the UTR verifier cannot resolve. */}
-      {order && upiUri && !paid && tracking === "live" && (
+      {/* Render for "live" (fully tracked) AND "degraded" (no row, manual
+          reconciliation). "unavailable" never shows a QR — we refuse to invite a
+          payment that cannot be resolved at all. */}
+      {order && upiUri && !paid && (tracking === "live" || tracking === "degraded") && (
         <section className="card mt-5 p-6 sm:p-8">
           <div className="flex items-center justify-between">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -719,6 +782,8 @@ export default function DirectUpiCheckout({
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Verifying…
                   </>
+                ) : degraded ? (
+                  "Submit Reference for Manual Review"
                 ) : (
                   "Verify Payment"
                 )}
@@ -752,6 +817,20 @@ export default function DirectUpiCheckout({
           <p className="mt-1 text-xs text-amber-700">
             Your license key will be generated as soon as the admin verifies your
             payment reference.
+          </p>
+        </div>
+      )}
+
+      {/* Degraded create — the QR is payable, but no order row was persisted, so
+          the buyer must be told their UTR will be matched manually. */}
+      {degraded && !paid && (
+        <div className="mt-5 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <div className="flex items-center gap-2 font-semibold">
+            <ShieldCheck className="h-4 w-4" />
+            Manual verification required
+          </div>
+          <p className="mt-1 text-xs text-amber-700">
+            {degradedMessage ?? DEGRADED_UTR_NOTICE}
           </p>
         </div>
       )}

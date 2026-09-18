@@ -73,15 +73,62 @@ function resolveDatasourceUrl(): string | undefined {
     );
   }
 
-  return runtimeUrl;
+  // Serverless connection budget.
+  //
+  // Supabase's transaction pooler multiplexes many client connections onto a
+  // small number of Postgres backends, but each serverless instance still opens
+  // its OWN pool. A per-instance `connection_limit` above the pooler's headroom
+  // is the classic cause of `P1001`/`P1002`/`P1017` under load — the exact
+  // errors that surface to the customer as a 503 DB_UNAVAILABLE on checkout.
+  // Tuning (and lowering, not raising) these values is safe to do at runtime:
+  // Prisma merges them into the datasource URL it is handed.
+  return applyServerlessPoolTuning(runtimeUrl);
+}
+
+/**
+ * Merge serverless-safe pool tuning into the pooler URL without clobbering any
+ * operator-supplied value. PgBouncer (port 6543) must NEVER be given more than
+ * a couple of connections per instance, so the defaults below are deliberately
+ * low; on the direct/session port the defaults are left untouched.
+ */
+function applyServerlessPoolTuning(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const isTransactionPooler = parsed.port === "6543";
+    const defaults: Record<string, string> = {
+      // Bounded wait for a TCP/TLS handshake to the pooler.
+      connect_timeout: "15",
+      // Fail fast instead of queueing requests until the serverless function
+      // itself times out (which yields an unparseable platform 500/503).
+      pool_timeout: "20",
+    };
+    if (isTransactionPooler) defaults.connection_limit = "10";
+
+    let mutated = false;
+    for (const [key, value] of Object.entries(defaults)) {
+      if (!parsed.searchParams.has(key)) {
+        parsed.searchParams.set(key, value);
+        mutated = true;
+      }
+    }
+    return mutated ? parsed.toString() : url;
+  } catch {
+    // Not a parseable URL — hand it back untouched so Prisma reports the real
+    // syntax problem instead of a silently mangled string.
+    return url;
+  }
 }
 
 function createPrismaClient(): PrismaClient {
   const url = resolveDatasourceUrl();
   return new PrismaClient({
-    // Explicit override: prevents the client from failing to construct when
-    // DIRECT_URL is absent (see resolveDatasourceUrl).
+    // The resolved/tuned URL is passed EXPLICITLY. `resolveDatasourceUrl()`
+    // validates the environment and merges the serverless pool tuning; this
+    // value was previously computed and discarded, so the tuning never reached
+    // the client and the pooler defaults applied instead.
     ...(url ? { datasources: { db: { url } } } : {}),
+    // Explicit override: keeps the client bootable when DATABASE_URL is absent
+    // (resolveDatasourceUrl already logs an actionable message in that case).
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
 }
@@ -118,4 +165,13 @@ if (!client) {
 
 export const prisma = client;
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+// CACHE UNCONDITIONALLY — production included.
+//
+// This previously read `if (process.env.NODE_ENV !== "production")`, so on
+// Vercel (NODE_ENV=production) the global was NEVER populated. Every serverless
+// module evaluation therefore constructed a brand-new PrismaClient with its own
+// connection pool, exhausting the Supabase pooler; the next query then failed
+// with P1001/P1002/P1017 and surfaced as the 503 DB_UNAVAILABLE on checkout.
+// Reusing one client per lambda module instance is the documented Prisma
+// serverless pattern and keeps the connection budget bounded.
+globalForPrisma.prisma = prisma;

@@ -48,6 +48,15 @@ const DB_UNAVAILABLE_MESSAGE =
 /** Returned when an error escapes `handleCreate` entirely. */
 const UNHANDLED_MESSAGE = "Database or payment service temporarily unavailable.";
 
+/**
+ * Surfaced on a DEGRADED order — the UPI intent was built from the static
+ * merchant config, but the order row could not be persisted (transient DB
+ * fault). The customer can still pay; the UTR is reconciled manually.
+ */
+const DEGRADED_MESSAGE =
+  "Your payment request was generated but live order tracking is temporarily unavailable. " +
+  "Complete the UPI transfer and keep your 12-digit UTR — our team will activate your license manually.";
+
 /** Rate limit window — 10 orders per 15 min per IP/email. */
 const RATE_LIMIT_MAX = 10;
 const RATE_LIMIT_WINDOW = 15 * 60;
@@ -206,7 +215,7 @@ async function handleCreate(req: NextRequest) {
     emailAddr = user.email;
     try {
       const record = await upsertPrismaUser(prisma, { id: user.id, email: user.email });
-      userId = record.id;
+      if (record) userId = record.id;
     } catch (err) {
       // Auth succeeded but the local user row could not be written. Continue as
       // a guest rather than failing the checkout.
@@ -248,22 +257,24 @@ async function handleCreate(req: NextRequest) {
   const orderId = generateOrderId();
   const expiresAt = orderExpiry();
 
-  // PERSIST-OR-FAIL.
+  // PERSIST-OR-FALLBACK.
   //
-  // The order row is the ONLY thing that makes a UPI payment verifiable: the
-  // 12-digit UTR is reconciled against it by /payment/verify, and the live
-  // status poller reads it every 3 seconds. Returning a QR with no persisted row
-  // hands the customer a payment that can never be confirmed — money moves and
-  // no license is ever issued.
+  // The order row is what makes a UPI payment auto-verifiable: the 12-digit UTR
+  // is reconciled against it by /payment/verify, and the live status poller
+  // reads it every 3 seconds. Persistence is therefore still attempted first,
+  // and the happy path is unchanged.
   //
-  // That failure mode is strictly worse than a retry, so a DB outage now fails
-  // LOUDLY with a 503 instead of degrading. The amount is still resolved
-  // server-side, so nothing about the price is ever client-controlled.
+  // A transient DB fault, however, must NOT strand a paying customer on a 503.
+  // The UPI intent and the merchant VPA are STATIC server-side values, so a real,
+  // scannable QR can be produced without touching the database. On failure we
+  // degrade instead of failing: the payment is still accepted and reconciled
+  // manually from the UTR, which the customer is told to retain.
   //
   // For self-hosted UPI:
   //   - paymentConfirmed: false (admin must verify bank statement before license)
   //   - utrSuspicious: will be updated by verify endpoint if UTR looks suspicious
-  let order: Awaited<ReturnType<typeof prisma.paymentOrder.create>>;
+  let order: Awaited<ReturnType<typeof prisma.paymentOrder.create>> | null = null;
+  let persisted = true;
   try {
     order = await prisma.paymentOrder.create({
       data: {
@@ -284,15 +295,17 @@ async function handleCreate(req: NextRequest) {
       },
     });
   } catch (err) {
-    // This is THE failure behind the checkout banner: `prisma.paymentOrder.create`
+    // This was THE failure behind the checkout banner: `prisma.paymentOrder.create`
     // rejected. Prisma signals runtime connection faults with distinct codes that
-    // are otherwise invisible once the error is reduced to a friendly 503 —
+    // are otherwise invisible once the error is reduced to a friendly message —
     // surfacing them here is what makes the incident diagnosable from logs.
     //   P1000 auth failed · P1001 host unreachable · P1002 connect timeout
     //   P1017 server closed the connection (typical pooler/prepared-statement
     //         rejection when `?pgbouncer=true` is missing on port 6543)
     //   P2021/P2022 table/column missing — migration never applied
     const prismaCode = (err as { code?: string })?.code ?? null;
+    // Explicit, greppable line naming the exact failure and the exact object.
+    console.error("Payment Init DB Error:", err);
     console.error("[PAYMENT_CREATE_CRASH]", err);
 
     // Full stack + structured context. The raw object dump alone is not
@@ -315,17 +328,22 @@ async function handleCreate(req: NextRequest) {
       })
     );
 
-    // Safe fallback: structured JSON, never an HTML 500 page, so the client can
-    // parse it and show a real message instead of a connectivity guess.
-    return NextResponse.json(
-      { success: false, message: DB_UNAVAILABLE_MESSAGE, code: "DB_UNAVAILABLE" },
-      { status: 503 }
-    );
+    // DEGRADE, DO NOT FAIL. Clear the flag; the response below still returns a
+    // fully-usable UPI intent so checkout proceeds.
+    persisted = false;
   }
 
-  // 6. Build the UPI URI + native intent URLs + clear rate limit on success.
+  // 6. Build the UPI URI + native intent URLs.
+  //
+  //    The identifiers come from the persisted row when one exists; otherwise
+  //    the already-generated `orderId`/`expiresAt` are reused so the QR, the
+  //    countdown and the UTR reference stay stable and self-describing.
+  const effectiveOrderId = order?.orderId ?? orderId;
+  const effectiveExpiresAt = order?.expiresAt ?? expiresAt;
+  const effectiveCreatedAt = order?.createdAt ?? new Date();
+
   const upiUri = generateUpiUri({
-    orderId: order.orderId,
+    orderId: effectiveOrderId,
     planId: plan.planId,
     amount: plan.amount,
   });
@@ -337,32 +355,35 @@ async function handleCreate(req: NextRequest) {
     {
       success: true,
       order: {
-        orderId: order.orderId,
+        orderId: effectiveOrderId,
         planId: plan.planId,
         planSlug: plan.planSlug,
         planName: planNameFor(plan.planSlug),
         amount: plan.amount,
         currency: "INR",
         provider: "UPI",
-        status: order.status,
-        createdAt: order.createdAt.toISOString(),
-        expiresAt: order.expiresAt.toISOString(),
+        status: order?.status ?? "PENDING",
+        createdAt: effectiveCreatedAt.toISOString(),
+        expiresAt: effectiveExpiresAt.toISOString(),
         /** Seconds until expiry — drives the checkout countdown. */
         expiresInSeconds: Math.max(
           0,
-          Math.floor((order.expiresAt.getTime() - Date.now()) / 1000)
+          Math.floor((effectiveExpiresAt.getTime() - Date.now()) / 1000)
         ),
       },
       merchant: { vpa: UPI_MERCHANT_VPA, name: UPI_MERCHANT_NAME },
       upiUri,
       intentUrls: generateUpiIntentUrls(upiUri),
       /**
-       * Wire-compatibility field. Order persistence is now mandatory — a DB
-       * outage returns 503 above — so this is always true. Retained so older
-       * clients that branch on it keep working.
+       * False when the order row could not be written. The client MUST treat
+       * this as degraded (manual reconciliation) rather than an error.
        */
-      persisted: true,
+      persisted,
+      /** Explicit degraded signal so clients need not infer it from `persisted`. */
+      degraded: !persisted,
+      ...(persisted ? {} : { message: DEGRADED_MESSAGE }),
     },
-    { status: 201 }
+    // A degraded order is still a successful, actionable payment request.
+    { status: persisted ? 201 : 200 }
   );
 }
