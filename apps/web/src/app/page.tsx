@@ -265,6 +265,14 @@ export default function HomePage() {
               <Download className="h-5 w-5" />
               Try for Free
             </Link>
+            <Link
+              href="/checkout?plan=YEAR_1"
+              className="w-full px-8 py-3.5 text-sm font-bold text-white bg-gradient-to-r from-brand-500 to-accent-500 rounded-xl shadow-lg shadow-brand-500/25 hover:brightness-110 transition hover:-translate-y-0.5 sm:w-auto"
+            >
+              <Zap className="h-4 w-4" />
+              Buy Now
+              <ArrowRight className="h-4 w-4" />
+            </Link>
             <SmoothScrollLink
               targetId="pricing"
               ariaLabel="See pricing"
