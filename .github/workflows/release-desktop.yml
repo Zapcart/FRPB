@@ -87,12 +87,15 @@ jobs:
           Get-ChildItem -Path apps/desktop/release -Recurse -File |
             Select-Object FullName, Length
 
-  # ── Main push: build validation only (no release) ────────────────────────
+  # ── Main push: build validation + snapshot publish ────────────────────────
   verify:
-    name: Verify desktop build (no publish)
+    name: Build + publish latest snapshot
     if: github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 45
+
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Checkout
@@ -118,8 +121,25 @@ jobs:
       - name: Build desktop (electron + renderer)
         run: pnpm --filter @frpb/desktop run build
 
-      - name: Package installer (validation, never publish)
+      - name: Package installer
         run: pnpm --filter @frpb/desktop exec electron-builder --win --publish never
+
+      - name: Upload installer to "latest" GitHub Release
+        run: |
+          $exePath = (Get-ChildItem -Path apps/desktop/release -Filter "*.exe" -Recurse | Select-Object -First 1).FullName
+          if (-not $exePath) { echo "No .exe found — aborting snapshot publish"; exit 1 }
+          $exeName = [System.IO.Path]::GetFileName($exePath)
+          echo "Uploading $exeName to latest release"
+
+          # Create or update a release tagged "latest"
+          $existing = gh release view latest --json id --jq '.id' 2>$null
+          if ($existing) {
+            gh release delete latest --yes 2>$null || $true
+            gh release create latest --title "Latest Build" --notes "Auto-deployed from main — $(Get-Date -Format 'yyyy-MM-dd HH:mm')" --target main --draft:false
+          } else {
+            gh release create latest --title "Latest Build" --notes "Auto-deployed from main — $(Get-Date -Format 'yyyy-MM-dd HH:mm')" --target main --draft:false
+          }
+          gh release upload latest $exePath --clobber
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
