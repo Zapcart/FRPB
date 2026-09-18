@@ -48,11 +48,10 @@ export async function resolveAdminAccess(): Promise<AdminAccess> {
     return { authorized: true, via: "key", user: null };
   }
 
-  // 2. Supabase session — preserves logged-in staff access.
-  const user = await getOptionalUser();
-  if (user) {
-    return { authorized: true, via: "user", user };
-  }
+  // 2. Supabase session — NOT accepted for admin console.
+  // Admin access is EXCLUSIVELY via owner key (ADMIN_LICENSE_KEY).
+  // Any visitor with a Supabase session must never reach /admin.
+  // (Supabase user lookup removed — was: getOptionalUser())
 
   return { authorized: false, via: null, user: null };
 }
