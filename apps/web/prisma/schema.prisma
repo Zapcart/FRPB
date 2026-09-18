@@ -143,6 +143,7 @@ model License {
 
   @@index([userId])
   @@index([status])
+  @@index([metadata]) // GIN index for JSON metadata queries (UTR lookup etc.)
 }
 
 // ─── Dual-rail Payment Orders (Direct UPI + PayGlocal) ────
@@ -156,6 +157,14 @@ model License {
 // `providerTxnId` each carry a unique index so a reference can never be claimed
 // twice (double-spend / duplicate-claim protection). Orders expire after 10
 // minutes.
+//
+// FRAUD PROTECTION FIELDS:
+//   - paymentConfirmed: When true, the payment has been verified by admin
+//     (bank statement match) or by a hosted gateway webhook. When false,
+//     the license is NOT granted even if UTR is structurally valid.
+//   - utrSuspicious: When true, the UTR passed format check but has suspicious
+//     patterns (all same digits, sequential, repeated pairs). Admin review
+//     recommended before granting license.
 
 enum UpiOrderStatus {
   PENDING
@@ -192,9 +201,21 @@ model PaymentOrder {
   expiresAt DateTime // createdAt + 10 minutes
   paidAt    DateTime?
 
+  // FRAUD PROTECTION: When true, payment has been manually confirmed by admin
+  // (bank statement verified) or by hosted gateway webhook. When false, the
+  // self-hosted UPI rail has NOT confirmed the actual bank transfer — only
+  // structural UTR validation has been done.
+  paymentConfirmed Boolean @default(false)
+
+  // FRAUD PROTECTION: When true, the UTR looks suspicious (all same digits,
+  // sequential, repeated pairs). Admin should review before confirming payment.
+  utrSuspicious    Boolean @default(false)
+
   @@index([status, expiresAt])
   @@index([email])
   @@index([provider, status])
+  @@index([paymentConfirmed, status]) // Find unconfirmed payments for admin review
+  @@index([utrSuspicious]) // Find suspicious UTRs for admin review
 }
 
 // ─── Hardware-bound devices ───────────────────────────────

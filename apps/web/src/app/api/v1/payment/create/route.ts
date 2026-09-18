@@ -8,6 +8,7 @@
 //     present in the client payload is ignored entirely — a tampered body can
 //     never under-pay.
 //   - The order is persisted as PENDING with a hard 10-minute expiry.
+//   - Rate limited to prevent abuse / order flooding.
 //   - The customer email comes from the authenticated session when available,
 //     otherwise from the (validated) request body.
 
@@ -31,6 +32,7 @@ import {
   orderExpiry,
   planNameFor,
 } from "@/lib/payment/orders";
+import { rateLimit, checkLockout, recordFailure, clearFailures } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const OPTIONS = preflight;
@@ -45,6 +47,10 @@ const DB_UNAVAILABLE_MESSAGE =
 
 /** Returned when an error escapes `handleCreate` entirely. */
 const UNHANDLED_MESSAGE = "Database or payment service temporarily unavailable.";
+
+/** Rate limit window — 10 orders per 15 min per IP/email. */
+const RATE_LIMIT_MAX = 10;
+const RATE_LIMIT_WINDOW = 15 * 60;
 
 /**
  * Reduce a Prisma error code to an operational action. Without this the log
@@ -128,12 +134,31 @@ export async function POST(req: NextRequest) {
 }
 
 async function handleCreate(req: NextRequest) {
+  // 0. Rate limiting — prevent order flooding / abuse.
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    ?? req.headers.get("x-real-ip")
+    ?? "unknown";
+  const email = "pending"; // placeholder — real email resolved later
+  const rateKey = `create:${ip}:${email}`;
+  const rateResult = await rateLimit(rateKey, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW);
+  if (!rateResult.allowed) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Too many payment requests. Please wait before trying again.",
+        retryAfter: rateResult.resetAt - Math.floor(Date.now() / 1000),
+      },
+      { status: 429 }
+    );
+  }
+
   // 1. Validate the request body. `amount` is deliberately NOT part of the
   //    schema — accepting it at all would invite a tampered payload.
   let parsed: z.infer<typeof CreateSchema>;
   try {
     parsed = CreateSchema.parse(await req.json());
   } catch (err) {
+    await recordFailure([rateKey], 5, 300); // lockout after 5 bad requests
     return NextResponse.json(
       { success: false, message: "Invalid request", detail: (err as Error).message },
       { status: 400 }
@@ -162,7 +187,7 @@ async function handleCreate(req: NextRequest) {
   //    In all three cases the purchase simply continues as a guest — the
   //    license is bound by email at grant time. Guest checkout must never be a
   //    500.
-  let email = parsed.userEmail ?? null;
+  let emailAddr = parsed.userEmail ?? null;
   let userId: string | null = null;
 
   // `getOptionalUser()` was previously OUTSIDE any guard, contradicting the
@@ -178,7 +203,7 @@ async function handleCreate(req: NextRequest) {
   }
 
   if (user) {
-    email = user.email;
+    emailAddr = user.email;
     try {
       const record = await upsertPrismaUser(prisma, { id: user.id, email: user.email });
       userId = record.id;
@@ -189,10 +214,25 @@ async function handleCreate(req: NextRequest) {
     }
   }
 
-  if (!email) {
+  if (!emailAddr) {
     return NextResponse.json(
       { success: false, message: "An email address is required to receive your license." },
       { status: 400 }
+    );
+  }
+
+  // Rebuild rate key with real email for accurate tracking.
+  const emailRateKey = `create:${ip}:${emailAddr}`;
+  const emailRateResult = await rateLimit(emailRateKey, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW);
+  if (!emailRateResult.allowed) {
+    await clearFailures([rateKey]);
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Too many payment requests for this email. Please wait before trying again.",
+        retryAfter: emailRateResult.resetAt - Math.floor(Date.now() / 1000),
+      },
+      { status: 429 }
     );
   }
 
@@ -219,19 +259,27 @@ async function handleCreate(req: NextRequest) {
   // That failure mode is strictly worse than a retry, so a DB outage now fails
   // LOUDLY with a 503 instead of degrading. The amount is still resolved
   // server-side, so nothing about the price is ever client-controlled.
+  //
+  // For self-hosted UPI:
+  //   - paymentConfirmed: false (admin must verify bank statement before license)
+  //   - utrSuspicious: will be updated by verify endpoint if UTR looks suspicious
   let order: Awaited<ReturnType<typeof prisma.paymentOrder.create>>;
   try {
     order = await prisma.paymentOrder.create({
       data: {
         orderId,
         userId,
-        email,
+        email: emailAddr,
         planId: plan.planSlug,
         // Persisted from the SERVER-resolved plan, never from the client.
         amount: plan.amount,
         currency: "INR",
         provider: "UPI",
         status: "PENDING",
+        // Self-hosted UPI: payment NOT confirmed until admin verifies bank statement.
+        paymentConfirmed: false,
+        // Will be updated by verify endpoint if UTR looks suspicious.
+        utrSuspicious: false,
         expiresAt,
       },
     });
@@ -262,6 +310,8 @@ async function handleCreate(req: NextRequest) {
         // Connection shape only — never the credential itself.
         dbUrl: redactConnectionString(process.env.DATABASE_URL),
         hasDirectUrl: Boolean(process.env.DIRECT_URL?.trim()),
+        rateLimitKey: emailRateKey,
+        planId: parsed.planId,
       })
     );
 
@@ -273,12 +323,15 @@ async function handleCreate(req: NextRequest) {
     );
   }
 
-  // 6. Build the UPI URI + native intent URLs.
+  // 6. Build the UPI URI + native intent URLs + clear rate limit on success.
   const upiUri = generateUpiUri({
     orderId: order.orderId,
     planId: plan.planId,
     amount: plan.amount,
   });
+
+  // Clear rate limit failures on successful order creation.
+  await clearFailures([rateKey, emailRateKey]);
 
   return NextResponse.json(
     {

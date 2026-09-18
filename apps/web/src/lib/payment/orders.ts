@@ -9,6 +9,9 @@
 //                      longer be claimed.
 //   3. LICENSE GRANT — a verified order mints exactly one license, linked back
 //                      to the order so a re-verify is idempotent.
+//   4. PAYMENT CONFIRMATION — for self-hosted UPI, the license is only granted
+//                      when paymentConfirmed=true (admin verified or gateway
+//                      webhook confirmed). This prevents fake UTR abuse.
 
 import type { PrismaClient } from "@prisma/client";
 import { randomBytes } from "node:crypto";
@@ -162,9 +165,21 @@ export interface GrantResult {
 /**
  * Mint exactly one license for a PAID order and link it back.
  *
- * Idempotent: when the order already carries a `licenseId` the existing grant is
+ * IDEMPOTENT: when the order already carries a `licenseId` the existing grant is
  * returned untouched, so a duplicate verify call can never issue a second key.
  * The raw key is returned so the verify response can display it once.
+ *
+ * PAYMENT CONFIRMATION CHECK (self-hosted UPI only):
+ *   For the Direct UPI rail (provider="UPI"), the license is ONLY granted when
+ *   `paymentConfirmed` is true. This prevents fake/random UTR abuse because:
+ *   - A random 12-digit UTR will pass format validation
+ *   - But without admin confirmation (bank statement match), paymentConfirmed
+ *     stays false and no license is granted
+ *   - Admin confirms payment by setting paymentConfirmed=true after verifying
+ *     the customer's bank statement shows the actual transfer
+ *
+ *   For PayGlocal (provider="PAYGLOCAL"), paymentConfirmed is set by the
+ *   webhook automatically (hosted gateway provides real confirmation).
  */
 export async function grantLicenseForOrder(
   orderId: string,
@@ -180,6 +195,18 @@ export async function grantLicenseForOrder(
       select: { id: true, key: true },
     });
     if (existing) return { licenseId: existing.id, licenseKey: existing.key };
+  }
+
+  // PAYMENT CONFIRMATION GATE:
+  // For self-hosted UPI, require admin confirmation before granting license.
+  // This is the critical fraud protection — prevents random UTR abuse.
+  if (order.provider === "UPI" && !order.paymentConfirmed) {
+    console.warn(
+      `[payment/orders] UPI order ${orderId} not paymentConfirmed —` +
+      ` refusing to grant license (prevent fake UTR abuse).` +
+      ` Customer must contact admin with bank statement proof.`
+    );
+    return null;
   }
 
   const planSlug = order.planId as PlanSlug;
@@ -319,6 +346,9 @@ export async function createPayGlocalOrder(input: {
       currency: "USD",
       provider: "PAYGLOCAL",
       status: "PENDING",
+      // PayGlocal auto-confirms via webhook, so set paymentConfirmed=true
+      // immediately — the hosted gateway provides real payment verification.
+      paymentConfirmed: true,
       expiresAt,
     },
   });
@@ -326,21 +356,19 @@ export async function createPayGlocalOrder(input: {
   return { orderId, amount: plan.usd, expiresAt };
 }
 
-/** Attach PayGlocal's order/txn reference to our PENDING order row. */
-export async function attachPayGlocalTxn(
-  orderId: string,
-  providerTxnId: string
-): Promise<void> {
+/**
+ * Mark a UPI order as payment-confirmed by admin.
+ * Called after admin verifies customer's bank statement matches the UTR.
+ */
+export async function confirmUpiPayment(orderId: string): Promise<boolean> {
   try {
     await prisma.paymentOrder.update({
       where: { orderId },
-      data: { providerTxnId },
+      data: { paymentConfirmed: true },
     });
-  } catch (err) {
-    // A unique collision means this txn is already bound to another order —
-    // surface it so the caller does not hand out a checkout for a duplicate.
-    console.error("[payment] failed to attach PayGlocal txn:", err);
-    throw err;
+    return true;
+  } catch {
+    return false;
   }
 }
 

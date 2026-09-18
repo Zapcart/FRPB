@@ -404,13 +404,25 @@ export default function DirectUpiCheckout({
         }
       }
       setPaid(true);
-      // Do not claim the license is active when minting failed on the server —
-      // the customer would be told to expect a key that never arrives.
-      setNotice(
-        data.grantFailed
-          ? "Payment verified — finalising your license. Redirecting to your dashboard…"
-          : "Payment verified — your license is active. Redirecting…"
-      );
+      // Handle admin-pending confirmation state (self-hosted UPI fraud protection).
+      if (data.paymentPendingConfirmation) {
+        setNotice(
+          data.message ??
+            "Payment reference recorded — pending admin confirmation. " +
+              "Share your bank statement with support to activate your license."
+        );
+        // Still redirect to dashboard so customer can see order status.
+        window.setTimeout(
+          () =>
+            router.push(
+              `/api/v1/payment/callback?provider=upi&orderId=${encodeURIComponent(
+                order.orderId
+              )}&utr=${encodeURIComponent(utr.trim())}`
+            ),
+          900
+        );
+        return;
+      }
       // Route through the unified callback so activation + redirect are shared
       // with the PayGlocal rail.
       window.setTimeout(

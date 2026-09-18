@@ -7,6 +7,24 @@
 // Everything here is PURE and dependency-free so it can be imported by both the
 // server (order creation returns the URI) and the client (QR render + intent
 // buttons) without pulling Node APIs into the browser bundle.
+//
+// IMPORTANT — UTR VALIDATION LIMITATIONS:
+//   The self-hosted Direct UPI engine validates UTRs structurally (12 digits)
+//   and uniquely (one claim per reference via DB unique index). It does NOT
+//   verify against NPCI/bank systems because:
+//   - NPCI does not expose a public UTR verification API
+//   - Bank-to-bank UPI settlement is final; there is no "cancel" mechanism
+//   - Real-time bank statement access requires bank-level credentials
+//
+//   To prevent fake/random UTR abuse, this endpoint relies on:
+//   1. Rate limiting (5 verify attempts per 10 min per IP)
+//   2. Order-bound verification (UTR must match a valid, unexpired order)
+//   3. Duplicate UTR protection (unique DB index)
+//   4. Optional admin confirmation (paymentConfirmed flag — see schema)
+//
+//   For HIGH-VALUE transactions, admins should manually verify bank statements
+//   before activating licenses, or use a hosted gateway (PayGlocal) that
+//   provides server-side payment confirmation.
 
 import { DUAL_PLANS } from "@/config/plans";
 
@@ -179,7 +197,20 @@ export function formatUpiAmount(amount: number): string {
 
 // ─── UTR validation ──────────────────────────────────────────────────────────
 
-/** A UPI transaction reference (UTR/RRN) is exactly 12 numeric digits. */
+/**
+ * A UPI transaction reference (UTR/RRN) is exactly 12 numeric digits.
+ *
+ * NOTE: This is a STRUCTURAL check only. Real UTRs are 12-digit numbers issued
+ * by banks/UPI apps for each transaction. However, ANY 12-digit number passes
+ * this check — there is no cryptographic or bank-side validation available in
+ * a self-hosted model.
+ *
+ * To prevent random/fake UTR abuse:
+ *   1. Rate limiting on verify endpoint (5 attempts per 10 min per IP)
+ *   2. Order-bound verification (UTR must match a valid, unclaimed order)
+ *   3. Unique DB index on UTR (prevents double-claim)
+ *   4. Optional admin confirmation flag for high-value protection
+ */
 export const UTR_PATTERN = /^\d{12}$/;
 
 /** True when `utr` is a structurally valid 12-digit UPI reference. */
@@ -190,4 +221,46 @@ export function isValidUtr(utr: string): boolean {
 /** Strip spaces/dashes a customer may have copied from their bank SMS. */
 export function normalizeUtr(utr: string): string {
   return `${utr ?? ""}`.replace(/[\s-]/g, "").trim();
+}
+
+/**
+ * Warn when a UTR passes structural validation but is clearly suspicious.
+ * Used for logging/audit — not a rejection criterion.
+ *
+ * Examples of suspicious patterns:
+ *   - All same digits (111111111111, 222222222222, etc.)
+ *   - Sequential digits (123456789012)
+ *   - Repeated pairs (121212121212)
+ */
+export function isSuspiciousUtr(utr: string): boolean {
+  const digits = Array.from(utr);
+  if (digits.length !== 12) return false;
+
+  // All same digit
+  if (new Set(digits).size === 1) return true;
+
+  // Sequential (ascending or descending)
+  let sequential = true;
+  for (let i = 1; i < digits.length; i++) {
+    const diff = (parseInt(digits[i]) - parseInt(digits[i - 1])) % 10;
+    if (diff !== 1 && diff !== -9) { // -9 handles 9→0 wrap
+      sequential = false;
+      break;
+    }
+  }
+  if (sequential) return true;
+
+  // Repeated 2-digit pattern (121212121212, 565656565656, etc.)
+  const pair = digits.slice(0, 2).join("");
+  let repeated = true;
+  for (let i = 2; i < digits.length; i += 2) {
+    const currentPair = digits.slice(i, i + 2).join("");
+    if (currentPair !== pair) {
+      repeated = false;
+      break;
+    }
+  }
+  if (repeated && digits.length % 2 === 0) return true;
+
+  return false;
 }

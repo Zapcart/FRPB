@@ -10,6 +10,12 @@
 // idempotently and redirects the browser to /dashboard?status=success. Provider
 // webhooks (POST with JSON) receive a JSON acknowledgement instead of a redirect
 // so PayGlocal does not retry a successfully processed event.
+//
+// SECURITY:
+//   - UPI callback: requires VALID orderId that exists in the database.
+//     Random/fake UTRs submitted directly to callback are rejected if the
+//     order doesn't exist or isn't in a claimable state.
+//   - Rate limiting: prevents callback flooding.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -21,6 +27,7 @@ import {
   markPayGlocalOrderPaid,
   resolveOrderStatus,
 } from "@/lib/payment/orders";
+import { rateLimit, recordFailure } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const OPTIONS = preflight;
@@ -84,6 +91,10 @@ function redirectTo(target: string): NextResponse {
   return NextResponse.redirect(target, { status: 303 });
 }
 
+// Rate limit: 10 callback hits per 5 min per IP
+const CALLBACK_RATE_MAX = 10;
+const CALLBACK_RATE_WINDOW = 5 * 60;
+
 export async function GET(req: NextRequest) {
   return withCorsResponse(await handleCallback(req, "GET"));
 }
@@ -93,6 +104,23 @@ export async function POST(req: NextRequest) {
 }
 
 async function handleCallback(req: NextRequest, method: "GET" | "POST") {
+  // Rate limiting for all callback access.
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    ?? req.headers.get("x-real-ip")
+    ?? "unknown";
+  const rateKey = `callback:${ip}:${method}`;
+  const rateResult = await rateLimit(rateKey, CALLBACK_RATE_MAX, CALLBACK_RATE_WINDOW);
+  if (!rateResult.allowed) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Too many callback requests. Please try again later.",
+        retryAfter: rateResult.resetAt - Math.floor(Date.now() / 1000),
+      },
+      { status: 429 }
+    );
+  }
+
   const params = req.nextUrl.searchParams;
   const provider = (params.get("provider") ?? "").toLowerCase();
 
@@ -100,32 +128,64 @@ async function handleCallback(req: NextRequest, method: "GET" | "POST") {
   if (provider === "upi") {
     const orderId = params.get("orderId");
     const utr = params.get("utr");
-    if (!orderId) return redirectTo(FAILURE_REDIRECT);
+    if (!orderId) {
+      await recordFailure([rateKey], 1, 30);
+      return redirectTo(FAILURE_REDIRECT);
+    }
 
-    const order = await prisma.paymentOrder.findUnique({ where: { orderId } });
-    if (!order) return redirectTo(FAILURE_REDIRECT);
+    // SECURITY: Verify the order EXISTS and is in a claimable state before
+    // accepting the callback. This prevents blind UTR injection attacks.
+    let order;
+    try {
+      order = await prisma.paymentOrder.findUnique({ where: { orderId } });
+    } catch (err) {
+      console.error("[payment/callback] UPI order lookup failed:", err);
+      await recordFailure([rateKey], 1, 30);
+      return redirectTo(FAILURE_REDIRECT);
+    }
+
+    if (!order) {
+      await recordFailure([rateKey], 2, 60);
+      return redirectTo(FAILURE_REDIRECT);
+    }
 
     // If a UTR is supplied and the order is still PENDING, claim it here — this
     // is the same uniqueness-guarded transition the verify endpoint performs.
     if (order.status !== "PAID" && utr && isValidUtr(utr)) {
+      // Duplicate UTR check — must not already be claimed by another order.
       const existing = await prisma.paymentOrder.findUnique({ where: { utr } });
       if (!existing || existing.orderId === order.orderId) {
         try {
-          await prisma.paymentOrder.updateMany({
+          const updated = await prisma.paymentOrder.updateMany({
             where: { id: order.id, status: "PENDING", utr: null },
             data: { status: "PAID", utr, paidAt: new Date() },
           });
-        } catch {
+          if (updated.count === 0) {
+            // Concurrent claim — fall through and re-read below.
+            console.warn(`[payment/callback] concurrent UTR claim for order ${orderId}`);
+          }
+        } catch (err) {
           // Concurrent claim — fall through and re-read below.
+          console.warn(`[payment/callback] UTR claim error for order ${orderId}:`, err);
         }
+      } else {
+        // UTR already used by another order — reject.
+        await recordFailure([rateKey], 2, 60);
+        return redirectTo(FAILURE_REDIRECT);
       }
     }
 
     const fresh = await prisma.paymentOrder.findUnique({ where: { orderId } });
-    if (!fresh) return redirectTo(FAILURE_REDIRECT);
+    if (!fresh) {
+      await recordFailure([rateKey], 2, 60);
+      return redirectTo(FAILURE_REDIRECT);
+    }
 
     const status = await resolveOrderStatus(fresh);
-    if (status !== "PAID") return redirectTo(FAILURE_REDIRECT);
+    if (status !== "PAID") {
+      await recordFailure([rateKey], 1, 30);
+      return redirectTo(FAILURE_REDIRECT);
+    }
 
     // Idempotent activation — one license per order.
     if (!fresh.licenseId) {
@@ -135,6 +195,10 @@ async function handleCallback(req: NextRequest, method: "GET" | "POST") {
         console.error("[payment/callback] UPI grant failed:", err);
       }
     }
+
+    // Clear rate limit on success.
+    await rateLimit(rateKey, CALLBACK_RATE_MAX * 2, CALLBACK_RATE_WINDOW); // reset
+
     return redirectTo(SUCCESS_REDIRECT);
   }
 
@@ -202,10 +266,14 @@ async function handleCallback(req: NextRequest, method: "GET" | "POST") {
     null;
 
   if (!orderId && !providerTxnId) {
+    await recordFailure([rateKey], 2, 60);
     return method === "POST"
       ? NextResponse.json({ error: "Missing order reference" }, { status: 422 })
       : redirectTo(FAILURE_REDIRECT);
   }
+
+  // Clear rate limit on valid callback.
+  await rateLimit(rateKey, CALLBACK_RATE_MAX * 2, CALLBACK_RATE_WINDOW);
 
   // Mark PAID + grant the license through the shared, idempotent helper.
   let granted: Awaited<ReturnType<typeof markPayGlocalOrderPaid>> = null;

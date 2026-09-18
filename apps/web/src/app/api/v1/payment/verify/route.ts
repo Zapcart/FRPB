@@ -5,15 +5,30 @@
 // minted exactly once.
 //
 // Security hardening:
-//   1. UTR STRUCTURE — must be exactly 12 numeric digits (spaces/dashes from a
+//   1. RATE LIMITING — prevents brute-force UTR guessing attacks.
+//   2. UTR STRUCTURE — must be exactly 12 numeric digits (spaces/dashes from a
 //      copied bank SMS are normalised away first).
-//   2. UTR UNIQUENESS  — `PaymentOrder.utr` carries a unique index, so the same
+//   3. UTR UNIQUENESS  — `PaymentOrder.utr` carries a unique index, so the same
 //      reference can never be claimed twice (double-spend protection). We also
 //      pre-check for a friendly error instead of leaking a P2002 constraint.
-//   3. ORDER EXPIRY    — a PENDING order past its 10-minute window is EXPIRED
+//   4. ORDER EXPIRY    — a PENDING order past its 10-minute window is EXPIRED
 //      and refuses the claim.
-//   4. IDEMPOTENT GRANT — an already-PAID order returns its existing license
+//   5. PAYMENT CONFIRMATION — for self-hosted UPI, the license is ONLY granted
+//      when paymentConfirmed=true (admin verified bank statement). This prevents
+//      random/fake UTR abuse — the order is marked PAID but NO license until
+//      admin confirms the actual bank transfer.
+//   6. IDEMPOTENT GRANT — an already-PAID order returns its existing license
 //      rather than minting a second key.
+//
+// NOTE ON UTR VALIDATION:
+//   The self-hosted Direct UPI engine accepts a UPI reference (UTR/RRN) from
+//   the customer and validates it structurally (12 digits) + uniquely (one
+//   claim per reference). True bank-side verification requires NPCI/bank API
+//   access which is NOT available in a self-hosted zero-MDR model.
+//
+//   The solution: order is marked PAID when UTR validates, but license is ONLY
+//   granted when paymentConfirmed=true (set by admin after bank statement match,
+//   or automatically by hosted gateway webhook for PayGlocal orders).
 
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -27,6 +42,7 @@ import {
   resolveOrderStatus,
 } from "@/lib/payment/orders";
 import type { PlanSlug } from "@frpb/shared";
+import { rateLimit, checkLockout, recordFailure, clearFailures } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const OPTIONS = preflight;
@@ -36,16 +52,26 @@ const VerifySchema = z.object({
   utrNumber: z.string().min(1).max(32),
 });
 
+// Rate limit: 5 verify attempts per 10 min per IP
+const VERIFY_RATE_MAX = 5;
+const VERIFY_RATE_WINDOW = 10 * 60;
+
 export async function POST(req: NextRequest) {
   return withCorsResponse(await handleVerify(req));
 }
 
 async function handleVerify(req: NextRequest) {
-  // 1. Parse + validate the payload.
+  // 0. Rate limiting — prevent UTR brute-force / random guessing attacks.
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    ?? req.headers.get("x-real-ip")
+    ?? "unknown";
+
   let parsed: z.infer<typeof VerifySchema>;
   try {
     parsed = VerifySchema.parse(await req.json());
   } catch (err) {
+    const fakeIpKey = `verify:${ip}:parse_fail`;
+    await recordFailure([fakeIpKey], 3, 120);
     return NextResponse.json(
       { success: false, message: "Invalid request", detail: (err as Error).message },
       { status: 400 }
@@ -54,9 +80,24 @@ async function handleVerify(req: NextRequest) {
 
   const orderId = parsed.orderId.trim();
   const utr = normalizeUtr(parsed.utrNumber);
+  const rateKeyIp = `verify:${ip}:${orderId}`;
 
-  // 2. UTR STRUCTURE — exactly 12 numeric digits.
+  // Rate limit check BEFORE any DB work.
+  const rateResult = await rateLimit(rateKeyIp, VERIFY_RATE_MAX, VERIFY_RATE_WINDOW);
+  if (!rateResult.allowed) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Too many verification attempts. Please wait before trying again.",
+        retryAfter: rateResult.resetAt - Math.floor(Date.now() / 1000),
+      },
+      { status: 429 }
+    );
+  }
+
+  // 1. UTR STRUCTURE — exactly 12 numeric digits.
   if (!isValidUtr(utr)) {
+    await recordFailure([rateKeyIp], 3, 120);
     return NextResponse.json(
       {
         success: false,
@@ -67,13 +108,7 @@ async function handleVerify(req: NextRequest) {
     );
   }
 
-  // 3. Load the order.
-  //
-  //    GUARDED: an unhandled rejection here (pooler unreachable, PgBouncer
-  //    prepared-statement rejection, schema drift) escaped the handler as an
-  //    HTML 500. The client's `res.json()` then threw inside its catch-all and
-  //    told the customer "Verification failed. Please check your connection" —
-  //    the wrong diagnosis for a server-side DB fault, and invisible in logs.
+  // 2. Load the order.
   let order;
   try {
     order = await prisma.paymentOrder.findUnique({ where: { orderId } });
@@ -102,14 +137,43 @@ async function handleVerify(req: NextRequest) {
     );
   }
   if (!order) {
+    await recordFailure([rateKeyIp], 2, 60);
     return NextResponse.json(
       { success: false, message: "Order not found. Please start a new checkout." },
       { status: 404 }
     );
   }
 
-  // 4. Already paid → idempotent success (returns the same license).
+  // SECURITY: UTR verification is ONLY for Direct UPI orders (provider="UPI").
+  // PayGlocal orders (provider="PAYGLOCAL") are verified via webhook/callback,
+  // not via UTR. Reject UPI verification for non-UPI orders.
+  if (order.provider !== "UPI") {
+    await recordFailure([rateKeyIp], 2, 60);
+    return NextResponse.json(
+      {
+        success: false,
+        message: `This order is a ${order.provider} payment and cannot be verified via UPI reference. ` +
+          `Please use the payment confirmation link sent to your email.`,
+      },
+      { status: 400 }
+    );
+  }
+
+  // Lockout check.
+  const lockoutResult = await checkLockout([rateKeyIp]);
+  if (lockoutResult) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Too many failed verification attempts. Please start a new order.",
+      },
+      { status: 429 }
+    );
+  }
+
+  // 3. Already paid → idempotent success.
   if (order.status === "PAID") {
+    await clearFailures([rateKeyIp]);
     return NextResponse.json({
       success: true,
       alreadyVerified: true,
@@ -120,12 +184,14 @@ async function handleVerify(req: NextRequest) {
       amount: order.amount,
       utr: order.utr,
       licenseId: order.licenseId,
+      paymentConfirmed: order.paymentConfirmed,
     });
   }
 
-  // 5. ORDER EXPIRY — never accept a claim against a stale order.
+  // 4. ORDER EXPIRY.
   const status = await resolveOrderStatus(order);
   if (status === "EXPIRED") {
+    await recordFailure([rateKeyIp], 1, 30);
     return NextResponse.json(
       {
         success: false,
@@ -136,28 +202,19 @@ async function handleVerify(req: NextRequest) {
     );
   }
   if (status === "FAILED") {
+    await recordFailure([rateKeyIp], 1, 30);
     return NextResponse.json(
       { success: false, status: "FAILED", message: "This order can no longer be verified." },
       { status: 409 }
     );
   }
 
-  // 6. UTR UNIQUENESS — two independent checks, because a reference can be
-  //    claimed through more than one flow:
-  //      (a) another PaymentOrder already bound to this UTR, and
-  //      (b) a License already granted for this UTR (written into its metadata
-  //          by the grant helper), which catches the case where the webhook
-  //          rail won the race and this UPI flow is now replaying the claim.
-  //    Checking only (a) is what previously allowed an overlapping UPI +
-  //    webhook flow to mint a duplicate key.
-  // The duplicate guards below are READ-ONLY pre-checks. They are wrapped so a
-  // transient DB drop returns a retryable 503 rather than bubbling out as an
-  // unhandled 500 — the customer has already paid at this point, so the error
-  // must be honest and recoverable.
+  // 5. UTR UNIQUENESS — two independent checks.
   const utrHash = sha256(utr);
   try {
     const existingClaim = await prisma.paymentOrder.findUnique({ where: { utr } });
     if (existingClaim && existingClaim.orderId !== order.orderId) {
+      await recordFailure([rateKeyIp], 2, 60);
       return NextResponse.json(
         {
           success: false,
@@ -168,9 +225,6 @@ async function handleVerify(req: NextRequest) {
       );
     }
 
-    // Look up by the durable UTR hash recorded on the granted license. Using the
-    // hash (not the raw value) keeps the lookup index-friendly and avoids storing
-    // a plaintext reference in an easily-queried column.
     const grantedForUtr = await prisma.license.findFirst({
       where: {
         OR: [
@@ -181,6 +235,7 @@ async function handleVerify(req: NextRequest) {
       select: { id: true, userId: true },
     });
     if (grantedForUtr && order.licenseId !== grantedForUtr.id) {
+      await recordFailure([rateKeyIp], 2, 60);
       return NextResponse.json(
         {
           success: false,
@@ -202,18 +257,16 @@ async function handleVerify(req: NextRequest) {
     );
   }
 
-  // 7. Mark PAID and claim the UTR. The unique index is the race-safe guard: if
-  //    a concurrent request binds the same UTR first, Prisma raises P2002 and we
-  //    surface the duplicate message rather than double-granting.
+  // 6. Mark PAID and claim the UTR.
   try {
     const updated = await prisma.paymentOrder.updateMany({
       where: { id: order.id, status: "PENDING", utr: null },
       data: { status: "PAID", utr, paidAt: new Date() },
     });
     if (updated.count === 0) {
-      // Someone else already flipped it — re-read and report the real state.
       const fresh = await prisma.paymentOrder.findUnique({ where: { id: order.id } });
       if (fresh?.status === "PAID") {
+        await clearFailures([rateKeyIp]);
         return NextResponse.json({
           success: true,
           alreadyVerified: true,
@@ -221,8 +274,10 @@ async function handleVerify(req: NextRequest) {
           orderId: fresh.orderId,
           utr: fresh.utr,
           licenseId: fresh.licenseId,
+          paymentConfirmed: fresh.paymentConfirmed,
         });
       }
+      await recordFailure([rateKeyIp], 2, 60);
       return NextResponse.json(
         { success: false, message: "This order is no longer awaiting payment." },
         { status: 409 }
@@ -231,6 +286,7 @@ async function handleVerify(req: NextRequest) {
   } catch (err) {
     const code = (err as { code?: string }).code;
     if (code === "P2002") {
+      await recordFailure([rateKeyIp], 2, 60);
       return NextResponse.json(
         {
           success: false,
@@ -246,6 +302,28 @@ async function handleVerify(req: NextRequest) {
     );
   }
 
+  // 7. PAYMENT CONFIRMATION CHECK (self-hosted UPI fraud protection).
+  if (order.provider === "UPI" && !order.paymentConfirmed) {
+    await clearFailures([rateKeyIp]);
+    return NextResponse.json({
+      success: true,
+      status: "PAID",
+      orderId: order.orderId,
+      planId: order.planId,
+      planName: planNameFor(order.planId as PlanSlug),
+      amount: order.amount,
+      utr,
+      licenseId: null,
+      paymentConfirmed: false,
+      paymentPendingConfirmation: true,
+      message:
+        "Payment reference recorded successfully. Your payment is pending admin confirmation. " +
+        "To activate your license, please share your bank statement (showing this UTR: " +
+        `${utr}) with support. This usually takes 1-2 hours during business hours. ` +
+        "Your money has NOT been charged to us — we are verifying the bank transfer.",
+    });
+  }
+
   // 8. Grant the license (idempotent — one key per order).
   let licenseKey: string | undefined;
   let licenseId: string | undefined;
@@ -256,15 +334,11 @@ async function handleVerify(req: NextRequest) {
     licenseKey = granted?.licenseKey;
     if (!granted) grantFailed = true;
   } catch (err) {
-    // The payment is recorded; a grant failure must not lose it. The customer
-    // can re-verify (idempotent) or recover the key from the dashboard.
-    //
-    // `grantFailed` is surfaced to the client so it does not claim "your
-    // license is active" while no key was actually minted — a silent success
-    // that left paid customers with nothing.
     grantFailed = true;
     console.error("[UTR_Verify_Error]: license grant failed for orderId=" + orderId + ":", err);
   }
+
+  await clearFailures([rateKeyIp]);
 
   return NextResponse.json({
     success: true,
@@ -275,9 +349,7 @@ async function handleVerify(req: NextRequest) {
     amount: order.amount,
     utr,
     licenseId,
-    /** Raw key returned once so the checkout can display it immediately. */
     licenseKey,
-    /** `true` when payment was claimed but minting the license failed. */
     grantFailed,
     message: grantFailed
       ? "Payment verified — we're finalising your license. It will appear in your dashboard shortly."

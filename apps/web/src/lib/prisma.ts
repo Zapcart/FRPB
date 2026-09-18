@@ -91,6 +91,22 @@ let client = globalForPrisma.prisma;
 if (!client) {
   try {
     client = createPrismaClient();
+    console.log("[prisma] Client initialized successfully");
+    // Log connection mode for operational visibility.
+    const dbUrl = process.env.DATABASE_URL?.trim();
+    if (dbUrl) {
+      try {
+        const u = new URL(dbUrl);
+        const isPooler = u.port === "6543";
+        const hasPgbouncer = u.searchParams.has("pgbouncer");
+        console.log(
+          `[prisma] Connection: ${isPooler ? "pooler (6543)" : "direct (" + u.port + ")"}` +
+          (hasPgbouncer ? " [pgbouncer=true OK]" : isPooler ? " [WARNING: pgbouncer missing]" : "")
+        );
+      } catch {
+        console.log("[prisma] Connection: URL parseable but could not analyze");
+      }
+    }
   } catch (err) {
     // Construction failed (bad URL syntax, missing env, unresolvable host).
     // Re-throw so the caller fails fast — but log the precise cause first, since

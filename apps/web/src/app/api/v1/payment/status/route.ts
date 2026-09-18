@@ -6,23 +6,48 @@
 //
 // An order past its 10-minute window is reported as EXPIRED (and persisted as
 // such by resolveOrderStatus) even if no verifier ever claimed it.
+//
+// Rate limited to prevent polling abuse.
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { preflight, withCorsResponse } from "@/lib/cors";
 import { resolveOrderStatus } from "@/lib/payment/orders";
 import type { PlanSlug } from "@frpb/shared";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const OPTIONS = preflight;
+
+// Rate limit: 30 status checks per 5 min per IP+order
+const STATUS_RATE_MAX = 30;
+const STATUS_RATE_WINDOW = 5 * 60;
 
 export async function GET(req: NextRequest) {
   return withCorsResponse(await handleStatus(req));
 }
 
 async function handleStatus(req: NextRequest) {
-  const orderId = req.nextUrl.searchParams.get("orderId")?.trim();
-  if (!orderId) {
+  // Rate limiting.
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    ?? req.headers.get("x-real-ip")
+    ?? "unknown";
+  const orderId = req.nextUrl.searchParams.get("orderId")?.trim() ?? "unknown";
+  const rateKey = `status:${ip}:${orderId}`;
+  const rateResult = await rateLimit(rateKey, STATUS_RATE_MAX, STATUS_RATE_WINDOW);
+  if (!rateResult.allowed) {
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Too many status checks. Please wait before trying again.",
+        retryAfter: rateResult.resetAt - Math.floor(Date.now() / 1000),
+      },
+      { status: 429 }
+    );
+  }
+
+  const orderIdParam = req.nextUrl.searchParams.get("orderId")?.trim();
+  if (!orderIdParam) {
     return NextResponse.json(
       { success: false, message: "orderId is required" },
       { status: 400 }
@@ -32,7 +57,7 @@ async function handleStatus(req: NextRequest) {
   let order;
   try {
     order = await prisma.paymentOrder.findUnique({
-      where: { orderId },
+      where: { orderId: orderIdParam },
       include: { license: { select: { id: true, expiresAt: true } } },
     });
   } catch (err) {
@@ -61,6 +86,9 @@ async function handleStatus(req: NextRequest) {
     0,
     Math.floor((order.expiresAt.getTime() - Date.now()) / 1000)
   );
+
+  // Clear rate limit since this is a legitimate poll.
+  await rateLimit(rateKey, STATUS_RATE_MAX * 2, STATUS_RATE_WINDOW);
 
   return NextResponse.json(
     {
