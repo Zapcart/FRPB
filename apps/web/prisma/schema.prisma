@@ -29,9 +29,9 @@ enum LicenseStatus {
 
 enum PaymentProvider {
   STRIPE // DEPRECATED — historical rows only
-  RAZORPAY // DEPRECATED — historical rows only
-  CASHFREE // DEPRECATED — was the INR card rail; INR now uses Direct UPI
-  PAYGLOCAL // ACTIVE — international / USD cards (only live gateway)
+  RAZORPAY // ACTIVE — the single, exclusive payment gateway
+  CASHFREE // DEPRECATED — historical rows only
+  PAYGLOCAL // DEPRECATED — historical rows only
 }
 
 enum PaymentStatus {

@@ -1,11 +1,10 @@
 // FRPB — pricing page
-// Renders the three plans from @frpb/shared with a USD / INR currency switcher.
-// Amounts come straight from the plan definition (priceCents / priceInr) so the
-// displayed price always matches the amount the gateway actually charges —
-// never a derived FX conversion. The selected currency is forwarded to
-// the Direct-UPI engine for INR / PayGlocal for USD, and preserved across the
-// auth hop via /checkout?currency=…
-// Currency display only — no payment provider branding on the frontend.
+// Renders the three plans from DUAL_PLANS with a USD / INR currency switcher.
+// Amounts come straight from the plan definition so the displayed price always
+// matches the amount Razorpay actually charges — never a derived FX conversion.
+// Razorpay Standard Web Checkout is the single, exclusive payment gateway:
+// every tier settles in INR, and the display currency is carried across to
+// /checkout?currency=… . Currency display only — no provider branding.
 
 "use client";
 
@@ -44,7 +43,7 @@ import {
   formatDualUsd,
   getDualPlan,
 } from "@/config/plans";
-import PaymentMethodModal from "@/components/PaymentMethodModal";
+import { startRazorpayCheckout } from "@/lib/razorpay/checkout-flow";
 
 /**
  * Trust / conversion badges rendered under the pricing grid. Addresses the four
@@ -101,7 +100,7 @@ const PRICING_FAQS = [
   },
   {
     q: "Can I pay in Indian Rupees?",
-    a: "Yes. Switch the currency toggle to INR (₹) and you will be routed to our India payment rail supporting UPI, NetBanking and domestic cards. International buyers are charged in USD by card.",
+    a: "Yes. Switch the currency toggle to INR (₹) and you will be charged in Indian Rupees through our secure checkout, which supports UPI, NetBanking, wallets and domestic as well as international cards.",
   },
 ] as const;
 
@@ -116,8 +115,8 @@ const BILLING_SUFFIX: Record<PlanSlug, Record<Currency, string>> = {
 /**
  * The pricing grid renders from DUAL_PLANS (the authoritative tier rates) rather
  * than the shared legacy PLANS, so the displayed price is always one of
- * ₹1,900/$20, ₹4,900/$50 or ₹9,999/$100 — matching exactly what the UPI and
- * PayGlocal rails charge.
+ * ₹1,900/$20, ₹4,900/$50 or ₹9,999/$100 — matching exactly the INR amount
+ * Razorpay charges at checkout.
  */
 const PLAN_CARDS = DUAL_PLANS.map((plan) => ({
   plan,
@@ -136,10 +135,11 @@ export default function PricingPage() {
   const [currency, setCurrency] = useState<Currency>("USD");
   // True when the initial currency came from region detection (not the user).
   const [autoDetected, setAutoDetected] = useState(false);
-  // The plan whose payment-method modal is open (null = closed).
-  const [modalPlan, setModalPlan] = useState<string | null>(null);
-  // Signed-in buyer email, used to prefill the modal's email field.
-  const [buyerEmail, setBuyerEmail] = useState<string | null>(null);
+  // Plan currently being paid for (null = idle) — drives the button spinner.
+  const [processingPlan, setProcessingPlan] = useState<PlanSlug | null>(null);
+  // Inline feedback for the Razorpay flow (replaces the old method modal).
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
 
   // Initialise the currency on mount: an explicit prior choice wins, else
   // geo/locale detection (India → INR, rest of world → USD). Runs once, so it
@@ -173,17 +173,24 @@ export default function PricingPage() {
   }
 
   /**
-   * "Choose plan" / "Buy now" → open the payment-method modal. Both rails
-   * (Direct UPI and PayGlocal card) can be started from there; the modal
-   * collects an email when the visitor is not signed in.
+   * "Choose plan" / "Buy now" → run the Razorpay Standard Web Checkout flow.
    *
-   * The signed-in email is resolved first so it can be prefilled, and the
-   * purchase intent is persisted so a sign-in round trip can resume cleanly.
+   * The order is created server-side (amount locked to the sanctioned INR tier
+   * rate), the Razorpay modal opens, and the captured signature is verified
+   * before any license is granted. The signed-in email is prefilled when
+   * available, and purchase intent is persisted so a sign-in round trip can
+   * resume cleanly.
    */
   async function handlePurchase(planSlug: PlanSlug) {
+    if (processingPlan) return;
+    setCheckoutError(null);
+    setCheckoutNotice(null);
+    setProcessingPlan(planSlug);
+
     savePendingPlan(planSlug, currency);
 
-    // Read (never mutate) the auth state to prefill the modal's email.
+    // Read (never mutate) the auth state to prefill the payer email.
+    let email: string | null = null;
     try {
       const supabase = createClient();
       const { data: sessionData } = await supabase.auth.getSession();
@@ -192,12 +199,31 @@ export default function PricingPage() {
         const { data } = await supabase.auth.getUser();
         user = data.user ?? null;
       }
-      setBuyerEmail(user?.email ?? null);
+      email = user?.email ?? null;
     } catch {
-      setBuyerEmail(null);
+      email = null;
     }
 
-    setModalPlan(planSlug);
+    const result = await startRazorpayCheckout({
+      planSlug,
+      email,
+      onDismiss: () =>
+        setCheckoutNotice("Checkout closed — no payment was taken."),
+    });
+
+    if (result.status === "paid") {
+      setCheckoutNotice(
+        "Payment successful — taking you to your dashboard…"
+      );
+      router.push("/dashboard");
+      return;
+    }
+
+    setProcessingPlan(null);
+
+    if (result.status === "failed") {
+      setCheckoutError(result.message);
+    }
   }
 
   return (
@@ -327,26 +353,43 @@ export default function PricingPage() {
                 <button
                   type="button"
                   onClick={() => void handlePurchase(card.slug)}
-                  className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-bold transition ${
+                  disabled={processingPlan !== null}
+                  className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
                     popular
                       ? "bg-gradient-to-r from-brand-500 to-accent-500 text-white shadow-lg shadow-brand-500/30 hover:brightness-110"
                       : "border border-slate-300 bg-white text-slate-700 hover:border-brand-300 hover:text-brand-600"
                   }`}
                 >
-                  {card.slug === "LIFETIME" ? "Get lifetime access" : "Choose plan"}
-                  <ArrowRight className="h-4 w-4" />
+                  {processingPlan === card.slug ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Opening secure checkout…
+                    </>
+                  ) : (
+                    <>
+                      {card.slug === "LIFETIME" ? "Get lifetime access" : "Choose plan"}
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
                 </button>
               </div>
             );
           })}
         </div>
 
-        {/* Payment-method modal — dual currency (INR/UPI or USD/card) */}
-        <PaymentMethodModal
-          plan={getDualPlan(modalPlan ?? "")}
-          email={buyerEmail}
-          onClose={() => setModalPlan(null)}
-        />
+        {/* Razorpay checkout feedback — inline, replaces the old method modal */}
+        {(checkoutError || checkoutNotice) && (
+          <div
+            role={checkoutError ? "alert" : "status"}
+            className={`mx-auto mt-8 max-w-xl rounded-xl border px-4 py-3 text-sm ${
+              checkoutError
+                ? "border-red-200 bg-red-50 text-red-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700"
+            }`}
+          >
+            {checkoutError ?? checkoutNotice}
+          </div>
+        )}
 
         {/* Trust badges — conversion triggers addressing buyer hesitations */}
         <section

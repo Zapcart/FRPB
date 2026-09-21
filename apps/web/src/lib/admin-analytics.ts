@@ -44,7 +44,7 @@ export async function getAdminAnalytics(): Promise<AdminAnalyticsResponse | null
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const [visitors, logins, licenses, frp, frpByBrand, frpByAndroid, recentFrp, recentLicenses, revenue, pendingUpiOrders] =
+  const [visitors, logins, licenses, frp, frpByBrand, frpByAndroid, recentFrp, recentLicenses, revenue] =
     await Promise.all([
       getVisitors(thirtyDaysAgo),
       getLogins(thirtyDaysAgo),
@@ -55,7 +55,6 @@ export async function getAdminAnalytics(): Promise<AdminAnalyticsResponse | null
       getRecentFrp(),
       getRecentLicenses(),
       getRevenue(),
-      getPendingUpiOrders(),
     ]);
 
   return {
@@ -68,8 +67,7 @@ export async function getAdminAnalytics(): Promise<AdminAnalyticsResponse | null
     recentFrp,
     recentLicenses,
     revenue,
-    pendingUpiOrders,
-    };
+  };
 }
 
 // ─── Individual query helpers ───
@@ -248,55 +246,6 @@ async function getRecentLicenses(limit = 10) {
   }));
 }
 
-async function getPendingUpiOrders() {
-  // Manual-approval queue: a customer-submitted UTR parks the order in
-  // PENDING_VERIFICATION until an admin matches it against the bank statement.
-  // Legacy PAID-but-unconfirmed orders are retained for backwards compatibility.
-  const orders = await prisma.paymentOrder.findMany({
-    where: {
-      provider: "UPI",
-      status: { in: ["PENDING_VERIFICATION", "PAID"] },
-      paymentConfirmed: false,
-    },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-    select: {
-      id: true,
-      orderId: true,
-      email: true,
-      planId: true,
-      amount: true,
-      currency: true,
-      status: true,
-      utr: true,
-      paidAt: true,
-      paymentConfirmed: true,
-      utrSuspicious: true,
-      createdAt: true,
-      expiresAt: true,
-      license: { select: { id: true, key: true } },
-    },
-  });
-
-  return orders.map((o) => ({
-    id: o.id,
-    orderId: o.orderId,
-    email: o.email,
-    planId: o.planId,
-    planName: PLAN_NAMES[o.planId] ?? o.planId,
-    amount: o.amount,
-    currency: o.currency,
-    status: o.status,
-    utr: o.utr,
-    paidAt: o.paidAt ? o.paidAt.toISOString() : null,
-    paymentConfirmed: o.paymentConfirmed,
-    utrSuspicious: o.utrSuspicious,
-    createdAt: o.createdAt.toISOString(),
-    expiresAt: o.expiresAt.toISOString(),
-    licenseKey: o.license?.key ?? null,
-  }));
-}
-
 const PLAN_NAMES: Record<string, string> = {
   MONTH_1: "1-Month Plan",
   YEAR_1: "1-Year Plan",
@@ -327,19 +276,19 @@ function emptyAccumulator(): CurrencyAccumulator {
  * The previous implementation summed every `Payment` row into one figure and
  * hard-coded `currency: "INR"` — but `Payment.currency` defaults to `"USD"`, so
  * international card revenue was reported under an INR label. It also ignored
- * the live `PaymentOrder` ledger (Direct UPI + PayGlocal) entirely, so real
- * sales were missing from the dashboard.
+ * the live `PaymentOrder` ledger entirely, so real sales were missing from the
+ * dashboard.
  *
  * We now read BOTH ledgers and bucket strictly by each row's own `currency`:
  *   • `Payment`      — historical (`STRIPE`/`RAZORPAY`/`CASHFREE`) + the legacy
  *                      `checkout` rail. Counted as the "legacy" contribution.
- *   • `PaymentOrder` — the LIVE dual rail: `UPI` → INR, `PAYGLOCAL` → USD.
+ *   • `PaymentOrder` — the LIVE Razorpay ledger (all tiers settle in INR).
  *
- * `Payment` and `PaymentOrder` are disjoint by construction (the PayGlocal
- * settle helper writes only `PaymentOrder`; the webhook processor writes only
- * `Payment`), so nothing is double-counted, and only `SUCCEEDED`/`PAID` rows
- * contribute to successful revenue. INR and USD are NEVER added together —
- * ₹1,900 and $20 are not summable.
+ * `Payment` and `PaymentOrder` are disjoint by construction — the Razorpay
+ * order lifecycle writes only `PaymentOrder`, while historical webhook
+ * processors wrote only `Payment` — so nothing is double-counted, and only
+ * `SUCCEEDED`/`PAID` rows contribute to successful revenue. INR and USD are
+ * NEVER added together — ₹1,900 and $20 are not summable.
  */
 async function getRevenue(): Promise<RevenueMetrics> {
   interface LegacyGroup {
@@ -363,7 +312,7 @@ async function getRevenue(): Promise<RevenueMetrics> {
     where: { status: "SUCCEEDED" },
   })) as unknown as LegacyGroup[];
 
-  // Live dual-rail ledger — PAID orders only.
+  // Live Razorpay ledger — PAID orders only.
   const live = (await prisma.paymentOrder.groupBy({
     by: ["currency", "planId"],
     _count: { planId: true },

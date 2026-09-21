@@ -57,25 +57,6 @@ export interface AdminAnalyticsResponse {
     createdAt: string;
   }[];
   revenue: RevenueMetrics;
-  pendingUpiOrders: {
-    id: string;
-    orderId: string;
-    email: string;
-    planId: string;
-    planName: string;
-    amount: number;
-    currency: string;
-    status: string;
-    utr: string | null;
-    /** Set once the order is promoted to PAID (null while PENDING_VERIFICATION). */
-    paidAt: string | null;
-    paymentConfirmed: boolean;
-    utrSuspicious: boolean;
-    createdAt: string;
-    expiresAt: string;
-    /** License key, when one has already been minted for the order. */
-    licenseKey: string | null;
-  }[];
 }
 
 /**
@@ -96,7 +77,7 @@ export interface CurrencyRevenue {
   successfulCount: number;
   /** Successful revenue from historical, now-retired rails in this currency. */
   legacyAmount: number;
-  /** Successful revenue from the live rails (Direct UPI / PayGlocal). */
+  /** Successful revenue from the live rail (Razorpay). */
   liveAmount: number;
 }
 
@@ -113,8 +94,8 @@ export interface RevenuePlanBreakdown {
 /**
  * Multi-currency revenue summary.
  *
- * Money is NEVER collapsed into a single figure: INR (Direct UPI, and the
- * retired Cashfree/INR rails) and USD (PayGlocal cards) are reported as separate
+ * Money is NEVER collapsed into a single figure: INR (Razorpay, and the retired
+ * Cashfree/INR rails) and USD (historical card rails) are reported as separate
  * pools. Comparing them is only meaningful after an explicit FX conversion, which
  * the dashboard deliberately does not perform.
  */

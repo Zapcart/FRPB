@@ -714,9 +714,9 @@ export default function HomePage() {
                   <h3 className="text-lg font-bold text-white">{plan.name}</h3>
                   <div className="mt-4 flex items-baseline gap-1.5">
                     <span className="text-4xl font-black tracking-tight text-white">
-                      {/* `plan.usd` is the canonical whole-dollar amount from
-                          @frpb/shared — the same value the checkout payload and
-                          the PayGlocal rail charge. Never a local calculation. */}
+                      {/* `plan.usd` is the canonical whole-dollar display price
+                          from @frpb/shared. The amount actually charged is
+                          resolved server-side, never from this value. */}
                       ${plan.usd}
                     </span>
                     <span className="text-sm font-medium text-slate-500">
@@ -725,7 +725,7 @@ export default function HomePage() {
                   </div>
                   {/* Cross-currency hint so the INR price is never a surprise. */}
                   <p className="mt-1 text-xs font-medium text-slate-500">
-                    or ₹{new Intl.NumberFormat("en-IN").format(plan.inr)} (UPI)
+                    or ₹{new Intl.NumberFormat("en-IN").format(plan.inr)} (INR)
                   </p>
                   <p className="mt-1 text-xs text-slate-500">
                     {plan.deviceLimit} device{plan.deviceLimit === 1 ? "" : "s"} ·{" "}

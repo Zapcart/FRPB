@@ -1,7 +1,7 @@
 // FRPB — dual-currency plan configuration (single source of truth).
 //
-// Every checkout surface (pricing grid, payment-method modal, Direct-UPI engine
-// and PayGlocal init) resolves its price from THIS table. The amounts are
+// Every checkout surface (pricing grid and the Razorpay checkout flow) resolves
+// its price from THIS table. The amounts are
 // hardcoded deliberately: a backend recalculation must never trust a
 // client-supplied figure, and these are the exact tier rates the business set.
 //
@@ -16,24 +16,23 @@
 //   Year      ₹4,900     $50
 //   Lifetime  ₹9,999     $100
 //
-// RAILS:
-//   INR → Direct UPI (Self-Hosted, zero-MDR). Settles straight to the merchant
-//         VPA; no hosted gateway and no third-party key.
-//   USD → PayGlocal (international credit / debit card).
-// Cashfree is no longer part of either rail.
+// GATEWAY:
+//   Razorpay Standard Web Checkout is the single, exclusive payment gateway.
+//   Every tier settles in INR (₹1,900 / ₹4,900 / ₹9,999) through Razorpay;
+//   the USD figures below are display-only reference prices.
 
 import { PLANS as SHARED_PLANS, type PlanSlug } from "@frpb/shared";
 
 /** Currency a plan can be charged in. */
 export type DualCurrency = "INR" | "USD";
 
-/** Payment rail backing each currency. */
-export type DualProvider = "UPI" | "PAYGLOCAL";
+/** Payment gateway backing every currency (Razorpay only). */
+export type DualProvider = "RAZORPAY";
 
 export interface DualPlan {
   /** Shared PlanSlug — the value stored on PaymentOrder.planId / License.planId. */
   slug: PlanSlug;
-  /** Public id used by the Direct-UPI engine (MONTHLY | YEARLY | LIFETIME). */
+  /** Stable per-tier receipt tag used by the Razorpay order notes. */
   orderPlanId: "MONTHLY" | "YEARLY" | "LIFETIME";
   name: string;
   /** Display + charge amount in whole rupees. */
@@ -143,7 +142,7 @@ export function getDualPlan(slug: string): DualPlan | null {
   return DUAL_PLANS.find((p) => p.slug === needle) ?? null;
 }
 
-/** Resolve a plan by the Direct-UPI public id (MONTHLY | YEARLY | LIFETIME). */
+/** Resolve a plan by its public order tag (MONTHLY | YEARLY | LIFETIME). */
 export function getDualPlanByOrderId(orderPlanId: string): DualPlan | null {
   const needle = `${orderPlanId ?? ""}`.trim().toUpperCase();
   return DUAL_PLANS.find((p) => p.orderPlanId === needle) ?? null;
@@ -154,19 +153,19 @@ export function dualAmount(plan: DualPlan, currency: DualCurrency): number {
   return currency === "INR" ? plan.inr : plan.usd;
 }
 
-/** The rail that settles a currency. */
-export function providerForDualCurrency(currency: DualCurrency): DualProvider {
-  return currency === "INR" ? "UPI" : "PAYGLOCAL";
+/** The gateway that settles every currency — Razorpay only. */
+export function providerForDualCurrency(_currency: DualCurrency): DualProvider {
+  return "RAZORPAY";
 }
 
 // ─── Strict amount locks ─────────────────────────────────────────────────────
 
-/** Amounts the Direct-UPI rail will ever charge (₹1900 / ₹4900 / ₹9999). */
+/** Amounts Razorpay will ever charge in INR (₹1900 / ₹4900 / ₹9999). */
 export const ALLOWED_INR_AMOUNTS: ReadonlySet<number> = new Set(
   DUAL_PLANS.map((p) => p.inr)
 );
 
-/** Amounts the PayGlocal rail will ever charge ($20 / $50 / $100). */
+/** Reference USD price points ($20 / $50 / $100) — display only. */
 export const ALLOWED_USD_AMOUNTS: ReadonlySet<number> = new Set(
   DUAL_PLANS.map((p) => p.usd)
 );

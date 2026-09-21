@@ -1,17 +1,17 @@
-// FRPB — dual-rail payment order lifecycle helpers.
+// FRPB — Razorpay payment order lifecycle helpers.
 //
-// Centralises the rules BOTH rails depend on so every route (create / verify /
-// status / callback / payglocal init) applies them identically:
+// Razorpay Standard Web Checkout is the single, exclusive payment gateway.
+// This module centralises the rules every Razorpay route depends on so the
+// create-order and verify-payment handlers apply them identically:
 //
-//   1. AMOUNT LOCK   — the chargeable amount is resolved from DUAL_PLANS, never
-//                      from the client payload.
-//   2. 10-MIN EXPIRY — a PENDING order past `expiresAt` is EXPIRED and can no
-//                      longer be claimed.
-//   3. LICENSE GRANT — a verified order mints exactly one license, linked back
-//                      to the order so a re-verify is idempotent.
-//   4. PAYMENT CONFIRMATION — for self-hosted UPI, the license is only granted
-//                      when paymentConfirmed=true (admin verified or gateway
-//                      webhook confirmed). This prevents fake UTR abuse.
+//   1. AMOUNT LOCK    — the chargeable amount is resolved from DUAL_PLANS,
+//                       never from the client payload.
+//   2. ORDER EXPIRY   — a PENDING order past `expiresAt` is EXPIRED and can no
+//                       longer be claimed.
+//   3. LICENSE GRANT  — a verified order mints exactly one license, linked back
+//                       to the order so a re-verify is idempotent.
+//   4. SIGNATURE GATE — the gateway HMAC signature is verified server-side
+//                       before any license is granted (see lib/razorpay/server).
 
 import type { PrismaClient } from "@prisma/client";
 import { randomBytes } from "node:crypto";
@@ -21,24 +21,15 @@ import { sha256 } from "@/lib/crypto/sha256";
 import { generateLicenseKey } from "@/lib/license/generate";
 import { normalizeEmail } from "@/lib/auth/user-identity";
 import { sendLicenseEmail } from "@/lib/email/resend";
-import { getUpiPlan } from "@/lib/upi";
 import { getDualPlan } from "@/config/plans";
 
-/** Direct-UPI orders expire 10 minutes after creation. */
+/** Razorpay orders expire 10 minutes after creation. */
 export const ORDER_TTL_MS = 10 * 60 * 1000;
 
 /**
- * The public plan ids accepted by the direct-UPI rail → shared PlanSlug.
- * Mirrors UPI_PLANS in lib/upi.ts (which also carries the locked amounts).
- */
-export function planSlugForUpiPlanId(planId: string): PlanSlug | null {
-  return getUpiPlan(planId)?.planSlug ?? null;
-}
-
-/**
- * Generate a collision-resistant public order id, e.g.
- * "ORD-1A2B3C4D5E6F". Crockford-style uppercase hex keeps it readable and
- * URL/UPI-safe; the DB unique index is the final collision guard.
+ * Generate a collision-resistant internal order id, e.g.
+ * "ORD-1A2B3C4D5E6F". Uppercase hex keeps it readable and URL-safe; the DB
+ * unique index is the final collision guard.
  */
 export function generateOrderId(): string {
   return `ORD-${randomBytes(6).toString("hex").toUpperCase()}`;
@@ -49,63 +40,9 @@ export function orderExpiry(from: Date = new Date()): Date {
   return new Date(from.getTime() + ORDER_TTL_MS);
 }
 
-/** True when a PENDING order has passed its expiry window. */
-export function isExpired(order: { status: string; expiresAt: Date }): boolean {
-  return order.status === "PENDING" && order.expiresAt.getTime() <= Date.now();
-}
-
 /**
- * Lazily transition a single order to EXPIRED when its window has passed and
- * persist the change (so the status endpoint and the DB agree). Returns the
- * effective status string.
- */
-export async function resolveOrderStatus(
-  order: { id: string; status: string; expiresAt: Date },
-  client: PrismaClient = prisma
-): Promise<"PENDING" | "PENDING_VERIFICATION" | "PAID" | "FAILED" | "EXPIRED"> {
-  if (!isExpired(order)) {
-    return order.status as "PENDING" | "PENDING_VERIFICATION" | "PAID" | "FAILED" | "EXPIRED";
-  }
-
-  // Expired: persist the terminal state, then re-read so a concurrent claim that
-  // flipped it to PAID wins. BOTH DB calls are individually guarded — this
-  // helper is called from the status poller and the UTR verifier, and a
-  // rejection escaping here (as the re-read previously did) surfaced as a bare
-  // 500: the tracker silently died and the UTR form reported a bogus
-  // "check your connection" instead of the real reason.
-  try {
-    await client.paymentOrder.update({
-      where: { id: order.id },
-      data: { status: "EXPIRED" },
-    });
-  } catch (err) {
-    // A concurrent claim may have flipped it to PAID, or the DB may be down.
-    console.warn(
-      "[payment/orders] could not persist EXPIRED (will re-read):",
-      (err as Error)?.message ?? err
-    );
-  }
-
-  try {
-    const fresh = await client.paymentOrder.findUnique({
-      where: { id: order.id },
-      select: { status: true },
-    });
-    return (fresh?.status as "PENDING" | "PENDING_VERIFICATION" | "PAID" | "FAILED" | "EXPIRED") ?? "EXPIRED";
-  } catch (err) {
-    // Unreachable DB: fall back to the locally computed expiry rather than
-    // throwing, so callers always receive a usable status.
-    console.error(
-      "[payment/orders] status re-read failed; reporting EXPIRED from local clock:",
-      (err as Error)?.message ?? err
-    );
-    return "EXPIRED";
-  }
-}
-
-/**
- * Bulk-expire every stale PENDING order. Called opportunistically by the create
- * endpoint so the table self-heals without a scheduled cron.
+ * Bulk-expire every stale PENDING order. Called opportunistically by the
+ * create-order endpoint so the table self-heals without a scheduled cron.
  */
 export async function expireStaleOrders(client: PrismaClient = prisma): Promise<number> {
   try {
@@ -122,9 +59,9 @@ export async function expireStaleOrders(client: PrismaClient = prisma): Promise<
 
 /**
  * Resolve the Prisma `Plan` row for a slug, creating it from the DUAL_PLANS
- * configuration when the seed has not run. This keeps both rails
- * self-sufficient: a license FK always has a valid Plan row to point at, and
- * the stored prices match the tiers actually charged (₹1,900/$20, etc.).
+ * configuration when the seed has not run. This keeps a license FK always
+ * pointing at a valid Plan row whose stored prices match the tiers actually
+ * charged (₹1,900 / ₹4,900 / ₹9,999).
  */
 async function ensurePlanRow(planSlug: PlanSlug, client: PrismaClient = prisma) {
   const existing = await client.plan.findUnique({ where: { slug: planSlug } });
@@ -168,18 +105,6 @@ export interface GrantResult {
  * IDEMPOTENT: when the order already carries a `licenseId` the existing grant is
  * returned untouched, so a duplicate verify call can never issue a second key.
  * The raw key is returned so the verify response can display it once.
- *
- * PAYMENT CONFIRMATION CHECK (self-hosted UPI only):
- *   For the Direct UPI rail (provider="UPI"), the license is ONLY granted when
- *   `paymentConfirmed` is true. This prevents fake/random UTR abuse because:
- *   - A random 12-digit UTR will pass format validation
- *   - But without admin confirmation (bank statement match), paymentConfirmed
- *     stays false and no license is granted
- *   - Admin confirms payment by setting paymentConfirmed=true after verifying
- *     the customer's bank statement shows the actual transfer
- *
- *   For PayGlocal (provider="PAYGLOCAL"), paymentConfirmed is set by the
- *   webhook automatically (hosted gateway provides real confirmation).
  */
 export async function grantLicenseForOrder(
   orderId: string,
@@ -195,18 +120,6 @@ export async function grantLicenseForOrder(
       select: { id: true, key: true },
     });
     if (existing) return { licenseId: existing.id, licenseKey: existing.key };
-  }
-
-  // PAYMENT CONFIRMATION GATE:
-  // For self-hosted UPI, require admin confirmation before granting license.
-  // This is the critical fraud protection — prevents random UTR abuse.
-  if (order.provider === "UPI" && !order.paymentConfirmed) {
-    console.warn(
-      `[payment/orders] UPI order ${orderId} not paymentConfirmed —` +
-      ` refusing to grant license (prevent fake UTR abuse).` +
-      ` Customer must contact admin with bank statement proof.`
-    );
-    return null;
   }
 
   const planSlug = order.planId as PlanSlug;
@@ -245,15 +158,12 @@ export async function grantLicenseForOrder(
         activatedAt: new Date(),
         expiresAt,
         metadata: {
-          provider: "DIRECT_UPI",
+          provider: "RAZORPAY",
           orderId: order.orderId,
-          utr: order.utr,
-          // Hashed copy for an index-friendly cross-flow duplicate lookup: the
-          // webhook rail can find a license already granted for this UTR without
-          // scanning plaintext metadata.
-          utrHash: order.utr ? sha256(order.utr) : null,
+          providerTxnId: order.providerTxnId,
           planSlug,
           amount: order.amount,
+          currency: order.currency,
         },
       },
     });
@@ -312,23 +222,19 @@ export async function grantLicenseForOrder(
   return { licenseId: license.id, licenseKey };
 }
 
-/** Human plan name for the given shared slug (used in API responses). */
-export function planNameFor(planSlug: PlanSlug): string {
-  return getDualPlan(planSlug)?.name ?? planSlug;
-}
-
 /**
- * Create a PENDING order for the PayGlocal (USD card) rail.
+ * Persist a PENDING Razorpay order, stamping the gateway's order id as the
+ * unique `providerTxnId` so the verify-payment handler can resolve it back.
  *
  * The amount is resolved from DUAL_PLANS — the caller only supplies the plan
- * slug and email, so a tampered payload can never set the price. `providerTxnId`
- * is stamped once PayGlocal returns its order reference.
+ * slug, so a tampered payload can never set the price.
  */
-export async function createPayGlocalOrder(input: {
+export async function createRazorpayOrder(input: {
   planSlug: PlanSlug;
   email: string;
   userId?: string | null;
-}): Promise<{ orderId: string; amount: number; expiresAt: Date }> {
+  providerTxnId: string;
+}): Promise<{ orderId: string; amount: number; currency: "INR"; expiresAt: Date }> {
   const plan = getDualPlan(input.planSlug);
   if (!plan) throw new Error(`Unknown plan slug: ${input.planSlug}`);
 
@@ -341,59 +247,31 @@ export async function createPayGlocalOrder(input: {
       userId: input.userId ?? null,
       email: normalizeEmail(input.email),
       planId: plan.slug,
-      // Server-resolved USD tier rate — never from the client.
-      amount: plan.usd,
-      currency: "USD",
-      provider: "PAYGLOCAL",
+      // Server-resolved INR tier rate — never from the client.
+      amount: plan.inr,
+      currency: "INR",
+      provider: "RAZORPAY",
       status: "PENDING",
-      // PayGlocal auto-confirms via webhook, so set paymentConfirmed=true
-      // immediately — the hosted gateway provides real payment verification.
+      // Razorpay confirms payment via the signed verify callback, so the
+      // license gate is satisfied by signature verification at verify time.
       paymentConfirmed: true,
+      providerTxnId: input.providerTxnId,
       expiresAt,
     },
   });
 
-  return { orderId, amount: plan.usd, expiresAt };
+  return { orderId, amount: plan.inr, currency: "INR", expiresAt };
 }
 
 /**
- * Bind a PayGlocal provider transaction id to an order so the webhook/callback
- * can resolve it back to the order.
- *
- * `providerTxnId` is `@unique`: if the reference already belongs to a different
- * order the update rejects with Prisma P2002, which the init route translates
- * into a fail-closed 409. The throw is therefore intentional and un-swallowed.
+ * Mark a Razorpay order PAID after its signature-verified callback confirms
+ * success, then grant the license. Idempotent: an already-PAID order is
+ * returned untouched by the update guard.
  */
-export async function attachPayGlocalTxn(orderId: string, providerTxnId: string): Promise<void> {
-  await prisma.paymentOrder.update({
-    where: { orderId },
-    data: { providerTxnId },
-  });
-}
-
-/**
- * Mark a UPI order as payment-confirmed by admin.
- * Called after admin verifies customer's bank statement matches the UTR.
- */
-export async function confirmUpiPayment(orderId: string): Promise<boolean> {
-  try {
-    await prisma.paymentOrder.update({
-      where: { orderId },
-      data: { paymentConfirmed: true },
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Mark a PayGlocal order PAID after its webhook/callback confirms success, then
- * grant the license. Idempotent: an already-PAID order is returned untouched.
- */
-export async function markPayGlocalOrderPaid(
-  ref: { orderId?: string | null; providerTxnId?: string | null }
-): Promise<GrantResult | null> {
+export async function markRazorpayOrderPaid(ref: {
+  orderId?: string | null;
+  providerTxnId?: string | null;
+}): Promise<GrantResult | null> {
   const where = ref.orderId
     ? { orderId: ref.orderId }
     : ref.providerTxnId
@@ -407,7 +285,7 @@ export async function markPayGlocalOrderPaid(
   if (order.status !== "PAID") {
     await prisma.paymentOrder.update({
       where: { id: order.id },
-      data: { status: "PAID", paidAt: new Date() },
+      data: { status: "PAID", paidAt: new Date(), paymentConfirmed: true },
     });
   }
 
