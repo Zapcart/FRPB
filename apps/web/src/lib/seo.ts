@@ -13,12 +13,18 @@ export const SITE_NAME = "FRPB";
 
 /** Product-level constants re-used by metadata + structured data. */
 export const PRODUCT_NAME = "FRPB Recovery";
-export const PRODUCT_TAGLINE = "#1 FRP Bypass & Android Device Recovery Tool";
+export const PRODUCT_TAGLINE = "FRP Bypass & Android Device Recovery Tool";
 export const PRODUCT_DESCRIPTION =
-  "One-click FRP bypass and flash reset tool for Samsung, Xiaomi, Vivo, Oppo, and MediaTek/Qualcomm devices. High-speed USB auto-detection.";
+  "Free-to-try FRP bypass and flash reset tool for Samsung, Xiaomi, Vivo, Oppo and MediaTek/Qualcomm devices — Windows & macOS, one-click USB detection.";
 
-/** Primary high-volume query target for the landing page. */
-export const PRIMARY_TITLE = `FRPB - ${PRODUCT_TAGLINE}`;
+/**
+ * Primary high-volume query target for the landing page.
+ *
+ * Keyword-first, benefit-led and year-qualified to win the SERP against
+ * generic competitors, while still landing under the ~60-char display limit
+ * (`54` chars) so Google does not truncate the differentiator.
+ */
+export const PRIMARY_TITLE = "FRP Bypass Tool 2026 — One-Click Android Unlock | FRPB";
 
 /**
  * Focus keyword set attached to the landing page + core routes.
@@ -39,6 +45,13 @@ export const PRIMARY_KEYWORDS = [
 /** Social share card. Single source so OG + Twitter never drift apart. */
 export const OG_IMAGE_PATH = "/logo.png";
 export const OG_IMAGE_ALT = "FRPB — FRP Bypass & Device Recovery Tool";
+/**
+ * Intrinsic dimensions of the social share card. Declared explicitly so the
+ * crawler can allocate the correct aspect-ratio box before the asset loads —
+ * avoids the "no dimension" warning in Rich Results and layout shift in preview.
+ */
+export const OG_IMAGE_WIDTH = 1200;
+export const OG_IMAGE_HEIGHT = 630;
 
 /** Absolute URL helper for canonicals, OG urls and sitemap entries. */
 export function absoluteUrl(path = "/"): string {
@@ -79,7 +92,14 @@ export function pageMetadata({
       title,
       description,
       url: canonical,
-      images: [{ url: image, width: 1200, height: 630, alt: imageAlt }],
+      images: [
+        {
+          url: image,
+          width: OG_IMAGE_WIDTH,
+          height: OG_IMAGE_HEIGHT,
+          alt: imageAlt,
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",

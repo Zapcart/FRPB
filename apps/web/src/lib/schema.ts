@@ -55,9 +55,11 @@ export function softwareApplicationSchema(): Record<string, unknown> {
     "@type": "SoftwareApplication",
     name: PRODUCT_NAME,
     alternateName: SITE_NAME,
-    applicationCategory: "UtilitiesApplication",
+    applicationCategory: "SecurityApplication",
     applicationSubCategory: "Android Device Recovery Utility",
-    operatingSystem: "Windows",
+    // Emitted to match the platform matrix rendered on the landing page and the
+    // per-OS installer routes (/downloads/FRPB-Setup.exe and .dmg).
+    operatingSystem: "Windows, macOS",
     softwareVersion: "1.0.1",
     url: absoluteUrl("/"),
     downloadUrl: absoluteUrl("/downloads"),
@@ -86,14 +88,10 @@ export function softwareApplicationSchema(): Record<string, unknown> {
         ...paid,
       ],
     },
-    aggregateRating: {
-      "@type": "AggregateRating",
-      ratingValue: "4.9",
-      bestRating: "5",
-      worstRating: "1",
-      ratingCount: "2043",
-      reviewCount: "2043",
-    },
+    // NOTE: no `aggregateRating` is emitted. Google requires rating markup to
+    // reflect visible, verifiable reviews; fabricating one is a structured-data
+    // policy violation and risks a manual action. Add it back only once real,
+    // on-page reviews exist.
     featureList: [
       "One-click FRP bypass",
       "Flash reset and firmware restore",
@@ -104,14 +102,113 @@ export function softwareApplicationSchema(): Record<string, unknown> {
   };
 }
 
-/** Organisation node — referenced by other graphs and emitted on the home page. */
+/**
+ * Organisation node — referenced as `publisher` by the other builders.
+ *
+ * Deliberately context-free so it can be embedded inside any graph without a
+ * duplicate `@context`. Use `organizationPageSchema()` for the standalone node.
+ */
 export function organizationSchema(): Record<string, unknown> {
   return {
     "@type": "Organization",
     name: SITE_NAME,
     url: SITE_URL,
-    logo: absoluteUrl(OG_IMAGE_PATH),
+    logo: {
+      "@type": "ImageObject",
+      url: absoluteUrl(OG_IMAGE_PATH),
+    },
     email: "support@frpb.in",
+    // Machine-readable support/contact surface for brand-knowledge panels.
+    contactPoint: {
+      "@type": "ContactPoint",
+      contactType: "customer support",
+      email: "support@frpb.in",
+      availableLanguage: ["en"],
+    },
+  };
+}
+
+/**
+ * Standalone `Organization` node for the home page.
+ *
+ * Emitted as its own JSON-LD block (rather than only as a nested `publisher`)
+ * so Google associates the site with a knowledge-panel entity and can resolve
+ * the brand logo.
+ */
+export function organizationPageSchema(): Record<string, unknown> {
+  return {
+    "@context": "https://schema.org",
+    ...organizationSchema(),
+  };
+}
+
+/**
+ * `Product` + `Offer` graph for the pricing page.
+ *
+ * Every plan is emitted in BOTH currencies the storefront actually charges
+ * (USD and INR) so the price range is eligible for merchant/price rich results
+ * regardless of the searcher's locale. Prices come from the shared PLANS
+ * definition, so they can never drift from what Razorpay charges.
+ */
+export function productSchema(): Record<string, unknown> {
+  const offerFor = (
+    plan: (typeof PLANS)[number],
+    price: number,
+    currency: string
+  ): Record<string, unknown> => {
+    const spec = (price / 100).toFixed(2);
+    const duration = billingDuration(plan.durationDays);
+    return {
+      "@type": "Offer",
+      name: plan.name,
+      url: absoluteUrl("/pricing"),
+      price: spec,
+      priceCurrency: currency,
+      availability: AVAILABILITY,
+      ...(duration
+        ? {
+            priceSpecification: {
+              "@type": "UnitPriceSpecification",
+              price: spec,
+              priceCurrency: currency,
+              billingDuration: duration,
+            },
+          }
+        : {}),
+    };
+  };
+
+  const offers = PLANS.flatMap((plan) => [
+    offerFor(plan, plan.priceCents, CURRENCY),
+    offerFor(plan, plan.priceInr, "INR"),
+  ]);
+
+  const usd = PLANS.map((p) => p.priceCents / 100);
+  const inr = PLANS.map((p) => p.priceInr / 100);
+
+  return {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: PRODUCT_NAME,
+    description: PRODUCT_DESCRIPTION,
+    image: absoluteUrl(OG_IMAGE_PATH),
+    brand: { "@type": "Brand", name: SITE_NAME },
+    category: "SecurityApplication",
+    url: absoluteUrl("/pricing"),
+    offers: {
+      "@type": "AggregateOffer",
+      priceCurrency: CURRENCY,
+      lowPrice: Math.min(...usd).toFixed(2),
+      highPrice: Math.max(...usd).toFixed(2),
+      offerCount: offers.length,
+      offers,
+    },
+    // Sibling currency range, surfaced so the INR storefront is represented too.
+    additionalProperty: {
+      "@type": "PropertyValue",
+      name: "INR price range",
+      value: `INR ${Math.min(...inr)}–${Math.max(...inr)}`,
+    },
   };
 }
 

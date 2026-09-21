@@ -44,6 +44,12 @@
     @apply rounded-2xl border border-slate-200 bg-white shadow-card;
   }
 
+  /* Hero glassmorphic tech card frame (light surfaces). The inner panel owns
+     the border/fill; this only supplies the arch ring + softened elevation. */
+  .glass-hero {
+    @apply relative rounded-[2rem] ring-1 ring-white/60 transition-shadow duration-300 hover:shadow-card-hover;
+  }
+
   .badge {
     @apply inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600;
   }

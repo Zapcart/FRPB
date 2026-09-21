@@ -4,7 +4,7 @@
 
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/seo";
-import { BLOG_CATEGORY_TABS, BLOG_POSTS } from "@/lib/blog";
+import { BLOG_POSTS } from "@/lib/blog";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
@@ -60,18 +60,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
   ];
 
-  // Category-filtered index views are indexable landing pages in their own
-  // right for broad queries ("iPhone iCloud lock guides"), so they are listed
-  // alongside the articles.
-  const categoryPages: MetadataRoute.Sitemap = BLOG_CATEGORY_TABS.filter(
-    (tab) => tab.id !== "all"
-  ).map((tab) => ({
-    url: `${SITE_URL}/blog?category=${tab.id}`,
-    lastModified: now,
-    changeFrequency: "weekly",
-    priority: 0.6,
-  }));
-
   const posts: MetadataRoute.Sitemap = BLOG_POSTS.map((post) => ({
     url: `${SITE_URL}/blog/${post.slug}`,
     lastModified: new Date(post.dateModified),
@@ -81,5 +69,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7,
   }));
 
-  return [...pages, ...categoryPages, ...posts];
+  // NOTE: the `?category=` blog filter views are intentionally NOT listed. Each
+  // of them canonicalises to `/blog` (see the blog index metadata), so listing
+  // them would only submit duplicate, non-canonical URLs. Keeping the sitemap
+  // canonical-only concentrates crawl budget on URLs Google can actually index.
+  return [...pages, ...posts];
 }

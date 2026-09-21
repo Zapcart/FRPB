@@ -9,15 +9,17 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { SessionProvider } from "@/components/session-provider";
 import { PostHogProvider } from "./providers";
-import JsonLd from "@/components/seo/json-ld";
 import {
   SITE_URL,
   SITE_NAME,
   PRODUCT_DESCRIPTION,
   PRIMARY_TITLE,
   PRIMARY_KEYWORDS,
+  OG_IMAGE_PATH,
+  OG_IMAGE_ALT,
+  OG_IMAGE_WIDTH,
+  OG_IMAGE_HEIGHT,
 } from "@/lib/seo";
-import { softwareApplicationSchema } from "@/lib/schema";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -46,10 +48,10 @@ export const metadata: Metadata = {
     description: PRODUCT_DESCRIPTION,
     images: [
       {
-        url: "/logo.png",
-        width: 1200,
-        height: 630,
-        alt: "FRPB — FRP Bypass & Device Recovery Tool",
+        url: OG_IMAGE_PATH,
+        width: OG_IMAGE_WIDTH,
+        height: OG_IMAGE_HEIGHT,
+        alt: OG_IMAGE_ALT,
       },
     ],
   },
@@ -57,7 +59,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: PRIMARY_TITLE,
     description: PRODUCT_DESCRIPTION,
-    images: ["/logo.png"],
+    images: [OG_IMAGE_PATH],
   },
   robots: {
     index: true,
@@ -71,8 +73,8 @@ export const metadata: Metadata = {
     },
   },
   icons: {
-    icon: [{ url: "/logo.png", type: "image/png" }],
-    apple: [{ url: "/logo.png", sizes: "180x180", type: "image/png" }],
+    icon: [{ url: OG_IMAGE_PATH, type: "image/png" }],
+    apple: [{ url: OG_IMAGE_PATH, sizes: "180x180", type: "image/png" }],
   },
   // No third-party ad-network or site-verification tags are emitted. All such
   // entries were removed by request, so the layout ships zero ad-network

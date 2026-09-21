@@ -5,9 +5,11 @@
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
-  title: "Pricing — FRP Bypass & Device Recovery Plans",
+  // Keyword-first + year-qualified; 50 chars before the "| FRPB" template so the
+  // price hook is never truncated in the SERP.
+  title: "FRP Bypass Tool Pricing (2026) — Plans from ₹1,900",
   description:
-    "Simple FRPB pricing for the FRP bypass and flash reset tool. Monthly, yearly and lifetime licenses — every plan unlocks the complete FRPB device recovery toolkit.",
+    "FRP bypass tool pricing for 2026: monthly, yearly and lifetime licenses with instant activation and a 7-day money-back guarantee. Pay in USD or INR.",
   path: "/pricing",
   keywords: [
     "frp bypass tool price",

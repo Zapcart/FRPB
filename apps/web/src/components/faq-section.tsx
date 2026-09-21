@@ -25,15 +25,15 @@ export default function FaqSection({
   if (!items.length) return null;
 
   return (
-    <section id={id} className="border-t border-white/10 bg-night-900/40">
+    <section id={id} className="border-t border-slate-200/80 bg-slate-50/60">
       <div className="mx-auto max-w-4xl px-6 py-20 sm:py-24">
         <div className="text-center">
-          <div className="mx-auto mb-5 grid h-12 w-12 place-items-center rounded-2xl border border-white/10 bg-white/[0.05] text-accent-400 backdrop-blur">
+          <div className="mx-auto mb-5 grid h-12 w-12 place-items-center rounded-2xl border border-brand-200 bg-white text-brand-600 shadow-sm">
             <HelpCircle className="h-6 w-6" />
           </div>
-          <h2 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">{heading}</h2>
+          <h2 className="text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">{heading}</h2>
           {intro ? (
-            <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-slate-400">
+            <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-slate-500">
               {intro}
             </p>
           ) : null}
@@ -43,13 +43,13 @@ export default function FaqSection({
           {items.map((item) => (
             <details
               key={item.question}
-              className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4 backdrop-blur-md transition duration-300 open:border-white/20 open:bg-white/[0.06] open:shadow-glass hover:border-white/20 hover:bg-white/[0.05]"
+              className="group overflow-hidden rounded-2xl border border-slate-200/80 bg-white px-5 py-4 shadow-sm transition-all duration-300 open:border-slate-300 open:shadow-md hover:border-slate-300 hover:shadow-md"
             >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-left text-base font-semibold text-white marker:hidden [&::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-left text-base font-semibold text-ink marker:hidden [&::-webkit-details-marker]:hidden">
                 <span>{item.question}</span>
-                <ChevronRight className="h-5 w-5 shrink-0 text-slate-500 transition-transform duration-200 group-open:rotate-90 group-open:text-accent-400" />
+                <ChevronRight className="h-5 w-5 shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-90 group-open:text-brand-600" />
               </summary>
-              <p className="mt-3 text-sm leading-relaxed text-slate-400">{item.answer}</p>
+              <p className="mt-3 text-sm leading-relaxed text-slate-500">{item.answer}</p>
             </details>
           ))}
         </div>

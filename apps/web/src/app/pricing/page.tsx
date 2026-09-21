@@ -9,6 +9,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -31,7 +32,7 @@ import {
 } from "@frpb/shared";
 import { createClient } from "@/lib/supabase/client";
 import JsonLd from "@/components/seo/json-ld";
-import { faqPageSchema } from "@/lib/schema";
+import { faqPageSchema, productSchema, breadcrumbSchema } from "@/lib/schema";
 import { savePendingPlan } from "@/lib/checkout/pending-plan";
 import {
   resolveDefaultCurrency,
@@ -231,10 +232,15 @@ export default function PricingPage() {
       <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
         <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <img
+            {/* next/image with explicit intrinsic dimensions — fixes the CLS
+                caused by the previous unsized raw <img> in the sticky header. */}
+            <Image
               src="/logo.png"
-              alt="FRPB"
-              className="h-8 w-8 shrink-0 rounded-xl"
+              alt="FRPB logo"
+              width={64}
+              height={64}
+              priority
+              className="h-8 w-8 shrink-0 rounded-xl object-cover"
             />
             <span className="text-lg font-extrabold tracking-tight text-ink">FRPB</span>
           </Link>
@@ -460,6 +466,18 @@ export default function PricingPage() {
 
         {/* FAQPage structured data — matches the visible accordion above. */}
         <JsonLd id="ld-pricing-faq" data={faqLd} />
+        {/* Product + Offer graph — one Offer per plan, emitted in BOTH the USD
+            and INR the storefront charges, so the price range is rich-result
+            eligible regardless of the searcher's locale. */}
+        <JsonLd id="ld-pricing-product" data={productSchema()} />
+        {/* BreadcrumbList — mirrors the visible Home → Pricing trail. */}
+        <JsonLd
+          id="ld-pricing-breadcrumb"
+          data={breadcrumbSchema([
+            { name: "Home", path: "/" },
+            { name: "Pricing", path: "/pricing" },
+          ])}
+        />
       </main>
 
       <footer className="border-t border-slate-200 bg-slate-50/70 py-8 text-center text-sm text-slate-500">
