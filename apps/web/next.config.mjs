@@ -42,6 +42,36 @@ const nextConfig = {
       },
     ];
   },
+  async rewrites() {
+    // PostHog first-party reverse proxy.
+    //
+    // Browser telemetry is sent to same-origin `/ingest/*` and transparently
+    // forwarded to PostHog's US ingestion + asset hosts. Serving analytics from
+    // our own domain means ad-blockers / privacy extensions that pattern-match
+    // `*.posthog.com` no longer drop the events, and the requests share the
+    // first-party cookie jar — improving event capture rate and attribution.
+    //
+    // Order matters: Next matches rewrites top-to-bottom, so the static-asset
+    // and `/decide` rules MUST precede the greedy `:path*` catch-all.
+    return [
+      {
+        // Script/asset bundle (e.g. array.js, surveys.js) served by the CDN host.
+        source: "/ingest/static/:path*",
+        destination: "https://us-assets.i.posthog.com/static/:path*",
+      },
+      {
+        // Feature-flag / session-recording decision endpoint. Listed before the
+        // catch-all so it is never swallowed by the generic `/:path*` rule.
+        source: "/ingest/decide",
+        destination: "https://us.i.posthog.com/decide",
+      },
+      {
+        // Everything else: event capture, flags, persons (`/e/`, `/flags/`, ...).
+        source: "/ingest/:path*",
+        destination: "https://us.i.posthog.com/:path*",
+      },
+    ];
+  },
 };
 
 export default nextConfig;

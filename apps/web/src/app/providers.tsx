@@ -16,7 +16,13 @@ import { useEffect, type ReactNode } from "react";
 import posthog from "posthog-js";
 import { PostHogProvider as PostHogReactProvider } from "posthog-js/react";
 
-const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
+// First-party ingestion path. Requests are proxied to PostHog's US API by the
+// `rewrites()` block in `next.config.mjs`, so telemetry never leaves our domain
+// and survives ad-blockers that block `*.posthog.com` outright.
+const POSTHOG_PROXY_PATH = "/ingest";
+// PostHog's own UI (toolbars, "open in PostHog" links) MUST hit the real host —
+// it is a user-facing navigation, not an ingested request, so it is *not* proxied.
+const POSTHOG_UI_HOST = "https://us.posthog.com";
 
 // True once `posthog.init` has run in the browser (and a key was available).
 let posthogReady = false;
@@ -35,8 +41,21 @@ export function PostHogProvider({ children }: { children: ReactNode }) {
     const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
     if (!key) return;
 
+    // Prefer the first-party proxy unconditionally. A legacy/stale
+    // `NEXT_PUBLIC_POSTHOG_HOST` pointing straight at `*.posthog.com` (as shipped
+    // in earlier .env files) must NOT be allowed to defeat the reverse proxy, so
+    // the env override is only honoured when it is itself a same-origin path.
+    const configuredHost = process.env.NEXT_PUBLIC_POSTHOG_HOST?.trim();
+    const apiHost = configuredHost?.startsWith("/")
+      ? configuredHost
+      : POSTHOG_PROXY_PATH;
+
     posthog.init(key, {
-      api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? DEFAULT_POSTHOG_HOST,
+      // Route event capture through the same-origin `/ingest` reverse proxy.
+      api_host: apiHost,
+      // Required when `api_host` is a proxy: tells the toolbar / deep links where
+      // the real PostHog app lives so they don't resolve to our `/ingest` route.
+      ui_host: POSTHOG_UI_HOST,
       // Capture SPA navigations automatically (App Router has no page reloads).
       capture_pageview: true,
       capture_pageleave: true,
