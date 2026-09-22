@@ -5,6 +5,7 @@
 import { Resend } from "resend";
 import { prisma } from "@/lib/prisma";
 import { licenseDeliveredTemplate } from "@/lib/email/templates";
+import { GITHUB_RELEASES_BASE } from "@/config/download";
 
 // Lazy singleton — constructing Resend with an empty key throws, which would
 // crash `next build` during page data collection when the env var is absent.
@@ -31,7 +32,8 @@ export async function sendLicenseEmail(
     licenseKey: license.key,
     planName: license.plan.name,
     expiresAt: license.expiresAt,
-    downloadUrl: process.env.DOWNLOAD_BASE_URL ?? "https://frpb.in/downloads",
+    // Installers are hosted on GitHub Releases (see src/config/download.ts).
+    downloadUrl: process.env.DOWNLOAD_BASE_URL ?? GITHUB_RELEASES_BASE,
     quickStartPdfUrl:
       process.env.QUICK_START_PDF_URL ?? "https://frpb.in/guides/frpb-quick-start.pdf",
   });
@@ -129,7 +131,8 @@ export async function retryFailedEmails(
       licenseKey: license.key,
       planName: license.plan.name,
       expiresAt: license.expiresAt,
-      downloadUrl: process.env.DOWNLOAD_BASE_URL ?? "https://frpb.in/downloads",
+      // Installers are hosted on GitHub Releases (see src/config/download.ts).
+      downloadUrl: process.env.DOWNLOAD_BASE_URL ?? GITHUB_RELEASES_BASE,
       quickStartPdfUrl:
         process.env.QUICK_START_PDF_URL ?? "https://frpb.in/guides/frpb-quick-start.pdf",
     });

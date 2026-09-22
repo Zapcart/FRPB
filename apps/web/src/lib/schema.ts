@@ -3,6 +3,7 @@
 // reasoned about independently. All builders emit plain objects.
 
 import { PLANS } from "@frpb/shared";
+import { RELEASE_VERSION } from "@/config/download";
 import {
   SITE_URL,
   SITE_NAME,
@@ -60,7 +61,7 @@ export function softwareApplicationSchema(): Record<string, unknown> {
     // Emitted to match the platform matrix rendered on the landing page and the
     // per-OS installer routes (/downloads/FRPB-Setup.exe and .dmg).
     operatingSystem: "Windows, macOS",
-    softwareVersion: "1.0.1",
+    softwareVersion: RELEASE_VERSION,
     url: absoluteUrl("/"),
     downloadUrl: absoluteUrl("/downloads"),
     installUrl: absoluteUrl("/downloads"),

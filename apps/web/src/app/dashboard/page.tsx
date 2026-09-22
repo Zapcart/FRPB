@@ -22,6 +22,7 @@ import type {
   DashboardDeviceItem,
   ApiEnvelope,
 } from "@frpb/shared";
+import { resolveInstallerUrl } from "@/config/download";
 
 interface LicenseWithDevices extends ListLicensesItem {
   devices: DashboardDeviceItem[];
@@ -333,7 +334,7 @@ export default function DashboardPage() {
                 </p>
               </div>
               <a
-                href={process.env.NEXT_PUBLIC_DOWNLOAD_URL ?? "/#downloads"}
+                href={resolveInstallerUrl()}
                 className="btn-accent rounded-lg px-5 py-2 text-sm font-bold text-white"
               >
                 Download

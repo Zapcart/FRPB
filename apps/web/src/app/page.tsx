@@ -34,6 +34,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { PLANS } from "@frpb/shared";
+import { resolveInstallerUrl } from "@/config/download";
 import SmoothScrollLink from "@/components/smooth-scroll-link";
 import JsonLd from "@/components/seo/json-ld";
 import FaqSection from "@/components/faq-section";
@@ -179,7 +180,9 @@ export const metadata: Metadata = {
 };
 
 export default function HomePage() {
-  const downloadUrl = process.env.NEXT_PUBLIC_DOWNLOAD_URL || "#download";
+  // Resolve the installer URL once per render (NEXT_PUBLIC_DOWNLOAD_URL →
+  // DOWNLOAD_BASE_URL → GitHub Releases v1.0.0 default). See config/download.ts.
+  const downloadUrl = resolveInstallerUrl();
 
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden bg-white text-slate-600 antialiased">
@@ -245,7 +248,7 @@ export default function HomePage() {
               className="btn-accent btn-shine hidden px-4 py-2.5 text-xs sm:inline-flex md:text-sm"
             >
               <Download className="h-4 w-4" />
-              Try for Free
+              Download for Windows
             </Link>
             <button
               className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-ink lg:hidden"
@@ -302,14 +305,14 @@ export default function HomePage() {
                   className="btn-accent btn-shine w-full px-8 py-3.5 text-sm uppercase tracking-wide shadow-blue-glow hover:-translate-y-0.5 sm:w-auto"
                 >
                   <Download className="h-5 w-5" />
-                  Try for Free
+                  Download for Windows
                 </Link>
                 <SmoothScrollLink
                   targetId="pricing"
-                  ariaLabel="See pricing"
+                  ariaLabel="View pricing"
                   className="btn-ghost w-full px-8 py-3.5 text-sm hover:-translate-y-0.5 sm:w-auto"
                 >
-                  See Pricing
+                  View Pricing
                   <ArrowRight className="h-4 w-4" />
                 </SmoothScrollLink>
               </div>
@@ -776,7 +779,7 @@ export default function HomePage() {
                 className="btn-accent btn-shine inline-flex w-full items-center justify-center gap-2 px-7 py-3.5 text-base hover:-translate-y-0.5 sm:w-auto"
               >
                 <Download className="h-5 w-5" />
-                Download FRPB free
+                Download for Windows
               </Link>
               <Link
                 href="/pricing"

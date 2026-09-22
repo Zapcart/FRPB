@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createReadStream, promises as fs } from "node:fs";
 import { Readable } from "node:stream";
 import path from "node:path";
+import { GITHUB_ASSET_ALIASES, GITHUB_RELEASES_BASE } from "@/config/download";
 
 /**
  * FRPB — GET /downloads/[file]
@@ -18,7 +19,8 @@ import path from "node:path";
  *      a base (no filename) it is treated as a base instead.
  *   3. NEXT_PUBLIC_DOWNLOAD_BASE_URL — client-visible base; redirect to <base>/<file>.
  *   4. DOWNLOAD_BASE_URL — treated as a base; 307 redirect to <base>/<file>.
- *   5. GitHub Releases fallback — the same-named asset on the latest release.
+ *   5. GitHub Releases fallback — the same-named asset on the pinned release
+ *      (see src/config/download.ts).
  *
  * Returns 404 with a JSON body when the name is not a known installer, or when
  * no target can be resolved.
@@ -30,16 +32,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const PUBLIC_DIR = path.join(process.cwd(), "public", "downloads");
-
-const GITHUB_RELEASES_BASE = "https://github.com/Zapcart/FRPB/releases/latest/download";
-
-// Canonical installer asset name served from GitHub Releases.
-// electron-builder is configured with a fixed artifactName ("FRPB-Setup.exe"),
-// so the public alias and the real asset name match.
-const GITHUB_ASSET_ALIASES: Record<string, string> = {
-  "frpb-setup.exe": "FRPB-Setup.exe",
-  "frpb-setup.dmg": "FRPB-Setup.dmg",
-};
 
 /** Installer assets we are willing to serve; anything else is a 404. */
 const ALLOWED_EXTENSIONS = [".exe", ".dmg"] as const;
@@ -131,9 +123,10 @@ export async function GET(
     );
   }
 
-  // ── 5. GitHub Releases fallback — the latest release's asset. ────────────
-  // Translate the public alias (FRPB-Setup.exe) to the real electron-builder
-  // asset name (FRPB-Recovery-Setup-<version>.exe) before redirecting.
+  // ── 5. GitHub Releases fallback — the pinned release's asset. ────────────
+  // Translate the public alias (FRPB-Setup.exe) to the canonical published
+  // asset name before redirecting. Base URL + aliases live in
+  // src/config/download.ts.
   const assetName = GITHUB_ASSET_ALIASES[requested.toLowerCase()] ?? requested;
   return NextResponse.redirect(
     `${GITHUB_RELEASES_BASE}/${encodeURIComponent(assetName)}`,

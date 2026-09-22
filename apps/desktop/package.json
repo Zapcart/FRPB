@@ -1,6 +1,6 @@
 {
   "name": "@frpb/desktop",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "private": true,
   "description": "FRPB Desktop App — Electron + React (license activation, USB device monitor, driver center)",
   "main": "dist-electron/main.js",

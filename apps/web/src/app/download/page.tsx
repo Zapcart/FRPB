@@ -1,32 +1,22 @@
 import { redirect } from "next/navigation";
+import { resolveInstallerUrl } from "@/config/download";
 
 /**
  * FRPB — /download
  *
  * Canonical short link that always triggers a download of the latest compiled
- * desktop installer. Resolves, in order:
+ * desktop installer. Resolution (see src/config/download.ts):
  *
- *   1. NEXT_PUBLIC_DOWNLOAD_URL — full installer URL (e.g.
- *      https://frpb.in/downloads/FRPB-Setup.exe). Used verbatim when set.
+ *   1. NEXT_PUBLIC_DOWNLOAD_URL — explicit override, used verbatim.
  *   2. DOWNLOAD_BASE_URL — treated as a base; <base>/FRPB-Setup.exe is used.
- *   3. Relative fallback — /downloads/FRPB-Setup.exe (served by the dynamic
- *      /downloads/[file] route from public/downloads or GitHub Releases).
+ *   3. GitHub Releases — the built-in default, i.e.
+ *      https://github.com/Zapcart/FRPB-Application/releases/download/v1.0.0/FRPB-Setup.exe
  *
- * Read per request so a redeployed binary/env change is picked up immediately.
+ * Read per request so a redeployed binary or environment change is picked up
+ * immediately, without touching the code.
  */
 export const dynamic = "force-dynamic";
 
-const EXE_NAME = "FRPB-Setup.exe";
-
-function downloadTarget(): string {
-  const direct = process.env.NEXT_PUBLIC_DOWNLOAD_URL;
-  if (direct && direct.trim().length > 0) {
-    return direct.trim();
-  }
-  const base = (process.env.DOWNLOAD_BASE_URL || "/downloads").replace(/\/+$/, "");
-  return `${base}/${EXE_NAME}`;
-}
-
 export default function DownloadPage(): never {
-  redirect(downloadTarget());
+  redirect(resolveInstallerUrl());
 }

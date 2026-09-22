@@ -7,8 +7,16 @@ import {
   FileDown,
   Smartphone,
   Info,
+  Sparkles,
 } from "lucide-react";
 import { pageMetadata } from "@/lib/seo";
+import {
+  EXE_NAME,
+  RELEASE_VERSION,
+  RELEASE_NOTES,
+  SMARTSCREEN_NOTICE,
+  resolveInstallerUrl,
+} from "@/config/download";
 
 export const metadata = pageMetadata({
   title: "Download FRPB for Windows 10/11",
@@ -23,24 +31,11 @@ export const metadata = pageMetadata({
   ],
 });
 
-const EXE_NAME = "FRPB-Setup.exe";
-
-function downloadTarget(): string {
-  // NEXT_PUBLIC_DOWNLOAD_URL points at the full installer URL
-  // (e.g. https://frpb.in/downloads/FRPB-Setup.exe). Prefer it when set.
-  const direct = process.env.NEXT_PUBLIC_DOWNLOAD_URL;
-  if (direct && direct.trim().length > 0) {
-    return direct.trim();
-  }
-  const base = process.env.DOWNLOAD_BASE_URL || "/downloads";
-  return `${base}/${EXE_NAME}`;
-}
-
 const HIGHLIGHTS = [
   {
     icon: ShieldCheck,
     title: "Safe & Verified",
-    desc: "Signed installer with SHA-256 checksum. No adware, no bundled toolbars.",
+    desc: "Hosted on the official GitHub Releases page. No adware, no bundled toolbars.",
   },
   {
     icon: MonitorDown,
@@ -55,7 +50,7 @@ const HIGHLIGHTS = [
 ];
 
 export default function DownloadsPage() {
-  const href = downloadTarget();
+  const href = resolveInstallerUrl();
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
@@ -89,7 +84,7 @@ export default function DownloadsPage() {
           <div className="flex flex-col items-center px-6 py-14 text-center sm:px-12 sm:py-16">
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-brand-100 bg-brand-50/80 px-4 py-1.5 text-xs font-semibold text-brand-700">
               <Download className="h-3.5 w-3.5" />
-              FRPB v1.0 — Official Download
+              FRPB v{RELEASE_VERSION} — Official Download
             </div>
 
             <h1 className="max-w-2xl text-3xl font-extrabold leading-tight tracking-tight text-ink sm:text-5xl">
@@ -104,10 +99,12 @@ export default function DownloadsPage() {
               firmware, install OEM drivers and manage your devices — all in one app.
             </p>
 
-            {/* Primary CTA — links straight to the .exe */}
+            {/* Primary CTA — links straight to the .exe on GitHub Releases */}
             <a
               href={href}
               download
+              target="_blank"
+              rel="noopener noreferrer"
               className="btn-accent mt-9 w-full max-w-md px-8 py-4 text-base shadow-blue-glow sm:w-auto"
             >
               <Download className="h-5 w-5" />
@@ -118,20 +115,17 @@ export default function DownloadsPage() {
               {EXE_NAME} · ~91 MB · Windows 10/11 · Free trial available
             </p>
 
-            {/* Windows SmartScreen guidance */}
+            {/* Browser / Windows SmartScreen first-launch guidance */}
             <div className="mt-5 flex w-full max-w-md items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-left">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-              <p className="text-xs leading-relaxed text-slate-500">
-                Note: If Windows SmartScreen displays a warning, click 'More info' and select
-                'Run anyway'.
-              </p>
+              <p className="text-xs leading-relaxed text-slate-500">{SMARTSCREEN_NOTICE}</p>
             </div>
 
-            {/* Version + checksum strip */}
+            {/* Version + trust strip */}
             <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5">
               <span className="badge">
                 <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                Version 1.0.1
+                Version {RELEASE_VERSION}
               </span>
               <span className="badge">
                 <ShieldCheck className="h-3.5 w-3.5 text-brand-500" />
@@ -141,6 +135,27 @@ export default function DownloadsPage() {
             </div>
           </div>
         </div>
+
+        {/* ================= RELEASE NOTES ================= */}
+        <section className="mt-10 card p-6 sm:p-8">
+          <div className="flex items-center gap-2.5">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-50 text-brand-600">
+              <Sparkles className="h-4.5 w-4.5" />
+            </span>
+            <div>
+              <h2 className="text-sm font-bold text-ink">What's new in v{RELEASE_VERSION}</h2>
+              <p className="text-xs text-slate-400">Latest release notes</p>
+            </div>
+          </div>
+          <ul className="mt-4 space-y-2.5">
+            {RELEASE_NOTES.map((note) => (
+              <li key={note} className="flex items-start gap-2.5">
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                <span className="text-xs leading-relaxed text-slate-600">{note}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
 
         {/* ================= HIGHLIGHTS ================= */}
         <section className="mt-10 grid gap-4 sm:grid-cols-3">
@@ -170,7 +185,7 @@ export default function DownloadsPage() {
               },
               {
                 q: "Is the download safe?",
-                a: "The installer is code-signed and hosted on our official servers. Always verify you are downloading from frpb.in or the official FRPB GitHub releases page.",
+                a: "Yes. The installer is code-signed and served from the official FRPB GitHub Releases page. If your browser or Windows SmartScreen shows an 'Unrecognized App' notice on first launch, click 'Keep' or 'More Info → Run Anyway' to continue.",
               },
             ].map((faq) => (
               <details key={faq.q} className="card group p-5">

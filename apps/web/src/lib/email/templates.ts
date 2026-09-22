@@ -6,7 +6,11 @@ export interface LicenseEmailTemplateInput {
   licenseKey: string;
   planName: string;
   expiresAt: Date | null;
-  /** Base download URL (e.g. https://frpb.in/downloads). Filenames are appended. */
+  /**
+   * Base download URL for installer assets (defaults to the GitHub Releases
+   * tag directory, e.g. https://github.com/Zapcart/FRPB-Application/releases/download/v1.0.0).
+   * Filenames are appended.
+   */
   downloadUrl: string;
   quickStartPdfUrl: string;
 }
