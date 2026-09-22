@@ -8,6 +8,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { SessionProvider } from "@/components/session-provider";
+import SocialUpdatesWidget from "@/components/SocialUpdatesWidget";
 import { PostHogProvider } from "./providers";
 import {
   SITE_URL,
@@ -87,6 +88,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-white font-sans text-slate-900 antialiased">
         <PostHogProvider>
           <SessionProvider>{children}</SessionProvider>
+          {/* Site-wide floating community widget (bottom-right). */}
+          <SocialUpdatesWidget />
         </PostHogProvider>
       </body>
     </html>

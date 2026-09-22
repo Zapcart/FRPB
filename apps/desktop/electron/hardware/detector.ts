@@ -652,12 +652,20 @@ export function pollHardware(): HardwareSnapshot {
   // rather than a generic serial port, so the wizard recognises it as a
   // low-level interface and auto-advances.
   if (!best) {
+    // Only consider COM ports tied to a real phone (mobile VID/PID) — a bare
+    // COM3 with no phone behind it must never read as "Connected".
     const com = readComPort(pnp, null, null);
-    // Defence in depth: `readComPort` already filters Bluetooth/virtual ports,
-    // but re-check here so a future change to the port list can never silently
-    // reintroduce a headset as a "connected device".
     const comIsVirtual = com.entry ? isVirtualOrBluetoothPort(com.entry) : false;
     if (com.port && !comIsVirtual) {
+      const pnpRowForCom = pnp.find((d) =>
+        d.friendlyName.toUpperCase().includes(com.port!)
+      );
+      const comIds = pnpRowIds(pnpRowForCom ?? null);
+      const comVid = comIds.vid ?? vidFromSerialEntry(com.entry ?? {});
+      const comPid = comIds.pid ?? pidFromSerialEntry(com.entry ?? {});
+      // Require mobile VID/PID evidence for the COM port to count.
+      const hasMobileEvidence = isMobilePortEvidence(comVid, comPid);
+      if (hasMobileEvidence) {
       // A serial endpoint may only be promoted to a LOW-LEVEL mode (preloader /
       // EDL) when its PnP chain / serialport metadata proves a mobile VID *and*
       // PID. Without that evidence it is reported as a bare "serial" endpoint,
@@ -681,7 +689,7 @@ export function pollHardware(): HardwareSnapshot {
       // when the driver hides VID/PID; a bare unrecognised port stays "serial".
       const hintedMobile =
         com.entry != null && serialHint(com.entry) !== "Unknown";
-      const provenMobile = vendorProven || hintedMobile;
+      const provenMobile = hasMobileEvidence || hintedMobile;
       const mode: HardwareMode =
         !provenMobile ? "serial" : isMtk ? "preloader" : isQcom ? "edl" : "serial";
       const pnpRow = pnp.find((d) => d.friendlyName.toUpperCase().includes(com.port!));

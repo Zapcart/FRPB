@@ -490,7 +490,7 @@ function detectChipset(adbBrand: string | undefined, model: string | undefined):
   const ids = currentUsbIds();
   if (ids) {
     if (ids.vid === QUALCOMM_VENDOR_ID && ids.pid === QCOM_EDL_PID) return "qualcomm";
-    if (ids.vid === MTK_VENDOR_ID) return "mediatek";
+    if (ids.vid === MTK_VENDOR_ID || ids.vid === 0x2d95) return "mediatek"; // 0x2d95 = Vivo (MTK-based)
     if (ids.vid === QUALCOMM_VENDOR_ID) return "qualcomm";
   }
   if (model) {
@@ -1469,7 +1469,7 @@ function sanitizeFrpOptions(raw: unknown): {
     // The engine requires concrete strings here (it interpolates them into
     // user-facing messages), so the nullable base fields are coerced.
     brand: base.brand ?? "",
-    model: base.model ?? "Generic",
+    model: base.model ?? "Auto-Detect",
     androidVersion: base.androidVersion ?? undefined,
     method,
     mode: base.mode ?? undefined,

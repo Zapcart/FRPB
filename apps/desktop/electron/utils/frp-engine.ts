@@ -640,6 +640,8 @@ export async function runFrpBypass(
         recoverable: true,
       };
     }
+    // Populate context with the detected device so downstream steps can use it.
+    context.device = detectedDevice;
   }
 
   // ── ADB presence gate ─────────────────────────────────────────────────

@@ -17,6 +17,9 @@ import { promisify } from "node:util";
 /** MediaTek vendor ID — BROM/Preloader mode me ye appear karta hai. */
 export const MTK_VENDOR_ID = 0x0e8d;
 
+/** Vivo vendor ID — BROM/Preloader mode me bhi appear kar sakta hai (MTK-based Vivo devices). */
+export const VIVO_VENDOR_ID = 0x2d95;
+
 /** BROM mode me device product ID (common values). */
 export const MTK_BROM_PID = 0x0000; // Generic — actual PID vary karta hai
 export const MTK_PRELOADER_PID = 0x0001;
@@ -255,7 +258,8 @@ export async function detectMtkBromDevice(): Promise<Device | null> {
     for (const device of devices) {
       const vid = device.deviceDescriptor.idVendor;
       const pid = device.deviceDescriptor.idProduct;
-      if (vid === MTK_VENDOR_ID) {
+      // MediaTek VID (0x0e8d) ya Vivo VID (0x2d95) — dono MTK-based BROM support kar sakte hain
+      if (vid === MTK_VENDOR_ID || vid === VIVO_VENDOR_ID) {
         const classes = (device.interfaces || []).map(i => i.descriptor.bInterfaceClass);
         // BROM mode me 0xFF vendor-specific class hota hai
         if (classes.includes(BROM_INTERFACE_CLASS) || pid === 0x0000 || pid === 0x0001) {
@@ -318,7 +322,7 @@ export async function bromHandshake(device: Device): Promise<{ chipset: string; 
       // Fallback failed
     }
 
-    return { chipset: "MTK", success: true }; // Assume success if device detected
+    return { chipset: "MTK", success: false };
   } catch (err) {
     log.error("[mtk-brom] bromHandshake failed:", err);
     return { chipset: "unknown", success: false };
@@ -358,9 +362,9 @@ export async function bromReadDeviceInfo(device: Device): Promise<MtkDeviceInfo 
     const serialMatch = infoStr.match(/serial[:=]\s*([^\r\n]+)/i);
 
     return {
-      chipset: chipsetMatch && chipsetMatch[1] ? chipsetMatch[1].trim() : "MTK",
+      chipset: chipsetMatch && chipsetMatch[1] ? chipsetMatch[1].trim() : "(unreadable)",
       manufactureDate: "",
-      model: modelMatch && modelMatch[1] ? modelMatch[1].trim() : "unknown",
+      model: modelMatch && modelMatch[1] ? modelMatch[1].trim() : "(unreadable)",
       securityPatch: "",
       serialNumber: serialMatch && serialMatch[1] ? serialMatch[1].trim() : "",
       firmwareVersion: fwVerMatch && fwVerMatch[1] ? fwVerMatch[1].trim() : "",
@@ -571,15 +575,44 @@ export async function bromForceToBrom(device: Device): Promise<boolean> {
 
 /** Check kare ki MTK VCOM driver install hai ya nahi.
  *  MTK BROM mode me kaam karne ke liye MTK VCOM driver install hona chahiye.
+ *  Driver check 2 tarike se karta hai:
+ *   1. USB device list — agar device connect hai aur VID 0x0e8d dikh raha hai
+ *   2. Windows Registry — VCOM driver install hai ya nahi (device connect hone ke bina bhi)
  */
 export function checkMtkVcomDriver(): boolean {
+  // 1. USB device list — agar device connect hai, VID check karein
   try {
     const devices = usb.getDeviceList();
-    const mtkDevices = devices.filter(d => d.deviceDescriptor.idVendor === MTK_VENDOR_ID);
-    return mtkDevices.length > 0;
+    const mtkDevices = devices.filter((d) => d.deviceDescriptor.idVendor === MTK_VENDOR_ID);
+    if (mtkDevices.length > 0) return true; // device connect hai, driver chal raha hoga
   } catch {
-    return false;
+    // USB library fail ho gayi — registry pe rely karna
   }
+
+  // 2. Windows Registry — VCOM driver install hai ya nahi
+  //    MTK VCOM driver install hone par ye services registry me create hote hain
+  //    HKLM\SYSTEM\CurrentControlSet\Services\<service-name>
+  const registryServices = [
+    "usbtc001",    // MediaTek MTK USB VCOM
+    "mtkudc3",     // MediaTek USB Device Class driver
+    "VcomApk",     // MediaTek VCOM AP
+    "mtkvc001",    // MediaTek VCOM (alt)
+    "mtkdrv",      // MediaTek driver (alt)
+  ];
+
+  for (const svc of registryServices) {
+    try {
+      execSync(
+        `reg query "HKLM\\SYSTEM\\CurrentControlSet\\Services\\${svc}" /v ImagePath`,
+        { timeout: 3000, windowsHide: true, encoding: "utf8" }
+      );
+      return true; // service exist karti hai → driver install hai
+    } catch {
+      // ye service nahi hai, agla try karein
+    }
+  }
+
+  return false;
 }
 
 /** MTK VCOM driver install karne ke liye instruction return kare. */
