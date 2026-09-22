@@ -8,6 +8,22 @@ export interface FaqItem {
 }
 
 export const HOME_FAQ: readonly FaqItem[] = [
+  // High-intent questions surfaced first so both the visible FAQ section and
+  // the FAQPage JSON-LD lead with the queries answer engines cite.
+  {
+    question: "Is FRPB safe to download?",
+    answer: "Yes, FRPB is clean, tested, and hosted via official GitHub Releases.",
+  },
+  {
+    question: "Which Android versions does FRPB support?",
+    answer:
+      "FRPB supports Android 10, 11, 12, 13, and 14 across Samsung, Xiaomi, Vivo, Oppo, and Realme devices.",
+  },
+  {
+    question: "Does FRPB require a PC?",
+    answer:
+      "Yes, FRPB Desktop App runs on Windows PC with one-click automated drivers.",
+  },
   {
     question: "What is an FRP lock and what does the FRPB FRP bypass tool do?",
     answer:

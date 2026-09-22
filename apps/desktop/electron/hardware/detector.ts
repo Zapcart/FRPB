@@ -471,10 +471,13 @@ function readComPort(
   // survived the Bluetooth/virtual filter AND carry mobile VID/PID evidence.
   const ports = serialPorts().filter((p) => !isVirtualOrBluetoothPort(p));
 
-  // 1. Vendor-hinted serialport entry — the SoC vendor name in its metadata is
-  //    itself proof of a real phone transport (MediaTek Preloader / QCOM VCOM).
+  // 1. Vendor-hinted serialport entry — but still require VID/PID evidence.
+  //    Metadata alone (e.g. "mediatek" in friendlyName) is not proof of a real
+  //    phone: a phantom driver entry or stale PnP row can carry the same string.
   const hinted = ports.find((p) => serialHint(p) !== "Unknown");
-  if (hinted?.path) return { port: hinted.path.toUpperCase(), entry: hinted };
+  if (hinted?.path && isMobilePortEvidence(vidFromSerialEntry(hinted), pidFromSerialEntry(hinted))) {
+    return { port: hinted.path.toUpperCase(), entry: hinted };
+  }
 
   // 2. PnP row for the exact VID/PID (its friendly name carries "(COMx)").
   if (preferVid != null) {
@@ -652,8 +655,6 @@ export function pollHardware(): HardwareSnapshot {
   // rather than a generic serial port, so the wizard recognises it as a
   // low-level interface and auto-advances.
   if (!best) {
-    // Only consider COM ports tied to a real phone (mobile VID/PID) — a bare
-    // COM3 with no phone behind it must never read as "Connected".
     const com = readComPort(pnp, null, null);
     const comIsVirtual = com.entry ? isVirtualOrBluetoothPort(com.entry) : false;
     if (com.port && !comIsVirtual) {
@@ -663,60 +664,45 @@ export function pollHardware(): HardwareSnapshot {
       const comIds = pnpRowIds(pnpRowForCom ?? null);
       const comVid = comIds.vid ?? vidFromSerialEntry(com.entry ?? {});
       const comPid = comIds.pid ?? pidFromSerialEntry(com.entry ?? {});
-      // Require mobile VID/PID evidence for the COM port to count.
       const hasMobileEvidence = isMobilePortEvidence(comVid, comPid);
       if (hasMobileEvidence) {
-      // A serial endpoint may only be promoted to a LOW-LEVEL mode (preloader /
-      // EDL) when its PnP chain / serialport metadata proves a mobile VID *and*
-      // PID. Without that evidence it is reported as a bare "serial" endpoint,
-      // which is deliberately NOT a wizard target — so the wizard keeps waiting
-      // for a real phone instead of attaching to a generic COM3.
-      const pnpRowForCom = pnp.find((d) =>
-        d.friendlyName.toUpperCase().includes(com.port!)
-      );
-      const comIds = pnpRowIds(pnpRowForCom ?? null);
-      const comVid = comIds.vid ?? vidFromSerialEntry(com.entry ?? {});
-      const comPid = comIds.pid ?? pidFromSerialEntry(com.entry ?? {});
-      const vendorProven = isMobilePortEvidence(comVid, comPid);
-
-      const chipset =
-        (com.entry ? serialHint(com.entry) : "Unknown") !== "Unknown"
-          ? serialHint(com.entry!)
-          : inferChipsetFromName(pnpRowForCom?.friendlyName ?? "");
-      const isMtk = chipset === "MediaTek";
-      const isQcom = chipset === "Qualcomm";
-      // A vendor-hinted MediaTek/Qualcomm endpoint is genuine phone hardware even
-      // when the driver hides VID/PID; a bare unrecognised port stays "serial".
-      const hintedMobile =
-        com.entry != null && serialHint(com.entry) !== "Unknown";
-      const provenMobile = hasMobileEvidence || hintedMobile;
-      const mode: HardwareMode =
-        !provenMobile ? "serial" : isMtk ? "preloader" : isQcom ? "edl" : "serial";
-      const pnpRow = pnp.find((d) => d.friendlyName.toUpperCase().includes(com.port!));
-      best = {
-        mode,
-        label:
-          mode === "serial"
-            ? `${MODE_LABELS.serial} (${com.port})`
-            : `${MODE_LABELS[mode]} (${com.port})`,
-        connected: true,
-        vid: comVid,
-        pid: comPid,
-        vidHex: comVid !== null ? hex4(comVid) : null,
-        pidHex: comPid !== null ? hex4(comPid) : null,
-        port: com.port,
-        chipset,
-        deviceInstanceId: pnpRow?.instanceId ?? null,
-        deviceName:
-          com.entry?.friendlyName ??
-          pnpRow?.friendlyName ??
-          com.entry?.manufacturer ??
-          null,
-        listenerActive,
-        requiresKeyCombo: isMtk || isQcom,
-        lowLevel: isLowLevel(mode),
-        lastScanAt,
-      };
+        const chipset =
+          (com.entry ? serialHint(com.entry) : "Unknown") !== "Unknown"
+            ? serialHint(com.entry!)
+            : inferChipsetFromName(pnpRowForCom?.friendlyName ?? "");
+        const isMtk = chipset === "MediaTek";
+        const isQcom = chipset === "Qualcomm";
+        const hintedMobile =
+          com.entry != null && serialHint(com.entry) !== "Unknown";
+        const provenMobile = hasMobileEvidence || hintedMobile;
+        const mode: HardwareMode =
+          !provenMobile ? "serial" : isMtk ? "preloader" : isQcom ? "edl" : "serial";
+        const pnpRow = pnp.find((d) => d.friendlyName.toUpperCase().includes(com.port!));
+        best = {
+          mode,
+          label:
+            mode === "serial"
+              ? `${MODE_LABELS.serial} (${com.port})`
+              : `${MODE_LABELS[mode]} (${com.port})`,
+          connected: true,
+          vid: comVid,
+          pid: comPid,
+          vidHex: comVid !== null ? hex4(comVid) : null,
+          pidHex: comPid !== null ? hex4(comPid) : null,
+          port: com.port,
+          chipset,
+          deviceInstanceId: pnpRow?.instanceId ?? null,
+          deviceName:
+            com.entry?.friendlyName ??
+            pnpRow?.friendlyName ??
+            com.entry?.manufacturer ??
+            null,
+          listenerActive,
+          requiresKeyCombo: isMtk || isQcom,
+          lowLevel: isLowLevel(mode),
+          lastScanAt,
+        };
+      }
     }
   }
 

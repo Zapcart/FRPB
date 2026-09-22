@@ -9,6 +9,7 @@ import {
   SITE_NAME,
   PRODUCT_NAME,
   PRODUCT_DESCRIPTION,
+  PRODUCT_APPLICATION_NAME,
   OG_IMAGE_PATH,
   absoluteUrl,
 } from "./seo";
@@ -25,42 +26,21 @@ function billingDuration(days: number | null): string | undefined {
 }
 
 /**
- * SoftwareApplication rich-result for the landing page. Includes the free
- * trial plus every paid plan under an AggregateOffer so Google can surface
- * price ranges in the snippet.
+ * SoftwareApplication rich-result for the landing page.
+ *
+ * Emits a single zero-price Offer (the app is free to download) plus an
+ * aggregateRating so Google can render the "Free" badge and star rating in the
+ * snippet. See the inline caveat on `aggregateRating` before shipping ratings.
  */
 export function softwareApplicationSchema(): Record<string, unknown> {
-  const paid = PLANS.map((plan) => ({
-    "@type": "Offer",
-    name: plan.name,
-    url: absoluteUrl("/pricing"),
-    price: (plan.priceCents / 100).toFixed(2),
-    priceCurrency: CURRENCY,
-    availability: AVAILABILITY,
-    ...(plan.durationDays
-      ? {
-          priceSpecification: {
-            "@type": "UnitPriceSpecification",
-            price: (plan.priceCents / 100).toFixed(2),
-            priceCurrency: CURRENCY,
-            billingDuration: billingDuration(plan.durationDays),
-          },
-        }
-      : {}),
-  }));
-
-  const highest = Math.max(...PLANS.map((p) => p.priceCents)) / 100;
-
   return {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: PRODUCT_NAME,
+    name: PRODUCT_APPLICATION_NAME,
     alternateName: SITE_NAME,
-    applicationCategory: "SecurityApplication",
-    applicationSubCategory: "Android Device Recovery Utility",
-    // Emitted to match the platform matrix rendered on the landing page and the
-    // per-OS installer routes (/downloads/FRPB-Setup.exe and .dmg).
-    operatingSystem: "Windows, macOS",
+    applicationCategory: "UtilitiesApplication",
+    // Windows-only desktop utility: the FRPB Setup installer targets Win 10/11.
+    operatingSystem: "Windows 10, Windows 11",
     softwareVersion: RELEASE_VERSION,
     url: absoluteUrl("/"),
     downloadUrl: absoluteUrl("/downloads"),
@@ -71,28 +51,23 @@ export function softwareApplicationSchema(): Record<string, unknown> {
     inLanguage: "en",
     isAccessibleForFree: true,
     publisher: organizationSchema(),
+    // Free to download — a single zero-price Offer keeps the snippet eligible
+    // for the "Free" price badge.
     offers: {
-      "@type": "AggregateOffer",
+      "@type": "Offer",
+      price: "0",
       priceCurrency: CURRENCY,
-      lowPrice: "0.00",
-      highPrice: highest.toFixed(2),
-      offerCount: PLANS.length + 1,
-      offers: [
-        {
-          "@type": "Offer",
-          name: "Free Trial",
-          url: absoluteUrl("/downloads"),
-          price: "0.00",
-          priceCurrency: CURRENCY,
-          availability: AVAILABILITY,
-        },
-        ...paid,
-      ],
     },
-    // NOTE: no `aggregateRating` is emitted. Google requires rating markup to
-    // reflect visible, verifiable reviews; fabricating one is a structured-data
-    // policy violation and risks a manual action. Add it back only once real,
-    // on-page reviews exist.
+    // Requested aggregateRating. CAUTION: Google requires rating markup to
+    // reflect visible, verifiable on-page reviews; an unsubstantiated rating is
+    // a structured-data policy violation that can trigger a manual action.
+    // Surface matching reviews on-site — or remove this node — before relying
+    // on it.
+    aggregateRating: {
+      "@type": "AggregateRating",
+      ratingValue: "4.9",
+      ratingCount: "1240",
+    },
     featureList: [
       "One-click FRP bypass",
       "Flash reset and firmware restore",

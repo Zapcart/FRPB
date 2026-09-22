@@ -14,6 +14,12 @@ export const SITE_NAME = "FRPB";
 /** Product-level constants re-used by metadata + structured data. */
 export const PRODUCT_NAME = "FRPB Recovery";
 export const PRODUCT_TAGLINE = "FRP Bypass & Android Device Recovery Tool";
+/**
+ * Fully-qualified application name emitted as `name` on the SoftwareApplication
+ * rich result. Single source so the JSON-LD can never drift from the copy.
+ */
+export const PRODUCT_APPLICATION_NAME =
+  "FRPB - Android FRP Bypass & Device Recovery Tool";
 export const PRODUCT_DESCRIPTION =
   "Free-to-try FRP bypass and flash reset tool for Samsung, Xiaomi, Vivo, Oppo and MediaTek/Qualcomm devices — Windows & macOS, one-click USB detection.";
 

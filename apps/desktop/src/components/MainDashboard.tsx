@@ -252,10 +252,6 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="hidden items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 sm:flex">
-              <Cpu className="h-3.5 w-3.5 text-slate-400" />
-              <span className="font-mono">{profile.key}</span>
-            </div>
             <button
               onClick={() => {
                 if (updaterStatus.state === "READY") {
