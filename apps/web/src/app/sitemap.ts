@@ -5,6 +5,7 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/seo";
 import { BLOG_POSTS } from "@/lib/blog";
+import { BRAND_PAGE_ROUTES } from "@/config/brand-pages";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
@@ -60,6 +61,16 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
   ];
 
+  // Programmatic brand-specific landing pages (Samsung, Xiaomi MIUI/HyperOS,
+  // Vivo/Oppo/Realme, Qualcomm EDL). High-intent long-tail targets, so they
+  // share the /downloads priority and are expected to change weekly.
+  const brandPages: MetadataRoute.Sitemap = BRAND_PAGE_ROUTES.map((route) => ({
+    url: `${SITE_URL}${route.path}`,
+    lastModified: now,
+    changeFrequency: route.changeFrequency,
+    priority: route.priority,
+  }));
+
   const posts: MetadataRoute.Sitemap = BLOG_POSTS.map((post) => ({
     url: `${SITE_URL}/blog/${post.slug}`,
     lastModified: new Date(post.dateModified),
@@ -73,5 +84,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // of them canonicalises to `/blog` (see the blog index metadata), so listing
   // them would only submit duplicate, non-canonical URLs. Keeping the sitemap
   // canonical-only concentrates crawl budget on URLs Google can actually index.
-  return [...pages, ...posts];
+  return [...pages, ...brandPages, ...posts];
 }
