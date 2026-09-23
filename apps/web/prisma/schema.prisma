@@ -16,7 +16,6 @@ datasource db {
 
 enum PlanType {
   MONTH_1
-  YEAR_1
   LIFETIME
 }
 

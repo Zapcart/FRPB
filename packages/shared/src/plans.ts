@@ -3,7 +3,7 @@
 // checkout sessions, webhook processor and the desktop app.
 // Mirror of the Prisma `Plan` rows — keep in sync with prisma/seed.ts.
 
-export const PLAN_TYPE_VALUES = ["MONTH_1", "YEAR_1", "LIFETIME"] as const;
+export const PLAN_TYPE_VALUES = ["MONTH_1", "LIFETIME"] as const;
 export type PlanSlug = (typeof PLAN_TYPE_VALUES)[number];
 
 /** Supported display/charge currencies. */
@@ -75,31 +75,13 @@ export const PLANS: readonly PlanDefinition[] = [
     ],
   },
   {
-    slug: "YEAR_1",
-    name: "1-Year Plan",
-    priceCents: 5000,   // $50
-    currency: "USD",
-    priceInr: 490000,   // ₹4,900
-    usd: 50,
-    inr: 4900,
-    durationDays: 365,
-    deviceLimit: 3,
-    features: [
-      "Full device recovery toolkit",
-      "Driver Center + recovery guides",
-      "3 device activations",
-      "Priority email support",
-      "All feature updates",
-    ],
-  },
-  {
     slug: "LIFETIME",
     name: "Lifetime Plan",
-    priceCents: 10000,  // $100
+    priceCents: 15000,  // $150
     currency: "USD",
-    priceInr: 999900,   // ₹9,999
-    usd: 100,
-    inr: 9999,
+    priceInr: 1399900,  // ₹13,999
+    usd: 150,
+    inr: 13999,
     durationDays: null,
     deviceLimit: 5,
     features: [

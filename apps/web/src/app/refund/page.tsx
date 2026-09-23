@@ -1,13 +1,13 @@
 // FRPB — Refund Policy
 // Server component. Static legal page explaining our refund policy for
-// monthly, yearly and lifetime plans.
+// monthly and lifetime plans.
 
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
   title: "Refund Policy",
   description:
-    "FRPB refund policy — what is refundable, when, and how to request a refund for monthly, yearly and lifetime plans.",
+    "FRPB refund policy — what is refundable, when, and how to request a refund for monthly and lifetime plans.",
   path: "/refund",
 });
 
@@ -73,10 +73,10 @@ export default function RefundPolicyPage() {
 
           <section>
             <h2 className="text-lg font-bold text-ink">
-              2. Monthly and Yearly Subscriptions
+              2. Monthly Subscriptions
             </h2>
             <p>
-              For monthly and yearly subscription plans:
+              For monthly subscription plans:
             </p>
             <ul className="mt-3 list-disc pl-6 space-y-1 text-slate-600">
               <li>
@@ -95,7 +95,7 @@ export default function RefundPolicyPage() {
                 a few business days.
               </li>
               <li>
-                After the seven-day window, monthly and yearly subscriptions are not
+                After the seven-day window, monthly subscriptions are not
                 eligible for a refund. Cancellations after this window stop future
                 renewals but do not generate a refund for fees already paid.
               </li>

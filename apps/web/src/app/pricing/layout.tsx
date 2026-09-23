@@ -9,7 +9,7 @@ export const metadata = pageMetadata({
   // price hook is never truncated in the SERP.
   title: "FRP Bypass Tool Pricing (2026) — Plans from ₹1,900",
   description:
-    "FRP bypass tool pricing for 2026: monthly, yearly and lifetime licenses with instant activation and a 7-day money-back guarantee. Pay in USD or INR.",
+    "FRP bypass tool pricing for 2026: monthly and lifetime licenses with instant activation and a 7-day money-back guarantee. Pay in USD or INR.",
   path: "/pricing",
   keywords: [
     "frp bypass tool price",

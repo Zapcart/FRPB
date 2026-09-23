@@ -13,12 +13,11 @@
 //
 //   Plan      INR        USD
 //   Month     ₹1,900     $20
-//   Year      ₹4,900     $50
-//   Lifetime  ₹9,999     $100
+//   Lifetime  ₹13,999    $150
 //
 // GATEWAY:
 //   Razorpay Standard Web Checkout is the single, exclusive payment gateway.
-//   Every tier settles in INR (₹1,900 / ₹4,900 / ₹9,999) through Razorpay;
+//   Every tier settles in INR (₹1,900 / ₹13,999) through Razorpay;
 //   the USD figures below are display-only reference prices.
 
 import { PLANS as SHARED_PLANS, type PlanSlug } from "@frpb/shared";
@@ -33,7 +32,7 @@ export interface DualPlan {
   /** Shared PlanSlug — the value stored on PaymentOrder.planId / License.planId. */
   slug: PlanSlug;
   /** Stable per-tier receipt tag used by the Razorpay order notes. */
-  orderPlanId: "MONTHLY" | "YEARLY" | "LIFETIME";
+  orderPlanId: "MONTHLY" | "LIFETIME";
   name: string;
   /** Display + charge amount in whole rupees. */
   inr: number;
@@ -67,27 +66,11 @@ export const DUAL_PLANS: readonly DualPlan[] = [
     ],
   },
   {
-    slug: "YEAR_1",
-    orderPlanId: "YEARLY",
-    name: "1 Year Plan",
-    inr: 4900,
-    usd: 50,
-    durationDays: 365,
-    deviceLimit: 3,
-    features: [
-      "Full device recovery toolkit",
-      "Driver Center + recovery guides",
-      "3 device activations",
-      "Priority email support",
-      "All feature updates",
-    ],
-  },
-  {
     slug: "LIFETIME",
     orderPlanId: "LIFETIME",
     name: "Lifetime Plan",
-    inr: 9999,
-    usd: 100,
+    inr: 13999,
+    usd: 150,
     durationDays: null,
     deviceLimit: 5,
     features: [
@@ -142,7 +125,7 @@ export function getDualPlan(slug: string): DualPlan | null {
   return DUAL_PLANS.find((p) => p.slug === needle) ?? null;
 }
 
-/** Resolve a plan by its public order tag (MONTHLY | YEARLY | LIFETIME). */
+/** Resolve a plan by its public order tag (MONTHLY | LIFETIME). */
 export function getDualPlanByOrderId(orderPlanId: string): DualPlan | null {
   const needle = `${orderPlanId ?? ""}`.trim().toUpperCase();
   return DUAL_PLANS.find((p) => p.orderPlanId === needle) ?? null;
@@ -160,12 +143,12 @@ export function providerForDualCurrency(_currency: DualCurrency): DualProvider {
 
 // ─── Strict amount locks ─────────────────────────────────────────────────────
 
-/** Amounts Razorpay will ever charge in INR (₹1900 / ₹4900 / ₹9999). */
+/** Amounts Razorpay will ever charge in INR (₹1900 / ₹13999). */
 export const ALLOWED_INR_AMOUNTS: ReadonlySet<number> = new Set(
   DUAL_PLANS.map((p) => p.inr)
 );
 
-/** Reference USD price points ($20 / $50 / $100) — display only. */
+/** Reference USD price points ($20 / $150) — display only. */
 export const ALLOWED_USD_AMOUNTS: ReadonlySet<number> = new Set(
   DUAL_PLANS.map((p) => p.usd)
 );

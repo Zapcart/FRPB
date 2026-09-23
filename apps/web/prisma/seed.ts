@@ -9,14 +9,14 @@ import { devTestKeysAllowed } from "../src/lib/license/test-key";
 const prisma = new PrismaClient();
 
 // slug typed as the Prisma PlanType enum values via string literals
-type PlanSlug = "MONTH_1" | "YEAR_1" | "LIFETIME";
+type PlanSlug = "MONTH_1" | "LIFETIME";
 
 /**
  * Plan rows are DERIVED from the shared PLANS definition.
  *
  * This file previously held a third hardcoded copy of the prices, which had
  * already drifted from the other two (it still carried the old 1999¢ / 4999¢ /
- * 9999¢ rates after the storefront moved to $20 / $50 / $100). Deriving them
+ * 9999¢ rates after the storefront moved to $20 / $150). Deriving them
  * means a price change is made in ONE place and the database, the storefront
  * and the checkout payload can no longer disagree.
  */

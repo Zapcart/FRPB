@@ -95,7 +95,6 @@ function verifyExpiryMath(): void {
 
   const expected: Record<PlanSlug, number | null> = {
     MONTH_1: 30,
-    YEAR_1: 365,
     LIFETIME: null,
   };
 
@@ -117,7 +116,6 @@ function verifyExpiryMath(): void {
 
   // Guard: the plan table must declare the durations the business requires.
   check("MONTH_1.durationDays === 30", getPlanDefinition("MONTH_1").durationDays === 30);
-  check("YEAR_1.durationDays === 365", getPlanDefinition("YEAR_1").durationDays === 365);
   check("LIFETIME.durationDays === null", getPlanDefinition("LIFETIME").durationDays === null);
 }
 
@@ -146,18 +144,18 @@ function verifyExpiryRejection(): void {
 function verifyEmailPayload(): void {
   section("4. Transactional email payload");
 
-  const expiresAt = addDays(new Date(), 365);
+  const expiresAt = addDays(new Date(), 30);
   const { subject, html } = licenseDeliveredTemplate({
     licenseKey: "FRPB-ABCD-EFGH-JKLM",
-    planName: "1-Year Plan",
+    planName: "1-Month Plan",
     expiresAt,
     downloadUrl: "https://frpb.in/downloads",
     quickStartPdfUrl: "https://frpb.in/guides/frpb-quick-start.pdf",
   });
 
-  check("subject names the plan", subject.includes("1-Year Plan"), subject);
+  check("subject names the plan", subject.includes("1-Month Plan"), subject);
   check("body contains the license key", html.includes("FRPB-ABCD-EFGH-JKLM"));
-  check("body contains the plan name", html.includes("1-Year Plan"));
+  check("body contains the plan name", html.includes("1-Month Plan"));
   check(
     "body contains the expiry date",
     html.includes(expiresAt.toISOString().slice(0, 10)),

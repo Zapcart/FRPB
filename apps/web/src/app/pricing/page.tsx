@@ -109,14 +109,13 @@ const PRICING_FAQS = [
 // Lifetime plans render a one-time label only — never a recurring interval.
 const BILLING_SUFFIX: Record<PlanSlug, Record<Currency, string>> = {
   MONTH_1: { USD: "/ month", INR: "/ महीना" },
-  YEAR_1: { USD: "/ year", INR: "/ साल" },
   LIFETIME: { USD: "one-time", INR: "एक बार" },
 };
 
 /**
  * The pricing grid renders from DUAL_PLANS (the authoritative tier rates) rather
  * than the shared legacy PLANS, so the displayed price is always one of
- * ₹1,900/$20, ₹4,900/$50 or ₹9,999/$100 — matching exactly the INR amount
+ * ₹1,900/$20 or ₹13,999/$150 — matching exactly the INR amount
  * Razorpay charges at checkout.
  */
 const PLAN_CARDS = DUAL_PLANS.map((plan) => ({
@@ -305,9 +304,9 @@ export default function PricingPage() {
           )}
         </div>
 
-        <div className="mt-12 grid gap-6 md:grid-cols-3">
+        <div className="mx-auto mt-12 grid max-w-4xl gap-6 grid-cols-1 md:grid-cols-2">
           {PLAN_CARDS.map((card) => {
-            const popular = card.slug === "YEAR_1";
+            const popular = card.slug === "LIFETIME";
             const alt = alternatePrice(card.slug);
             return (
               <div

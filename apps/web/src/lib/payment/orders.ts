@@ -61,7 +61,7 @@ export async function expireStaleOrders(client: PrismaClient = prisma): Promise<
  * Resolve the Prisma `Plan` row for a slug, creating it from the DUAL_PLANS
  * configuration when the seed has not run. This keeps a license FK always
  * pointing at a valid Plan row whose stored prices match the tiers actually
- * charged (₹1,900 / ₹4,900 / ₹9,999).
+ * charged (₹1,900 / ₹13,999).
  */
 async function ensurePlanRow(planSlug: PlanSlug, client: PrismaClient = prisma) {
   const existing = await client.plan.findUnique({ where: { slug: planSlug } });

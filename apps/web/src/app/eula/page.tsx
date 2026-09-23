@@ -78,7 +78,7 @@ export default function EULAPage() {
               scope of your use is governed by the plan you have purchased:
             </p>
             <ul className="mt-3 list-disc pl-6 space-y-1 text-slate-600">
-              <li>A monthly or yearly plan permits use on the number of devices
+              <li>A monthly plan permits use on the number of devices
                 permitted by that plan at any one time.</li>
               <li>A lifetime plan permits perpetual use under the same device limits,
                 subject to the restrictions below.</li>

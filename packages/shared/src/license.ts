@@ -75,7 +75,7 @@ export type UnbindRequest = z.infer<typeof UnbindRequestSchema>;
 // ─── Checkout request (Web → POST /api/v1/checkout) ────────────────────────
 
 export const CheckoutRequestSchema = z.object({
-  planSlug: z.enum(["MONTH_1", "YEAR_1", "LIFETIME"]),
+  planSlug: z.enum(["MONTH_1", "LIFETIME"]),
   /** Currency for display — defaults to USD. INR rails through Direct UPI. */
   currency: z.enum(["USD", "INR"]).optional().default("USD"),
   successUrl: z.string().url().optional(),

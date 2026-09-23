@@ -61,7 +61,7 @@ sequenceDiagram
     participant D as Desktop App Electron
 
     U->>W: Visit / (Landing + Pricing)
-    U->>W: Select plan (1-Month / 1-Year / Lifetime)
+    U->>W: Select plan (1-Month / Lifetime)
     W->>P: Create Checkout Session (planId, userId)
     P-->>U: Redirect to payment provider
     U->>P: Complete payment
@@ -208,7 +208,7 @@ frpb/
 
 Design notes:
 
-- **License device limit**: `deviceLimit` (1 for 1-Month, 3 for 1-Year, 5 for Lifetime by default) — configurable in [`packages/shared/src/plans.ts`](../packages/shared/src/plans.ts).
+- **License device limit**: `deviceLimit` (1 for 1-Month, 5 for Lifetime by default) — configurable in [`packages/shared/src/plans.ts`](../packages/shared/src/plans.ts).
 - **Hardware binding**: `LicenseDevice` rows store `hardwareId` + `deviceName`; verification registers new devices up to `deviceLimit`.
 - **Online-only enforcement**: `lastVerifiedAt` is written on every successful `/verify` call; `isActive` derived from `status` + `expiresAt`.
 - **Payments**: both Stripe and Razorpay normalized into one `Payment` model via a `provider` enum.
@@ -228,7 +228,6 @@ datasource db {
 // ─── Enums ────────────────────────────────────────────────
 enum PlanType {
   MONTH_1
-  YEAR_1
   LIFETIME
 }
 
@@ -274,7 +273,7 @@ model User {
 model Plan {
   id          String    @id @default(cuid())
   slug        PlanType  @unique
-  name        String    // "1-Month Plan", "1-Year Plan", "Lifetime Plan"
+  name        String    // "1-Month Plan", "Lifetime Plan"
   priceCents  Int
   currency    String    @default("USD")
   durationDays Int?     // null = lifetime
@@ -1418,7 +1417,7 @@ autoUpdater.autoInstallOnAppQuit = true;
 // apps/desktop/src/lib/ipc.d.ts
 export interface LicenseProfile {
   key: string;
-  plan: "MONTH_1" | "YEAR_1" | "LIFETIME";
+  plan: "MONTH_1" | "LIFETIME";
   planName: string;
   expiresAt: string | null;
   deviceLimit: number;

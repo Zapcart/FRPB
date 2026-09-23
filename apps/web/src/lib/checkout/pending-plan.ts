@@ -6,7 +6,7 @@
 // an external inbox, and any intermediate navigation drops the query string.
 // Persisting the intent in localStorage makes the funnel survive all of that.
 //
-// Slugs are the REAL PlanSlug values (MONTH_1 | YEAR_1 | LIFETIME) so the
+// Slugs are the REAL PlanSlug values (MONTH_1 | LIFETIME) so the
 // /checkout page's validation accepts them instead of bouncing to /pricing.
 
 import { PLAN_TYPE_VALUES, type PlanSlug } from "@frpb/shared";

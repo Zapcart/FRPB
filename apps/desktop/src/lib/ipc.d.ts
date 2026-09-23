@@ -13,7 +13,7 @@ export type { DeviceAutoDetected, ModelCatalogEntry };
 
 export interface LicenseProfile {
   key: string;
-  plan: "MONTH_1" | "YEAR_1" | "LIFETIME";
+  plan: "MONTH_1" | "LIFETIME";
   planName: string;
   expiresAt: string | null;
   deviceLimit: number;

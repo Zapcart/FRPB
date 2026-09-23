@@ -159,13 +159,11 @@ const BENTO: readonly BentoFeature[] = [
 
 const PRICING_NOTES: Record<string, string> = {
   MONTH_1: "per month",
-  YEAR_1: "per year",
   LIFETIME: "one-time",
 };
 
 const PLAN_BADGES: Record<string, string> = {
-  YEAR_1: "MOST POPULAR",
-  LIFETIME: "BEST VALUE",
+  LIFETIME: "MOST POPULAR",
 };
 
 export const metadata: Metadata = {
@@ -666,9 +664,9 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="mt-14 grid gap-6 lg:grid-cols-3">
+          <div className="mx-auto mt-14 grid max-w-4xl gap-6 grid-cols-1 md:grid-cols-2">
             {PLANS.map((plan) => {
-              const popular = plan.slug === "YEAR_1";
+              const popular = plan.slug === "LIFETIME";
               const badge = PLAN_BADGES[plan.slug];
               return (
                 <div

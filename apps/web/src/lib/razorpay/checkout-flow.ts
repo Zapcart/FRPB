@@ -19,7 +19,7 @@ import {
 } from "./client";
 
 export interface StartCheckoutParams {
-  /** Shared plan slug (MONTH_1 | YEAR_1 | LIFETIME). */
+  /** Shared plan slug (MONTH_1 | LIFETIME). */
   planSlug: string;
   /** Buyer email — required by the create-order route to bind the license. */
   email?: string | null;
