@@ -1,0 +1,19 @@
+# Netlify build configuration (repository root).
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# SECRETS SCANNING
+# ─────────────────────────────────────────────────────────────────────────────
+# The web app ships several intentionally-PUBLIC `NEXT_PUBLIC_*` values. Next.js
+# inlines these into the client bundle at build time (they are read by browser
+# code, so they cannot be kept server-side). Netlify's secret scanner treats the
+# VALUE of any environment variable whose NAME looks sensitive (i.e. contains
+# "KEY"/"SECRET") as a secret, then fails the build if that value is found in the
+# build output. That produces false positives for client-side public keys.
+#
+# We therefore omit ONLY those specific public keys from scanning. Every genuine
+# server secret (DATABASE_URL, RAZORPAY_KEY_SECRET, ADMIN_LICENSE_KEY,
+# CRON_SECRET, RESEND_API_KEY, UPSTASH_REDIS_REST_TOKEN, POSTHOG_API_KEY,
+# SUPABASE service-role key, …) remains fully scanned and must never appear in
+# the repository or build output.
+[build]
+  environment = { SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_ANON_KEY,NEXT_PUBLIC_POSTHOG_KEY,NEXT_PUBLIC_RAZORPAY_KEY_ID" }
