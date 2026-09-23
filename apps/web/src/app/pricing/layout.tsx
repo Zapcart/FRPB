@@ -7,9 +7,9 @@ import { pageMetadata } from "@/lib/seo";
 export const metadata = pageMetadata({
   // Keyword-first + year-qualified; 50 chars before the "| FRPB" template so the
   // price hook is never truncated in the SERP.
-  title: "FRP Bypass Tool Pricing (2026) — Plans from ₹1,900",
+  title: "FRP Bypass Tool Pricing (2026) — Plans from $20",
   description:
-    "FRP bypass tool pricing for 2026: monthly and lifetime licenses with instant activation and a 7-day money-back guarantee. Pay in USD or INR.",
+    "FRP bypass tool pricing for 2026: monthly and lifetime licenses with instant activation and a 7-day money-back guarantee. All plans are charged in USD.",
   path: "/pricing",
   keywords: [
     "frp bypass tool price",

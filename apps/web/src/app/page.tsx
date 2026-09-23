@@ -710,10 +710,6 @@ export default function HomePage() {
                       {PRICING_NOTES[plan.slug]}
                     </span>
                   </div>
-                  {/* Cross-currency hint so the INR price is never a surprise. */}
-                  <p className="mt-1 text-xs font-medium text-slate-400">
-                    or ₹{new Intl.NumberFormat("en-IN").format(plan.inr)} (INR)
-                  </p>
                   <p className="mt-1 text-xs text-slate-400">
                     {plan.deviceLimit} device{plan.deviceLimit === 1 ? "" : "s"} ·{" "}
                     {plan.durationDays ? `${plan.durationDays} days` : "Lifetime access"}
