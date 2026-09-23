@@ -627,6 +627,22 @@ export async function runFrpBypass(
     };
   }
 
+  // Build context early so every step has access to the same runtime values.
+  const chipset = options.chipset || "unknown";
+  const brand = options.brand || "unknown";
+  const model = options.model || "unknown";
+  const androidVersion = options.androidVersion || 10;
+
+  const context: BypassContext = {
+    device: null,
+    mode: detectTransportMode({ chipset, brand, androidVersion, model }),
+    brand,
+    model,
+    chipset,
+    androidVersion,
+    progressCb,
+  };
+
   // Step 2: Verify device is actually connected before attempting bypass.
   // Without a real device, there is nothing to unlock — fail fast with a clear
   // message instead of pretending the operation succeeded.
@@ -640,7 +656,6 @@ export async function runFrpBypass(
         recoverable: true,
       };
     }
-    // Populate context with the detected device so downstream steps can use it.
     context.device = detectedDevice;
   }
 
@@ -680,25 +695,7 @@ export async function runFrpBypass(
     }
   }
 
-  // Step 3: Determine transport mode and execute
-  const chipset = options.chipset || "unknown";
-  const brand = options.brand || "unknown";
-  const model = options.model || "unknown";
-  const androidVersion = options.androidVersion || 10;
-
-  const context: BypassContext = {
-    device: null,
-    mode: detectTransportMode({ chipset, brand, androidVersion, model }),
-    brand,
-    model,
-    chipset,
-    androidVersion,
-    progressCb,
-  };
-
-  context.progressCb("detect-transport", 5, `Detected transport mode: ${context.mode}`);
-
-  // Step 3: Route to appropriate method
+  // ── Step 3: Route to appropriate method ──────────────────────────────────
   switch (options.method) {
     case "mtk-brom":
     case "download-mode":

@@ -82,11 +82,9 @@ export default function ActivationScreen({ cached, onActivated }: ActivationScre
   const [verifying, setVerifying] = useState(false);
   const [activated, setActivated] = useState<LicenseProfile | null>(null);
 
-  // Saved key from a previous activation on this machine, offered as an
-  // opt-in convenience rather than being written into the field automatically.
+  // Saved key from a previous activation on this machine, kept in encrypted cache
+  // for diagnostics only — NEVER surfaced as a fillable field or a follow-up hint.
   const previousKey = cached?.key ?? "";
-  const canOfferPreviousKey =
-    previousKey.length > 0 && key.length === 0 && !verifying && !activated;
 
   // Dev-only hint: the master test key exists solely for local browser preview
   // (Vite dev server without Electron). `import.meta.env.DEV` is statically
@@ -191,17 +189,6 @@ export default function ActivationScreen({ cached, onActivated }: ActivationScre
                   className="frpb-input py-2.5 pl-10 pr-3 font-mono"
                 />
               </div>
-
-              {canOfferPreviousKey && (
-                <button
-                  type="button"
-                  onClick={() => setKey(previousKey.toUpperCase())}
-                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 transition hover:text-brand-700"
-                >
-                  <KeyRound className="h-3 w-3" />
-                  Use the key activated on this machine previously
-                </button>
-              )}
 
               {error && (
                 <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-700">

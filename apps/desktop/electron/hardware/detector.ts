@@ -471,31 +471,52 @@ function readComPort(
   // survived the Bluetooth/virtual filter AND carry mobile VID/PID evidence.
   const ports = serialPorts().filter((p) => !isVirtualOrBluetoothPort(p));
 
-  // 1. Vendor-hinted serialport entry — but still require VID/PID evidence.
-  //    Metadata alone (e.g. "mediatek" in friendlyName) is not proof of a real
-  //    phone: a phantom driver entry or stale PnP row can carry the same string.
+  // 1. Vendor-hinted serialport entry — but require BOTH metadata hint AND a
+  //    matching PnP row so a phantom/virtual COM driver (no PnP device) cannot
+  //    masquerade as a phone just because its friendly name carries "mediatek".
   const hinted = ports.find((p) => serialHint(p) !== "Unknown");
   if (hinted?.path && isMobilePortEvidence(vidFromSerialEntry(hinted), pidFromSerialEntry(hinted))) {
-    return { port: hinted.path.toUpperCase(), entry: hinted };
+    const pnpRowForHinted = pnp.find((d) =>
+      !isRejectedPnpRow(d) &&
+      d.friendlyName.toUpperCase().includes(hinted.path!.toUpperCase())
+    );
+    if (pnpRowForHinted) {
+      return { port: hinted.path.toUpperCase(), entry: hinted };
+    }
   }
 
   // 2. PnP row for the exact VID/PID (its friendly name carries "(COMx)").
+  //    The row must be a real USB device — ROOT\\/SWD\\/BTHENUM enumerators are
+  //    rejected by isRejectedPnpRow and must never satisfy a phone COM lookup.
   if (preferVid != null) {
     const row =
       (preferPid != null ? findPnpFor(preferVid, preferPid, pnp) : null) ??
       findPnpByVendorHint(preferVid, pnp);
-    const m = row && /\((COM\d+)\)/i.exec(row.friendlyName);
-    if (m?.[1]) return { port: m[1].toUpperCase(), entry: null };
+    if (row && !isRejectedPnpRow(row)) {
+      const m = /\((COM\d+)\)/i.exec(row.friendlyName);
+      if (m?.[1]) return { port: m[1].toUpperCase(), entry: null };
+    }
   }
 
-  // 3. A serialport entry backed by a matching mobile VID + PID.
+  // 3. A serialport entry backed by a matching mobile VID + PID AND a real
+  //    PnP device (virtual/com0com drivers can fake VID/PID in metadata but
+  //    have no USB PnP row).
   const withVid = ports.find((p) =>
     isMobilePortEvidence(vidFromSerialEntry(p), pidFromSerialEntry(p))
   );
-  if (withVid?.path) return { port: withVid.path.toUpperCase(), entry: withVid };
+  if (withVid?.path) {
+    const pnpRowForVid = pnp.find((d) =>
+      !isRejectedPnpRow(d) &&
+      d.friendlyName.toUpperCase().includes(withVid.path!.toUpperCase())
+    );
+    if (pnpRowForVid) return { port: withVid.path.toUpperCase(), entry: withVid };
+  }
 
-  // 3b. PnP row whose Device Instance ID carries a matching mobile VID + PID.
+  // 3b. PnP row whose Device Instance ID carries a matching mobile VID + PID
+  //    AND whose Instance ID looks like a real USB device (ROOT\\/SWD\\/BTHENUM
+  //    enumerators must never satisfy a phone COM lookup).
   for (const d of pnp) {
+    if (isRejectedPnpRow(d)) continue;
     const { vid, pid } = pnpRowIds(d);
     if (!isMobilePortEvidence(vid, pid)) continue;
     const m = /\((COM\d+)\)/i.exec(d.friendlyName);
@@ -503,8 +524,9 @@ function readComPort(
   }
 
   // 4. Windows SERIALCOMM registry map — accepted only if the COM port maps to
-  //    a PnP row with matching mobile VID + PID (the registry alone cannot tell
-  //    us the vendor, and blindly trusting it is how a Bluetooth port got in).
+  //    a non-rejected PnP row with matching mobile VID + PID (the registry alone
+  //    cannot tell us the vendor, and blindly trusting it is how a Bluetooth port
+  //    got in).
   if (process.platform !== "win32") return { port: null, entry: null };
   try {
     const out = execSync("reg query HKLM\\HARDWARE\\DEVICEMAP\\SERIALCOMM", {
@@ -516,7 +538,9 @@ function readComPort(
     const com = comMatch?.[1] ? comMatch[1].toUpperCase() : null;
     if (!com) return { port: null, entry: null };
 
-    const row = pnp.find((d) => d.friendlyName.toUpperCase().includes(com));
+    const row = pnp.find(
+      (d) => !isRejectedPnpRow(d) && d.friendlyName.toUpperCase().includes(com)
+    );
     const { vid, pid } = pnpRowIds(row ?? null);
     if (!row || !isMobilePortEvidence(vid, pid)) return { port: null, entry: null };
     return { port: com, entry: null };
@@ -658,8 +682,11 @@ export function pollHardware(): HardwareSnapshot {
     const com = readComPort(pnp, null, null);
     const comIsVirtual = com.entry ? isVirtualOrBluetoothPort(com.entry) : false;
     if (com.port && !comIsVirtual) {
+      // Resolve the PnP row that owns this COM port — only accept it if the row
+      // is a real USB device (ROOT\\/SWD\\/BTHENUM rows must never satisfy a
+      // phone COM lookup, even when the registry/friendly name carries the port).
       const pnpRowForCom = pnp.find((d) =>
-        d.friendlyName.toUpperCase().includes(com.port!)
+        !isRejectedPnpRow(d) && d.friendlyName.toUpperCase().includes(com.port!)
       );
       const comIds = pnpRowIds(pnpRowForCom ?? null);
       const comVid = comIds.vid ?? vidFromSerialEntry(com.entry ?? {});
@@ -677,7 +704,10 @@ export function pollHardware(): HardwareSnapshot {
         const provenMobile = hasMobileEvidence || hintedMobile;
         const mode: HardwareMode =
           !provenMobile ? "serial" : isMtk ? "preloader" : isQcom ? "edl" : "serial";
-        const pnpRow = pnp.find((d) => d.friendlyName.toUpperCase().includes(com.port!));
+        const pnpRow = pnpRowForCom &&
+          !isRejectedPnpRow(pnpRowForCom)
+            ? pnpRowForCom
+            : null;
         best = {
           mode,
           label:

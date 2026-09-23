@@ -4,10 +4,12 @@
 //   body: { planId: string; amount?: number; currency?: string; userEmail?: string }
 //
 // Razorpay Standard Web Checkout is the single, exclusive payment gateway.
+// The storefront charges in USD only, so the currency is hardcoded here — never
+// taken from the client payload.
 // Flow:
-//   1. Resolve the DUAL_PLAN from `planId` and LOCK the amount server-side for
-//      the requested currency (INR → paise, USD → cents).
-//   2. Create a Razorpay order via the Orders API in that currency.
+//   1. Resolve the DUAL_PLAN from `planId` and LOCK the amount server-side to
+//      the USD tier rate in cents ($20 → 2000, $150 → 15000).
+//   2. Create a Razorpay order via the Orders API in USD.
 //   3. Persist a PENDING PaymentOrder carrying the Razorpay order id.
 //   4. Return { order_id, amount, currency } for the browser checkout modal.
 
@@ -16,7 +18,6 @@ import { preflight, withCorsResponse } from "@/lib/cors";
 import {
   getDualPlan,
   getDualPlanByOrderId,
-  isDualCurrency,
   razorpayAmount,
   type DualCurrency,
   type DualPlan,
@@ -29,8 +30,8 @@ import { normalizeEmail } from "@/lib/auth/user-identity";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** Razorpay requires the smallest chargeable amount of 100 paise (₹1). */
-const MIN_AMOUNT_PAISE = 100;
+/** Razorpay requires the smallest chargeable amount of 100 cents ($1 in USD). */
+const MIN_AMOUNT_UNITS = 100;
 
 const DB_UNAVAILABLE_MESSAGE =
   "We could not start your checkout because our database is temporarily unavailable. Please try again in a moment.";
@@ -93,18 +94,14 @@ async function handleCreateOrder(req: NextRequest): Promise<Response> {
     );
   }
 
-  // CURRENCY — only the two sanctioned currencies are accepted. A missing or
-  // unsupported value falls back to INR rather than charging an unintended
-  // currency; the value is upper-cased so "usd"/"inr" from the client resolve.
-  const currency: DualCurrency = isDualCurrency(body.currency)
-    ? (body.currency.trim().toUpperCase() as DualCurrency)
-    : "INR";
+  // CURRENCY — the storefront charges in USD only. Hardcoded server-side rather
+  // than trusted from the client payload.
+  const currency: DualCurrency = "USD";
 
-  // AMOUNT LOCK — always charge the server-resolved tier rate for the resolved
-  // currency (₹1,900 / ₹13,999 in paise, or $20 / $150 in cents), never the
-  // client-supplied value. `amount` is accepted only for a mismatch check.
+  // AMOUNT LOCK — always charge the server-resolved tier rate in USD cents
+  // ($20 → 2000, $150 → 15000), never a client-supplied value.
   const amountSubUnits = razorpayAmount(plan, currency);
-  if (amountSubUnits < MIN_AMOUNT_PAISE) {
+  if (amountSubUnits < MIN_AMOUNT_UNITS) {
     return NextResponse.json(
       { success: false, error: "The chargeable amount is below the gateway minimum." },
       { status: 400 }
@@ -112,7 +109,8 @@ async function handleCreateOrder(req: NextRequest): Promise<Response> {
   }
 
   // Resolve the customer email — explicit body value first, then the Supabase
-  // session. Required so the license can be issued and emailed on success.
+  // session. Checkout is gated behind authentication upstream, so a signed-in
+  // buyer always carries an email here and the license can be issued + emailed.
   let email = typeof body.userEmail === "string" ? body.userEmail.trim() : "";
   if (!email) {
     try {
@@ -124,12 +122,6 @@ async function handleCreateOrder(req: NextRequest): Promise<Response> {
         (err as Error)?.message ?? err
       );
     }
-  }
-  if (!email) {
-    return NextResponse.json(
-      { success: false, error: "An email address is required to issue your license." },
-      { status: 400 }
-    );
   }
   email = normalizeEmail(email);
 

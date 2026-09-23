@@ -4,6 +4,7 @@
 // isme low-level USB commands ke through device access possible hai.
 
 import { log } from "./logger";
+import { execSync } from "node:child_process";
 // node-usb@2.x sets `__esModule: true`, so a default import compiles to
 // `__importDefault(require("usb")).default` which is `undefined` under
 // esModuleInterop. Use a namespace import for the runtime value, and a

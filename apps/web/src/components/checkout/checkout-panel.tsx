@@ -1,9 +1,9 @@
 // FRPB — checkout panel (Razorpay Standard Web Checkout).
 //
-// The single purchase surface for every tier. The displayed amount comes from
-// `@/config/plans` (the authoritative tier table) and the *charged* amount is
-// re-derived server-side by /api/v1/checkout/create-order, so the two can never
-// diverge on the client.
+// The single purchase surface for every tier. Every plan is priced and charged
+// in USD, so the displayed amount comes from `@/config/plans` (the authoritative
+// tier table) and the *charged* amount is re-derived server-side by
+// /api/v1/checkout/create-order, so the two can never diverge on the client.
 
 "use client";
 
@@ -12,19 +12,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, Lock, ShieldCheck } from "lucide-react";
 import type { PlanSlug } from "@frpb/shared";
-import { formatDualInr, formatDualUsd, getDualPlan } from "@/config/plans";
+import { formatDualUsd, getDualPlan } from "@/config/plans";
 import { startRazorpayCheckout } from "@/lib/razorpay/checkout-flow";
 
 interface CheckoutPanelProps {
   planSlug: PlanSlug;
-  currency: "USD" | "INR";
   /** Signed-in buyer email (optional — Razorpay collects it when absent). */
   email?: string | null;
 }
 
 export default function CheckoutPanel({
   planSlug,
-  currency,
   email = null,
 }: CheckoutPanelProps) {
   const router = useRouter();
@@ -48,8 +46,7 @@ export default function CheckoutPanel({
     );
   }
 
-  const displayPrice =
-    currency === "INR" ? formatDualInr(plan.inr) : formatDualUsd(plan.usd);
+  const displayPrice = formatDualUsd(plan.usd);
 
   async function handlePay() {
     setError(null);
@@ -58,7 +55,6 @@ export default function CheckoutPanel({
 
     const result = await startRazorpayCheckout({
       planSlug: plan!.slug,
-      currency,
       email,
       onDismiss: () => setNotice("Checkout closed — no payment was taken."),
     });
@@ -95,7 +91,7 @@ export default function CheckoutPanel({
         </span>
       </div>
       <p className="mt-1 text-xs text-slate-400">
-        Charges settle in {currency} ({displayPrice}).
+        Charges settle in USD ({displayPrice}).
       </p>
 
       <ul className="mt-6 space-y-3 text-sm">

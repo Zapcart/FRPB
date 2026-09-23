@@ -126,8 +126,7 @@ export default function AuthView({
               Continuing with the{" "}
               <span className="font-bold">{badgePlan.name}</span>{" "}
               <span className="text-brand-600">
-                ({formatMoney(priceFor(badgePlan, "USD"), "USD")} /{" "}
-                {formatMoney(priceFor(badgePlan, "INR"), "INR")})
+                ({formatMoney(priceFor(badgePlan, "USD"), "USD")})
               </span>
               . You'll complete payment right after this step.
             </p>

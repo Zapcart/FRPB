@@ -121,10 +121,10 @@ export function organizationPageSchema(): Record<string, unknown> {
 /**
  * `Product` + `Offer` graph for the pricing page.
  *
- * Every plan is emitted in BOTH currencies the storefront actually charges
- * (USD and INR) so the price range is eligible for merchant/price rich results
- * regardless of the searcher's locale. Prices come from the shared PLANS
- * definition, so they can never drift from what Razorpay charges.
+ * Every plan is emitted in USD — the only currency the storefront charges — so
+ * the price range is eligible for merchant/price rich results. Prices come from
+ * the shared PLANS definition, so they can never drift from what Razorpay
+ * charges.
  */
 export function productSchema(): Record<string, unknown> {
   const offerFor = (
@@ -154,13 +154,9 @@ export function productSchema(): Record<string, unknown> {
     };
   };
 
-  const offers = PLANS.flatMap((plan) => [
-    offerFor(plan, plan.priceCents, CURRENCY),
-    offerFor(plan, plan.priceInr, "INR"),
-  ]);
+  const offers = PLANS.map((plan) => offerFor(plan, plan.priceCents, CURRENCY));
 
   const usd = PLANS.map((p) => p.priceCents / 100);
-  const inr = PLANS.map((p) => p.priceInr / 100);
 
   return {
     "@context": "https://schema.org",
@@ -178,12 +174,6 @@ export function productSchema(): Record<string, unknown> {
       highPrice: Math.max(...usd).toFixed(2),
       offerCount: offers.length,
       offers,
-    },
-    // Sibling currency range, surfaced so the INR storefront is represented too.
-    additionalProperty: {
-      "@type": "PropertyValue",
-      name: "INR price range",
-      value: `INR ${Math.min(...inr)}–${Math.max(...inr)}`,
     },
   };
 }

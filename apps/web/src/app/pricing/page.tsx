@@ -1,14 +1,15 @@
 // FRPB — pricing page
-// Renders the three plans from DUAL_PLANS with a USD / INR currency switcher.
+// Renders the two plans from DUAL_PLANS in a single native currency: USD.
 // Amounts come straight from the plan definition so the displayed price always
 // matches the amount Razorpay actually charges — never a derived FX conversion.
-// Razorpay Standard Web Checkout is the single, exclusive payment gateway:
-// every tier settles in INR, and the display currency is carried across to
-// /checkout?currency=… . Currency display only — no provider branding.
+// Razorpay Standard Web Checkout is the single, exclusive payment gateway and
+// every tier settles in USD ($20 / month, $150 one-time). Checkout is gated
+// behind authentication: guests are redirected to sign-up and the pending-plan
+// intent resumes the purchase for the selected plan automatically.
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -17,39 +18,23 @@ import {
   Loader2,
   ArrowRight,
   ShieldCheck,
-  Globe,
   Zap,
   Headphones,
   Lock,
   ChevronDown,
 } from "lucide-react";
-import {
-  PLANS,
-  formatMoney,
-  priceFor,
-  type Currency,
-  type PlanSlug,
-} from "@frpb/shared";
+import { type PlanSlug } from "@frpb/shared";
 import { createClient } from "@/lib/supabase/client";
 import JsonLd from "@/components/seo/json-ld";
 import { faqPageSchema, productSchema, breadcrumbSchema } from "@/lib/schema";
 import { savePendingPlan } from "@/lib/checkout/pending-plan";
-import {
-  resolveDefaultCurrency,
-  storeCurrency,
-} from "@/lib/checkout/currency";
 import {
   LEGAL_DISCLAIMER,
   LEGAL_EMAIL,
   SUPPORT_EMAIL,
   mailtoHref,
 } from "@/config/legal";
-import {
-  DUAL_PLANS,
-  formatDualInr,
-  formatDualUsd,
-  getDualPlan,
-} from "@/config/plans";
+import { DUAL_PLANS, formatDualUsd } from "@/config/plans";
 import { startRazorpayCheckout } from "@/lib/razorpay/checkout-flow";
 
 /**
@@ -106,23 +91,22 @@ const PRICING_FAQS = [
     a: "You are covered by a 7-day money-back guarantee. If FRPB cannot resolve your device, contact support and we will refund the purchase in full.",
   },
   {
-    q: "Can I pay in Indian Rupees?",
-    a: "Yes. Switch the currency toggle to INR (₹) and you will be charged in Indian Rupees through our secure checkout, which supports UPI, NetBanking, wallets and domestic as well as international cards.",
+    q: "Which currency will I be charged in?",
+    a: "All prices are charged in US Dollars (USD). International cards are accepted, and your bank converts the amount to your local currency at checkout.",
   },
 ] as const;
 
-// Billing interval suffix, keyed by plan slug + display currency.
-// Lifetime plans render a one-time label only — never a recurring interval.
-const BILLING_SUFFIX: Record<PlanSlug, Record<Currency, string>> = {
-  MONTH_1: { USD: "/ month", INR: "/ महीना" },
-  LIFETIME: { USD: "one-time", INR: "एक बार" },
+// Billing interval suffix, keyed by plan slug. All tiers are priced and charged
+// in USD; a lifetime plan renders a one-time label, never a recurring interval.
+const BILLING_SUFFIX: Record<PlanSlug, string> = {
+  MONTH_1: "/ month",
+  LIFETIME: "one-time",
 };
 
 /**
  * The pricing grid renders from DUAL_PLANS (the authoritative tier rates) rather
- * than the shared legacy PLANS, so the displayed price is always one of
- * ₹1,900/$20 or ₹13,999/$150 — matching exactly the INR amount
- * Razorpay charges at checkout.
+ * than the shared legacy PLANS, so the displayed price is always exactly $20 or
+ * $150 — matching the USD amount Razorpay charges at checkout.
  */
 const PLAN_CARDS = DUAL_PLANS.map((plan) => ({
   plan,
@@ -133,34 +117,13 @@ const PLAN_CARDS = DUAL_PLANS.map((plan) => ({
   durationDays: plan.durationDays,
 }));
 
-// Currency detection + persistence now live in @/lib/checkout/currency, which
-// layers PostHog geoip on top of the timezone/locale heuristic.
-
 export default function PricingPage() {
   const router = useRouter();
-  const [currency, setCurrency] = useState<Currency>("USD");
-  // True when the initial currency came from region detection (not the user).
-  const [autoDetected, setAutoDetected] = useState(false);
   // Plan currently being paid for (null = idle) — drives the button spinner.
   const [processingPlan, setProcessingPlan] = useState<PlanSlug | null>(null);
   // Inline feedback for the Razorpay flow (replaces the old method modal).
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
-
-  // Initialise the currency on mount: an explicit prior choice wins, else
-  // geo/locale detection (India → INR, rest of world → USD). Runs once, so it
-  // never fights an explicit user toggle afterwards.
-  useEffect(() => {
-    const { currency: initial, source } = resolveDefaultCurrency();
-    setCurrency(initial);
-    setAutoDetected(source !== "stored");
-  }, []);
-
-  function chooseCurrency(next: Currency) {
-    setCurrency(next);
-    setAutoDetected(false);
-    storeCurrency(next);
-  }
 
   // Accordion state — first question starts open so the section reads as
   // helpful content rather than a collapsed wall of headers.
@@ -171,21 +134,15 @@ export default function PricingPage() {
     PRICING_FAQS.map((f) => ({ question: f.q, answer: f.a }))
   );
 
-  /** The other currency's price, shown as a secondary "(~₹…)" hint. */
-  function alternatePrice(planSlug: PlanSlug): string | null {
-    const plan = getDualPlan(planSlug);
-    if (!plan) return null;
-    return currency === "USD" ? formatDualInr(plan.inr) : formatDualUsd(plan.usd);
-  }
-
   /**
-   * "Choose plan" / "Buy now" → run the Razorpay Standard Web Checkout flow.
+   * "Choose plan" / "Get lifetime access" → start the purchase funnel.
    *
-   * The order is created server-side (amount locked to the sanctioned INR tier
-   * rate), the Razorpay modal opens, and the captured signature is verified
-   * before any license is granted. The signed-in email is prefilled when
-   * available, and purchase intent is persisted so a sign-in round trip can
-   * resume cleanly.
+   * Payments are USD-only and gated behind authentication: an unauthenticated
+   * visitor is sent to the sign-up form with the selected plan attached, and the
+   * pending-plan helper resumes checkout automatically once they are signed in.
+   * Authenticated buyers go straight to the Razorpay Standard Web Checkout
+   * modal, where the order is created server-side (amount locked to the USD tier
+   * rate) and the captured signature is verified before any license is granted.
    */
   async function handlePurchase(planSlug: PlanSlug) {
     if (processingPlan) return;
@@ -193,7 +150,9 @@ export default function PricingPage() {
     setCheckoutNotice(null);
     setProcessingPlan(planSlug);
 
-    savePendingPlan(planSlug, currency);
+    // Persist the USD purchase intent so the auth round trip and the checkout
+    // page resume with the exact plan the visitor selected.
+    savePendingPlan(planSlug, "USD");
 
     // Read (never mutate) the auth state to prefill the payer email.
     let email: string | null = null;
@@ -210,9 +169,22 @@ export default function PricingPage() {
       email = null;
     }
 
+    // Guests must authenticate before paying — never open the gateway without an
+    // account. Redirect to the sign-up form; AuthView reads the pending plan and
+    // resumes checkout for this exact plan once signup/sign-in succeeds.
+    if (!email) {
+      setProcessingPlan(null);
+      const params = new URLSearchParams({
+        mode: "signup",
+        plan: planSlug,
+        returnTo: "/checkout",
+      });
+      router.push(`/auth?${params.toString()}`);
+      return;
+    }
+
     const result = await startRazorpayCheckout({
       planSlug,
-      currency,
       email,
       onDismiss: () =>
         setCheckoutNotice("Checkout closed — no payment was taken."),
@@ -281,40 +253,9 @@ export default function PricingPage() {
           </p>
         </div>
 
-        {/* Currency switcher — display + charge currency, no provider branding */}
-        <div className="mt-6 flex flex-col items-center justify-center gap-2">
-          <div className="flex items-center gap-3">
-            <Globe className="h-4 w-4 text-slate-400" />
-            <span className="text-xs font-medium text-slate-500">Show prices in:</span>
-            <div className="flex overflow-hidden rounded-xl border border-slate-200">
-              {(["USD", "INR"] as const).map((cur) => (
-                <button
-                  key={cur}
-                  type="button"
-                  onClick={() => chooseCurrency(cur)}
-                  className={`px-4 py-1.5 text-sm font-semibold transition ${
-                    currency === cur
-                      ? "bg-brand-500 text-white shadow-sm"
-                      : "bg-white text-slate-600 hover:bg-slate-50"
-                  }`}
-                  aria-pressed={currency === cur}
-                >
-                  {cur === "USD" ? "USD ($)" : "INR (₹)"}
-                </button>
-              ))}
-            </div>
-          </div>
-          {autoDetected && (
-            <span className="text-[11px] font-medium text-slate-400">
-              Auto-detected your region — you can switch anytime.
-            </span>
-          )}
-        </div>
-
         <div className="mx-auto mt-12 grid max-w-4xl gap-6 grid-cols-1 md:grid-cols-2">
           {PLAN_CARDS.map((card) => {
             const popular = card.slug === "LIFETIME";
-            const alt = alternatePrice(card.slug);
             return (
               <div
                 key={card.slug}
@@ -332,18 +273,12 @@ export default function PricingPage() {
                 <h2 className="text-xl font-bold text-slate-900">{card.name}</h2>
                 <div className="mt-4 flex items-baseline gap-1.5">
                   <span className="text-4xl font-black tracking-tight text-ink">
-                    {currency === "USD"
-                      ? formatDualUsd(card.plan.usd)
-                      : formatDualInr(card.plan.inr)}
+                    {formatDualUsd(card.plan.usd)}
                   </span>
                   <span className="text-sm font-medium text-slate-400">
-                    {BILLING_SUFFIX[card.slug][currency]}
+                    {BILLING_SUFFIX[card.slug]}
                   </span>
                 </div>
-                {/* Dual-currency hint — the amount the other currency charges */}
-                {alt && (
-                  <p className="mt-1 text-xs font-medium text-slate-400">(~{alt})</p>
-                )}
                 <p className="mt-1 text-xs text-slate-400">
                   {card.deviceLimit} device{card.deviceLimit === 1 ? "" : "s"} ·{" "}
                   {card.durationDays ? `${card.durationDays} days` : "Lifetime access"}
@@ -472,9 +407,9 @@ export default function PricingPage() {
 
         {/* FAQPage structured data — matches the visible accordion above. */}
         <JsonLd id="ld-pricing-faq" data={faqLd} />
-        {/* Product + Offer graph — one Offer per plan, emitted in BOTH the USD
-            and INR the storefront charges, so the price range is rich-result
-            eligible regardless of the searcher's locale. */}
+        {/* Product + Offer graph — one Offer per plan, emitted in USD only to
+            match the single currency the storefront charges, so the price range
+            is rich-result eligible. */}
         <JsonLd id="ld-pricing-product" data={productSchema()} />
         {/* BreadcrumbList — mirrors the visible Home → Pricing trail. */}
         <JsonLd
