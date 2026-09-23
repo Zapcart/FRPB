@@ -9,6 +9,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { SessionProvider } from "@/components/session-provider";
 import SocialUpdatesWidget from "@/components/SocialUpdatesWidget";
+import PageViewTracker from "@/components/analytics/page-view-tracker";
 import { PostHogProvider } from "./providers";
 import {
   SITE_URL,
@@ -88,6 +89,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-white font-sans text-slate-900 antialiased">
         <PostHogProvider>
           <SessionProvider>{children}</SessionProvider>
+          {/* First-party page-view beacon → admin "VISITORS (30D)" metric. */}
+          <PageViewTracker />
           {/* Site-wide floating community widget (bottom-right). */}
           <SocialUpdatesWidget />
         </PostHogProvider>

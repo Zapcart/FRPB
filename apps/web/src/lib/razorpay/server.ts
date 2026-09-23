@@ -40,6 +40,20 @@ export function getRazorpayKeySecret(): string {
   return secret;
 }
 
+/**
+ * Webhook signing secret — configured in the Razorpay dashboard when the
+ * webhook endpoint is registered. Kept separate from `RAZORPAY_KEY_SECRET`
+ * because Razorpay signs webhook payloads with this dedicated secret, not the
+ * key secret used for Standard Checkout callbacks.
+ *
+ * Optional: when unset, `verifyWebhookSignature` fails closed (returns false)
+ * so an unconfigured deployment can never accept a forged webhook.
+ */
+export function getRazorpayWebhookSecret(): string | null {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim();
+  return secret && secret.length > 0 ? secret : null;
+}
+
 let client: Razorpay | null = null;
 
 /**
@@ -88,6 +102,54 @@ export function verifyPaymentSignature(params: {
   } catch (err) {
     console.error(
       "[razorpay/server] signature verification failed to run:",
+      (err as Error)?.message ?? err
+    );
+    return false;
+  }
+}
+
+/**
+ * Verify a Razorpay WEBHOOK signature.
+ *
+ * Unlike the checkout callback above (which signs
+ * `order_id|payment_id`), Razorpay signs the **raw request body** with HMAC-SHA256
+ * keyed by the webhook signing secret, and sends the hex digest in the
+ * `X-Razorpay-Signature` header. Verification MUST run against the exact bytes
+ * Razorpay sent — never a re-serialised JSON object — so callers pass the raw
+ * body string.
+ *
+ * Fails closed: a missing `RAZORPAY_WEBHOOK_SECRET` or a malformed/forged
+ * signature returns `false`, so no license can ever be granted from an
+ * unverified webhook.
+ */
+export function verifyWebhookSignature(params: {
+  rawBody: string;
+  signature: string | null | undefined;
+}): boolean {
+  try {
+    const secret = getRazorpayWebhookSecret();
+    if (!secret) {
+      console.error(
+        "[razorpay/server] RAZORPAY_WEBHOOK_SECRET is not configured — rejecting webhook."
+      );
+      return false;
+    }
+    if (!params.signature) return false;
+
+    const expected = crypto
+      .createHmac("sha256", secret)
+      .update(params.rawBody)
+      .digest("hex");
+
+    const provided = params.signature.trim().toLowerCase();
+    const expectedBuf = Buffer.from(expected, "utf8");
+    const providedBuf = Buffer.from(provided, "utf8");
+
+    if (expectedBuf.length !== providedBuf.length) return false;
+    return crypto.timingSafeEqual(expectedBuf, providedBuf);
+  } catch (err) {
+    console.error(
+      "[razorpay/server] webhook signature verification failed to run:",
       (err as Error)?.message ?? err
     );
     return false;

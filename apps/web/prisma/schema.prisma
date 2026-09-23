@@ -61,6 +61,7 @@ model User {
   payments   Payment[]
   frpRequests FrpUnlockRequest[]
   paymentOrders PaymentOrder[]
+  pageViews   PageView[]
 }
 
 // ─── Plans ────────────────────────────────────────────────
@@ -262,4 +263,36 @@ model FrpUnlockRequest {
   @@index([status])
   @@index([userId])
   @@index([imeiHash])
+}
+
+// ─── First-party Page Views (admin VISITORS metric) ────────
+//
+// WHY THIS EXISTS: the admin "VISITORS (30D)" card previously derived its figure
+// from `FrpUnlockRequest.ipAddress`, so it counted only the handful of users who
+// filed an unlock request — NOT actual site traffic. This table records a
+// privacy-preserving page view on every landing so the metric reflects real
+// visitation. No raw IP is stored: `visitorHash` is a salted SHA-256 of the
+// IP + user-agent, giving a stable per-visitor key that cannot be reversed.
+//
+// The metric intentionally stays on our own infrastructure (not PostHog) so it
+// still works when PostHog is unconfigured or blocked by an ad-blocker.
+
+enum PageViewSource {
+  WEB
+  DESKTOP
+  BOT
+}
+
+model PageView {
+  id          String         @id @default(cuid())
+  path        String
+  visitorHash String
+  source      PageViewSource @default(WEB)
+  userId      String?
+  user        User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt   DateTime       @default(now())
+
+  @@index([createdAt])
+  @@index([visitorHash, createdAt])
+  @@index([userId])
 }

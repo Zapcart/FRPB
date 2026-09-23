@@ -260,9 +260,12 @@ export async function createRazorpayOrder(input: {
       currency,
       provider: "RAZORPAY",
       status: "PENDING",
-      // Razorpay confirms payment via the signed verify callback, so the
-      // license gate is satisfied by signature verification at verify time.
-      paymentConfirmed: true,
+      // NOT confirmed at creation. A freshly created order is provably unpaid:
+      // `paymentConfirmed` is flipped to true ONLY after a server-verified
+      // Razorpay signal (the signed verify callback or the signed
+      // `payment.captured` webhook). Stamping it true here previously made an
+      // unpaid order look settled to anything gating on this flag.
+      paymentConfirmed: false,
       providerTxnId: input.providerTxnId,
       expiresAt,
     },
@@ -298,4 +301,69 @@ export async function markRazorpayOrderPaid(ref: {
   }
 
   return grantLicenseForOrder(order.orderId);
+}
+
+/**
+ * Claim a webhook event id for idempotent processing.
+ *
+ * Razorpay retries webhooks aggressively, so the same `eventId` can arrive many
+ * times. The `WebhookEvent.eventId` unique index is the gate: the FIRST delivery
+ * inserts the row and returns `true`; every retry hits the unique constraint,
+ * returns `false`, and the caller must skip side effects. This makes
+ * `payment.captured` handling exactly-once without a distributed lock — and the
+ * reserved row doubles as an audit trail.
+ *
+ * A unique-constraint violation (`P2002`) is the expected "already seen" path;
+ * any OTHER error re-throws so a genuine DB outage is surfaced rather than
+ * silently swallowing the event.
+ */
+export async function reserveWebhookEvent(input: {
+  provider: "RAZORPAY";
+  eventId: string;
+  eventType: string;
+  payload: unknown;
+  client?: PrismaClient;
+}): Promise<boolean> {
+  const client = input.client ?? prisma;
+  try {
+    await client.webhookEvent.create({
+      data: {
+        provider: input.provider,
+        eventId: input.eventId,
+        eventType: input.eventType,
+        payload: input.payload as object,
+        status: "RECEIVED",
+      },
+    });
+    return true;
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    if (code === "P2002") return false;
+    throw err;
+  }
+}
+
+/** Mark a previously reserved webhook event as processed (audit trail). */
+export async function markWebhookEvent(
+  eventId: string,
+  data: { status: string; licenseId?: string | null; error?: string | null },
+  client: PrismaClient = prisma
+): Promise<void> {
+  try {
+    await client.webhookEvent.update({
+      where: { eventId },
+      data: {
+        status: data.status,
+        licenseId: data.licenseId ?? null,
+        error: data.error ?? null,
+        processedAt: new Date(),
+      },
+    });
+  } catch (err) {
+    // Audit bookkeeping must never break license delivery.
+    console.error(
+      "[payment/orders] failed to update webhook event:",
+      (err as Error)?.message ?? err
+    );
+  }
 }

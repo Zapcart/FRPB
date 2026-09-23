@@ -73,24 +73,24 @@ export async function getAdminAnalytics(): Promise<AdminAnalyticsResponse | null
 // ─── Individual query helpers ───
 
 async function getVisitors(since: Date) {
-  // When POSTHOG_API_KEY is configured these could come from the PostHog
-  // Query API; until then we derive an indicative estimate from the database.
-  const distinctIps = await prisma.frpUnlockRequest.groupBy({
-    by: ["ipAddress"],
-    where: { requestedAt: { gte: since } },
-    _count: { ipAddress: true },
+  // First-party page views recorded by the site-wide beacon
+  // (/api/v1/analytics/pageview). Grouping by the salted `visitorHash` yields
+  // a true unique-visitor count without ever storing a raw IP address. Bot
+  // traffic is excluded so crawlers never inflate the metric.
+  const groups = await prisma.pageView.groupBy({
+    by: ["visitorHash"],
+    where: { createdAt: { gte: since }, source: { not: "BOT" } },
+    _count: { visitorHash: true },
   });
-  const totalVisitors = distinctIps.reduce((sum, g) => sum + g._count.ipAddress, 0);
 
-  const returningUsers = await prisma.user.count({
-    where: {
-      licenses: { some: { createdAt: { gte: since } } },
-    },
-  });
+  // Every distinct hash is one unique visitor in the window; a hash seen more
+  // than once is a returning visitor.
+  const totalVisitors = groups.length;
+  const returningVisitors = groups.filter((g) => g._count.visitorHash > 1).length;
 
   return {
     total30d: totalVisitors,
-    returning30d: returningUsers,
+    returning30d: returningVisitors,
   };
 }
 
