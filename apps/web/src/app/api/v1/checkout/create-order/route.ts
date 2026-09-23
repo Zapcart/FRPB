@@ -5,14 +5,22 @@
 //
 // Razorpay Standard Web Checkout is the single, exclusive payment gateway.
 // Flow:
-//   1. Resolve the DUAL_PLAN from `planId` and LOCK the amount server-side.
-//   2. Create a Razorpay order (amount in paise) via the Orders API.
+//   1. Resolve the DUAL_PLAN from `planId` and LOCK the amount server-side for
+//      the requested currency (INR → paise, USD → cents).
+//   2. Create a Razorpay order via the Orders API in that currency.
 //   3. Persist a PENDING PaymentOrder carrying the Razorpay order id.
 //   4. Return { order_id, amount, currency } for the browser checkout modal.
 
 import { NextResponse, type NextRequest } from "next/server";
 import { preflight, withCorsResponse } from "@/lib/cors";
-import { getDualPlan, getDualPlanByOrderId, type DualPlan } from "@/config/plans";
+import {
+  getDualPlan,
+  getDualPlanByOrderId,
+  isDualCurrency,
+  razorpayAmount,
+  type DualCurrency,
+  type DualPlan,
+} from "@/config/plans";
 import { getRazorpayClient, RazorpayConfigError } from "@/lib/razorpay/server";
 import { createRazorpayOrder, expireStaleOrders } from "@/lib/payment/orders";
 import { getOptionalUser } from "@/lib/supabase/server";
@@ -85,12 +93,20 @@ async function handleCreateOrder(req: NextRequest): Promise<Response> {
     );
   }
 
-  // AMOUNT LOCK — always charge the server-resolved INR tier rate, never the
+  // CURRENCY — only the two sanctioned currencies are accepted. A missing or
+  // unsupported value falls back to INR rather than charging an unintended
+  // currency; the value is upper-cased so "usd"/"inr" from the client resolve.
+  const currency: DualCurrency = isDualCurrency(body.currency)
+    ? (body.currency.trim().toUpperCase() as DualCurrency)
+    : "INR";
+
+  // AMOUNT LOCK — always charge the server-resolved tier rate for the resolved
+  // currency (₹1,900 / ₹13,999 in paise, or $20 / $150 in cents), never the
   // client-supplied value. `amount` is accepted only for a mismatch check.
-  const amountInPaise = Math.round(plan.inr * 100);
-  if (amountInPaise < MIN_AMOUNT_PAISE) {
+  const amountSubUnits = razorpayAmount(plan, currency);
+  if (amountSubUnits < MIN_AMOUNT_PAISE) {
     return NextResponse.json(
-      { success: false, error: "The chargeable amount must be at least 100 paise." },
+      { success: false, error: "The chargeable amount is below the gateway minimum." },
       { status: 400 }
     );
   }
@@ -122,8 +138,8 @@ async function handleCreateOrder(req: NextRequest): Promise<Response> {
   try {
     const razorpay = getRazorpayClient();
     const order = await razorpay.orders.create({
-      amount: amountInPaise,
-      currency: "INR",
+      amount: amountSubUnits,
+      currency,
       receipt: `receipt_${Date.now()}`,
       notes: { planSlug: plan.slug },
     });
@@ -153,6 +169,7 @@ async function handleCreateOrder(req: NextRequest): Promise<Response> {
       planSlug: plan.slug,
       email,
       providerTxnId: razorpayOrderId,
+      currency,
     });
   } catch (err) {
     const code = (err as { code?: string })?.code;
@@ -174,8 +191,8 @@ async function handleCreateOrder(req: NextRequest): Promise<Response> {
   return NextResponse.json({
     success: true,
     order_id: razorpayOrderId,
-    amount: amountInPaise,
-    currency: "INR",
+    amount: amountSubUnits,
+    currency,
     planId: plan.slug,
   });
 }

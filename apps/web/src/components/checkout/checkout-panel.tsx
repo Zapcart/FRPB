@@ -58,6 +58,7 @@ export default function CheckoutPanel({
 
     const result = await startRazorpayCheckout({
       planSlug: plan!.slug,
+      currency,
       email,
       onDismiss: () => setNotice("Checkout closed — no payment was taken."),
     });
@@ -94,7 +95,7 @@ export default function CheckoutPanel({
         </span>
       </div>
       <p className="mt-1 text-xs text-slate-400">
-        Charges settle in INR ({formatDualInr(plan.inr)}).
+        Charges settle in {currency} ({displayPrice}).
       </p>
 
       <ul className="mt-6 space-y-3 text-sm">

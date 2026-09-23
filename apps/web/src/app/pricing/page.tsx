@@ -212,6 +212,7 @@ export default function PricingPage() {
 
     const result = await startRazorpayCheckout({
       planSlug,
+      currency,
       email,
       onDismiss: () =>
         setCheckoutNotice("Checkout closed — no payment was taken."),

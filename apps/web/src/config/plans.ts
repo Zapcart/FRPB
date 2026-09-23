@@ -16,14 +16,28 @@
 //   Lifetime  ₹13,999    $150
 //
 // GATEWAY:
-//   Razorpay Standard Web Checkout is the single, exclusive payment gateway.
-//   Every tier settles in INR (₹1,900 / ₹13,999) through Razorpay;
-//   the USD figures below are display-only reference prices.
+//   Razorpay Standard Web Checkout is the single, exclusive payment gateway,
+//   and it settles EACH currency natively: INR tiers charge ₹1,900 / ₹13,999
+//   and USD tiers charge $20 / $150. The currency is chosen by the buyer and
+//   locked server-side to the matching tier rate below — never converted with
+//   a live FX rate, and never read from the client.
 
 import { PLANS as SHARED_PLANS, type PlanSlug } from "@frpb/shared";
 
 /** Currency a plan can be charged in. */
 export type DualCurrency = "INR" | "USD";
+
+/**
+ * Narrow an untrusted value (e.g. a request body field) to a DualCurrency.
+ * Case-insensitive so "usd"/"INR" from the client both resolve; anything
+ * unsupported returns null so the caller can fall back to a safe default
+ * rather than charging an unintended currency.
+ */
+export function isDualCurrency(value: unknown): value is DualCurrency {
+  if (typeof value !== "string") return false;
+  const needle = value.trim().toUpperCase();
+  return needle === "INR" || needle === "USD";
+}
 
 /** Payment gateway backing every currency (Razorpay only). */
 export type DualProvider = "RAZORPAY";
@@ -131,9 +145,21 @@ export function getDualPlanByOrderId(orderPlanId: string): DualPlan | null {
   return DUAL_PLANS.find((p) => p.orderPlanId === needle) ?? null;
 }
 
-/** A plan's amount in the requested currency (whole units). */
+/** A plan's amount in the requested currency (whole major units). */
 export function dualAmount(plan: DualPlan, currency: DualCurrency): number {
   return currency === "INR" ? plan.inr : plan.usd;
+}
+
+/**
+ * A plan's amount in the smallest gateway sub-unit for the requested currency
+ * (INR paise / USD cents) — the exact figure the Razorpay Orders API expects.
+ *
+ * Razorpay charges in the smallest unit, so ₹1,900 → 190000 paise and
+ * $20 → 2000 cents. Both currencies use a 100:1 minor-unit ratio, and the
+ * multiplication is rounded to absorb float error on whole-unit tier prices.
+ */
+export function razorpayAmount(plan: DualPlan, currency: DualCurrency): number {
+  return Math.round(dualAmount(plan, currency) * 100);
 }
 
 /** The gateway that settles every currency — Razorpay only. */
@@ -148,7 +174,7 @@ export const ALLOWED_INR_AMOUNTS: ReadonlySet<number> = new Set(
   DUAL_PLANS.map((p) => p.inr)
 );
 
-/** Reference USD price points ($20 / $150) — display only. */
+/** USD price points Razorpay will ever charge ($20 / $150). */
 export const ALLOWED_USD_AMOUNTS: ReadonlySet<number> = new Set(
   DUAL_PLANS.map((p) => p.usd)
 );
@@ -161,6 +187,11 @@ export function isAllowedInrAmount(amount: number): boolean {
 /** True when `amount` is a sanctioned USD tier rate. */
 export function isAllowedUsdAmount(amount: number): boolean {
   return ALLOWED_USD_AMOUNTS.has(amount);
+}
+
+/** True when `amount` is a sanctioned tier rate in the given currency. */
+export function isAllowedAmount(amount: number, currency: DualCurrency): boolean {
+  return currency === "INR" ? isAllowedInrAmount(amount) : isAllowedUsdAmount(amount);
 }
 
 // ─── Formatting ──────────────────────────────────────────────────────────────

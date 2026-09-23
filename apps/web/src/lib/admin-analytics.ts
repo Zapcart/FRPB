@@ -281,7 +281,8 @@ function emptyAccumulator(): CurrencyAccumulator {
  * We now read BOTH ledgers and bucket strictly by each row's own `currency`:
  *   • `Payment`      — historical (`STRIPE`/`RAZORPAY`/`CASHFREE`) + the legacy
  *                      `checkout` rail. Counted as the "legacy" contribution.
- *   • `PaymentOrder` — the LIVE Razorpay ledger (all tiers settle in INR).
+ *   • `PaymentOrder` — the LIVE Razorpay ledger (tiers settle natively in INR
+ *                      or USD per the buyer's selection).
  *
  * `Payment` and `PaymentOrder` are disjoint by construction — the Razorpay
  * order lifecycle writes only `PaymentOrder`, while historical webhook

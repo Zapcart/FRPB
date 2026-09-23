@@ -21,7 +21,7 @@ import { sha256 } from "@/lib/crypto/sha256";
 import { generateLicenseKey } from "@/lib/license/generate";
 import { normalizeEmail } from "@/lib/auth/user-identity";
 import { sendLicenseEmail } from "@/lib/email/resend";
-import { getDualPlan } from "@/config/plans";
+import { dualAmount, getDualPlan, type DualCurrency } from "@/config/plans";
 
 /** Razorpay orders expire 10 minutes after creation. */
 export const ORDER_TTL_MS = 10 * 60 * 1000;
@@ -226,17 +226,24 @@ export async function grantLicenseForOrder(
  * Persist a PENDING Razorpay order, stamping the gateway's order id as the
  * unique `providerTxnId` so the verify-payment handler can resolve it back.
  *
- * The amount is resolved from DUAL_PLANS — the caller only supplies the plan
- * slug, so a tampered payload can never set the price.
+ * The amount is resolved from DUAL_PLANS for the requested currency — the
+ * caller only supplies the plan slug and currency, so a tampered payload can
+ * never set the price. `amount` is stored in WHOLE major units (₹1,900 / $20),
+ * the convention `admin-analytics` assumes when it buckets the live ledger.
  */
 export async function createRazorpayOrder(input: {
   planSlug: PlanSlug;
   email: string;
   userId?: string | null;
   providerTxnId: string;
-}): Promise<{ orderId: string; amount: number; currency: "INR"; expiresAt: Date }> {
+  /** Charge currency resolved + validated by the caller (defaults to INR). */
+  currency?: DualCurrency;
+}): Promise<{ orderId: string; amount: number; currency: DualCurrency; expiresAt: Date }> {
   const plan = getDualPlan(input.planSlug);
   if (!plan) throw new Error(`Unknown plan slug: ${input.planSlug}`);
+
+  const currency: DualCurrency = input.currency ?? "INR";
+  const amount = dualAmount(plan, currency);
 
   const orderId = generateOrderId();
   const expiresAt = orderExpiry();
@@ -247,9 +254,10 @@ export async function createRazorpayOrder(input: {
       userId: input.userId ?? null,
       email: normalizeEmail(input.email),
       planId: plan.slug,
-      // Server-resolved INR tier rate — never from the client.
-      amount: plan.inr,
-      currency: "INR",
+      // Server-resolved tier rate for the requested currency — never from the
+      // client, and stored in whole major units.
+      amount,
+      currency,
       provider: "RAZORPAY",
       status: "PENDING",
       // Razorpay confirms payment via the signed verify callback, so the
@@ -260,7 +268,7 @@ export async function createRazorpayOrder(input: {
     },
   });
 
-  return { orderId, amount: plan.inr, currency: "INR", expiresAt };
+  return { orderId, amount, currency, expiresAt };
 }
 
 /**

@@ -2,7 +2,8 @@
 //
 // One call performs the whole purchase:
 //   1. POST /api/v1/checkout/create-order  → server creates the Razorpay order
-//      (amount is locked server-side to the sanctioned INR tier rate).
+//      (amount is locked server-side to the sanctioned tier rate for the
+//      selected currency: INR paise or USD cents).
 //   2. Open the Razorpay modal with the returned order id.
 //   3. On handler success, POST /api/v1/checkout/verify-payment so the server
 //      verifies the HMAC-SHA256 signature and grants the license.
@@ -21,6 +22,11 @@ import {
 export interface StartCheckoutParams {
   /** Shared plan slug (MONTH_1 | LIFETIME). */
   planSlug: string;
+  /**
+   * Charge currency selected by the buyer. Validated + locked server-side to the
+   * matching tier rate; defaults to INR when omitted.
+   */
+  currency?: "INR" | "USD";
   /** Buyer email — required by the create-order route to bind the license. */
   email?: string | null;
   /** Called when the customer closes the Razorpay modal without paying. */
@@ -60,7 +66,8 @@ function errorMessage(payload: unknown, fallback: string): string {
 /** Create the Razorpay order server-side. Returns a failure result on error. */
 async function createOrder(
   planSlug: string,
-  email: string | null
+  email: string | null,
+  currency: "INR" | "USD"
 ): Promise<
   | { ok: true; orderId: string; amount: number; currency: string }
   | { ok: false; message: string }
@@ -73,6 +80,7 @@ async function createOrder(
       body: JSON.stringify({
         planId: planSlug,
         userEmail: email ?? undefined,
+        currency,
       }),
     });
   } catch (err) {
@@ -104,7 +112,7 @@ async function createOrder(
     ok: true,
     orderId: data.order_id,
     amount: typeof data.amount === "number" ? data.amount : 0,
-    currency: data.currency ?? "INR",
+    currency: data.currency ?? currency,
   };
 }
 
@@ -167,6 +175,8 @@ export async function startRazorpayCheckout(
     return { status: "failed", message: `Unknown plan "${params.planSlug}".` };
   }
 
+  const currency: "INR" | "USD" = params.currency === "USD" ? "USD" : "INR";
+
   const key = getRazorpayPublicKeyId();
   if (!key) {
     console.error("[razorpay/checkout] NEXT_PUBLIC_RAZORPAY_KEY_ID is not set.");
@@ -177,7 +187,7 @@ export async function startRazorpayCheckout(
     };
   }
 
-  const order = await createOrder(plan.slug, params.email ?? null);
+  const order = await createOrder(plan.slug, params.email ?? null, currency);
   if (!order.ok) return { status: "failed", message: order.message };
 
   let RazorpayCtor;
