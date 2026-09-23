@@ -106,7 +106,7 @@ export default async function DashboardLayout({
           </span>
           <Link
             href="/downloads"
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+            className="flex min-h-[44px] touch-manipulation select-none items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition active:bg-slate-100 hover:bg-slate-100 hover:text-slate-900"
           >
             <Download className="h-4 w-4" /> Downloads
           </Link>
@@ -114,7 +114,7 @@ export default async function DashboardLayout({
               full page reload that would re-run auth bootstrapping. */}
           <Link
             href="/#pricing"
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+            className="flex min-h-[44px] touch-manipulation select-none items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition active:bg-slate-100 hover:bg-slate-100 hover:text-slate-900"
           >
             <ArrowRight className="h-4 w-4" /> Buy a new plan
           </Link>
@@ -132,7 +132,7 @@ export default async function DashboardLayout({
             )}
           </div>
           <SignOutButton
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition hover:bg-slate-100 hover:text-rose-600 disabled:opacity-50"
+            className="flex min-h-[44px] w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition active:bg-slate-100 hover:bg-slate-100 hover:text-rose-600 disabled:opacity-50"
             label="Sign out"
             open
           />
@@ -147,12 +147,12 @@ export default async function DashboardLayout({
             <div className="flex items-center gap-2">
               <Link
                 href="/pricing"
-                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                className="inline-flex min-h-[44px] touch-manipulation select-none items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-slate-500 transition active:bg-slate-100 hover:bg-slate-100 hover:text-slate-900"
               >
                 <ArrowRight className="h-3.5 w-3.5" /> Choose Plan
               </Link>
               <SignOutButton
-                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-rose-600 disabled:opacity-50"
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-slate-500 transition active:bg-slate-100 hover:bg-slate-100 hover:text-rose-600 disabled:opacity-50"
                 label="Logout"
               />
             </div>

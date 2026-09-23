@@ -225,7 +225,7 @@ export default function PricingPage() {
           <div className="flex items-center gap-3">
             <Link
               href="/"
-              className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
+              className="inline-flex min-h-[44px] touch-manipulation select-none items-center rounded-lg px-4 text-sm font-medium text-slate-600 transition active:text-brand-600 hover:text-slate-900"
             >
               Home
             </Link>
@@ -301,7 +301,8 @@ export default function PricingPage() {
                   type="button"
                   onClick={() => void handlePurchase(card.slug)}
                   disabled={processingPlan !== null}
-                  className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                  aria-busy={processingPlan === card.slug}
+                  className={`mt-8 inline-flex min-h-[48px] w-full touch-manipulation select-none items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-bold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100 ${
                     popular
                       ? "bg-gradient-to-r from-brand-500 to-accent-500 text-white shadow-lg shadow-brand-500/30 hover:brightness-110"
                       : "border border-slate-300 bg-white text-slate-700 hover:border-brand-300 hover:text-brand-600"
@@ -379,7 +380,7 @@ export default function PricingPage() {
                     type="button"
                     onClick={() => setOpenFaq(open ? null : i)}
                     aria-expanded={open}
-                    className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left"
+                    className="flex min-h-[44px] w-full touch-manipulation select-none items-center justify-between gap-4 px-5 py-4 text-left transition active:bg-slate-50"
                   >
                     <span className="text-sm font-semibold text-slate-900">{faq.q}</span>
                     <ChevronDown

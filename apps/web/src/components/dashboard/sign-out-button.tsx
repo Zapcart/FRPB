@@ -44,7 +44,8 @@ export default function SignOutButton({ className, label, open }: SignOutButtonP
       type="button"
       onClick={handleSignOut}
       disabled={busy || pending}
-      className={className}
+      aria-busy={busy || pending}
+      className={`${className} touch-manipulation select-none`}
     >
       {busy || pending ? (
         <Loader2 className="h-4 w-4 animate-spin" />

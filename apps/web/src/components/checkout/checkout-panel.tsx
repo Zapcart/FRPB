@@ -127,7 +127,8 @@ export default function CheckoutPanel({
         type="button"
         onClick={() => void handlePay()}
         disabled={processing}
-        className="btn-accent mt-6 inline-flex w-full items-center justify-center gap-2 px-6 py-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+        aria-busy={processing}
+        className="btn-accent mt-6 inline-flex min-h-[48px] w-full touch-manipulation select-none items-center justify-center gap-2 px-6 py-3 text-sm active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100"
       >
         {processing ? (
           <>

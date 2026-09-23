@@ -219,12 +219,13 @@ export default function AuthView({
         <p className="mt-6 text-center text-sm text-slate-500">
           {mode === "signin" ? "Don't have an account?" : "Already have an account?"}{" "}
           <button
+            type="button"
             onClick={() => {
               setMode(mode === "signin" ? "signup" : "signin");
               setError(null);
               setNotice(null);
             }}
-            className="font-semibold text-brand-600 hover:text-brand-700 hover:underline"
+            className="-my-2 inline-flex min-h-[44px] touch-manipulation select-none items-center px-1 font-semibold text-brand-600 transition active:text-brand-800 hover:text-brand-700 hover:underline"
           >
             {mode === "signin" ? "Sign up" : "Sign in"}
           </button>

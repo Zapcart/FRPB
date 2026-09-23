@@ -101,7 +101,7 @@ export default function SocialUpdatesWidget() {
             type="button"
             onClick={() => setOpen(false)}
             aria-label="Close community widget"
-            className="absolute right-3 top-3 rounded-full p-1 text-white/80 transition-colors hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            className="absolute right-2 top-2 grid h-11 w-11 touch-manipulation select-none place-items-center rounded-full text-white/80 transition-colors active:bg-white/25 hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>

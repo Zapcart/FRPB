@@ -255,7 +255,8 @@ export default function HomePage() {
               Download for Windows
             </Link>
             <button
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-ink lg:hidden"
+              type="button"
+              className="inline-flex h-11 w-11 touch-manipulation select-none items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition active:scale-95 active:bg-slate-100 hover:border-slate-300 hover:text-ink lg:hidden"
               aria-label="Menu"
             >
               <Menu className="h-5 w-5" />

@@ -9,6 +9,10 @@
 
   html {
     scroll-behavior: smooth;
+    /* Kill the legacy 300ms mobile tap delay (and double-tap zoom) so a single
+       tap dispatches immediately. Pinch-zoom stays available for a11y. */
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
   }
 
   /* Offset in-page anchor targets so the sticky header never overlaps them. */
@@ -19,6 +23,39 @@
 
   body {
     @apply bg-white font-sans text-slate-900 antialiased;
+    /* Suppress the grey/blue mobile tap highlight — feedback is provided by the
+       explicit :active styles below instead. */
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Buttons and links opt into touch-friendly behaviour: no 300ms tap delay,
+     no iOS tap flash, and an immediate pressed state so a tap feels instant. */
+  button,
+  [role="button"],
+  a,
+  label,
+  summary {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  a[href] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  /* Snappy, GPU-composited press feedback (opacity only — no layout thrash). */
+  button:not(:disabled):active,
+  [role="button"]:not([aria-disabled="true"]):active,
+  a[href]:active {
+    transition-duration: 0ms;
+    opacity: 0.85;
   }
 
   ::selection {
@@ -29,15 +66,15 @@
 @layer components {
   /* ---------- Light surfaces (pricing, dashboard, auth) ---------- */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 transition hover:bg-brand-600 hover:shadow-xl hover:shadow-brand-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 disabled:cursor-not-allowed disabled:opacity-60;
+    @apply inline-flex min-h-[44px] cursor-pointer touch-manipulation select-none items-center justify-center gap-2 rounded-xl bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/25 transition hover:bg-brand-600 hover:shadow-xl hover:shadow-brand-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 active:scale-[0.97] active:shadow-md disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100;
   }
 
   .btn-accent {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-500 to-accent-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/30 transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 disabled:cursor-not-allowed disabled:opacity-60;
+    @apply inline-flex min-h-[44px] cursor-pointer touch-manipulation select-none items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-brand-500 to-accent-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-500/30 transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/50 active:scale-[0.97] active:brightness-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white/80 px-5 py-2.5 text-sm font-semibold text-slate-700 backdrop-blur transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 disabled:cursor-not-allowed disabled:opacity-60;
+    @apply inline-flex min-h-[44px] cursor-pointer touch-manipulation select-none items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white/80 px-5 py-2.5 text-sm font-semibold text-slate-700 backdrop-blur transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40 active:scale-[0.97] active:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100;
   }
 
   .card {
@@ -81,7 +118,7 @@
 
   /* Ghost button tuned for dark glass surfaces. */
   .btn-ghost-dark {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.04] px-5 py-2.5 text-sm font-semibold text-slate-200 backdrop-blur-md transition hover:-translate-y-0.5 hover:border-white/30 hover:bg-white/[0.09] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/50;
+    @apply inline-flex min-h-[44px] cursor-pointer touch-manipulation select-none items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.04] px-5 py-2.5 text-sm font-semibold text-slate-200 backdrop-blur-md transition hover:-translate-y-0.5 hover:border-white/30 hover:bg-white/[0.09] hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/50 active:translate-y-0 active:scale-[0.97] active:bg-white/[0.13] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100;
   }
 
   /* Gradient CTA with an animated sheen sweep on hover. */
@@ -159,6 +196,14 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  /* Keep the instant tap feedback but drop the scale transform. */
+  .btn-primary:active,
+  .btn-accent:active,
+  .btn-ghost:active,
+  .btn-ghost-dark:active {
+    transform: none !important;
   }
 }
 

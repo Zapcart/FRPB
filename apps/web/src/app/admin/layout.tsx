@@ -54,13 +54,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <nav className="flex items-center gap-4">
               <Link
                 href="/dashboard"
-                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                className="inline-flex min-h-[44px] touch-manipulation select-none items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-slate-500 transition active:bg-slate-100 hover:bg-slate-100 hover:text-slate-900"
               >
                 <LayoutDashboard className="h-3.5 w-3.5" />
                 Back to Dashboard
               </Link>
               <SignOutButton
-                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50"
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-rose-600 transition active:bg-rose-50 hover:bg-rose-50"
                 label="Logout"
               />
             </nav>

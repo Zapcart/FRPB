@@ -20,11 +20,14 @@ export default function AuthShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2">
             <Link
               href="/pricing"
-              className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
+              className="inline-flex min-h-[44px] touch-manipulation select-none items-center rounded-lg px-4 py-2 text-sm font-medium text-slate-600 transition hover:text-slate-900 active:text-brand-600"
             >
               Pricing
             </Link>
-            <Link href="/" className="btn-ghost rounded-lg px-4 py-2 text-sm font-medium">
+            <Link
+              href="/"
+              className="btn-ghost inline-flex min-h-[44px] touch-manipulation select-none items-center rounded-lg px-4 py-2 text-sm font-medium"
+            >
               Back to home
             </Link>
           </div>

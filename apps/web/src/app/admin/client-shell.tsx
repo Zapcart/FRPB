@@ -158,9 +158,11 @@ export default function ClientAdminShell({
         </div>
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={handleRefresh}
             disabled={refreshing}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+            aria-busy={refreshing}
+            className="inline-flex min-h-[44px] touch-manipulation select-none items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 active:scale-[0.97] active:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
             {refreshing ? "Refreshing…" : "Refresh"}
@@ -186,9 +188,11 @@ export default function ClientAdminShell({
             </div>
           </div>
           <button
+            type="button"
             onClick={handleRefresh}
             disabled={refreshing}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100 disabled:opacity-50"
+            aria-busy={refreshing}
+            className="inline-flex min-h-[44px] shrink-0 touch-manipulation select-none items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-4 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100 active:scale-[0.97] active:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
             {refreshing ? "Retrying…" : "Retry"}

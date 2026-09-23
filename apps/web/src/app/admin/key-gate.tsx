@@ -82,7 +82,8 @@ export default function AdminKeyGate() {
           <button
             type="submit"
             disabled={loading || key.trim().length === 0}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50"
+            aria-busy={loading}
+            className="inline-flex min-h-[44px] w-full touch-manipulation select-none items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 active:scale-[0.98] active:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
           >
             {loading ? (
               <>

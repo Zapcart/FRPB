@@ -98,7 +98,7 @@ export default function CategoryFilter({
               role="tab"
               aria-selected={isActive}
               onClick={() => select(tab.id)}
-              className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm font-semibold transition ${
+              className={`inline-flex min-h-[44px] touch-manipulation select-none items-center gap-1.5 rounded-full border px-4 py-1.5 text-sm font-semibold transition active:scale-[0.97] ${
                 isActive
                   ? "border-brand-500 bg-brand-500 text-white shadow-sm"
                   : "border-slate-200 bg-white text-slate-600 hover:border-brand-300 hover:text-brand-600"

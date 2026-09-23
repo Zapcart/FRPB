@@ -53,14 +53,15 @@ export default function DashboardError({
           {kind === "auth" ? (
             <Link
               href="/login"
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+              className="inline-flex min-h-[48px] touch-manipulation select-none items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 active:scale-[0.98] active:bg-slate-800"
             >
               <KeyRound className="h-4 w-4" /> Sign in
             </Link>
           ) : (
             <button
+              type="button"
               onClick={reset}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700"
+              className="inline-flex min-h-[48px] touch-manipulation select-none items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700 active:scale-[0.98] active:bg-slate-800"
             >
               <RefreshCw className="h-4 w-4" /> Try again
             </button>
