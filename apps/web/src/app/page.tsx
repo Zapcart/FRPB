@@ -35,6 +35,12 @@ import {
 } from "lucide-react";
 import { PLANS } from "@frpb/shared";
 import { resolveInstallerUrl } from "@/config/download";
+import {
+  LEGAL_DISCLAIMER,
+  LEGAL_EMAIL,
+  SUPPORT_EMAIL,
+  mailtoHref,
+} from "@/config/legal";
 import SmoothScrollLink from "@/components/smooth-scroll-link";
 import JsonLd from "@/components/seo/json-ld";
 import FaqSection from "@/components/faq-section";
@@ -891,14 +897,31 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-slate-200/80 pt-8 sm:flex-row">
+          {/* DPDP / legal disclaimer — site-wide small print. */}
+          <p className="mt-10 max-w-4xl text-xs leading-relaxed text-slate-400">
+            {LEGAL_DISCLAIMER}
+          </p>
+
+          <div className="mt-6 flex flex-col items-center justify-between gap-4 border-t border-slate-200/80 pt-8 sm:flex-row">
             <p className="text-xs text-slate-400">
               © {new Date().getFullYear()} FRPB. All rights reserved.
             </p>
-            <p className="flex items-center gap-1.5 text-xs text-slate-400">
-              <Mail className="h-3.5 w-3.5" />
-              support@frpb.in
-            </p>
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-slate-400">
+              <a
+                href={mailtoHref(SUPPORT_EMAIL)}
+                className="flex items-center gap-1.5 transition hover:text-slate-600"
+              >
+                <Mail className="h-3.5 w-3.5" />
+                {SUPPORT_EMAIL}
+              </a>
+              <a
+                href={mailtoHref(LEGAL_EMAIL)}
+                className="flex items-center gap-1.5 transition hover:text-slate-600"
+              >
+                <Mail className="h-3.5 w-3.5" />
+                {LEGAL_EMAIL}
+              </a>
+            </div>
           </div>
         </div>
       </footer>

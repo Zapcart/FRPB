@@ -3,6 +3,12 @@
 // use it, and how long we keep it, written for a lay customer in plain English.
 
 import { pageMetadata } from "@/lib/seo";
+import {
+  LEGAL_EMAIL,
+  LEGAL_LOCATION,
+  SUPPORT_EMAIL,
+  mailtoHref,
+} from "@/config/legal";
 
 export const metadata = pageMetadata({
   title: "Privacy Policy",
@@ -188,13 +194,22 @@ export default function PrivacyPolicyPage() {
             <p>
               To exercise any of these rights, email{" "}
               <a
-                href="mailto:support@frpb.in"
+                href={mailtoHref(SUPPORT_EMAIL)}
                 className="text-brand-600 hover:underline"
               >
-                support@frpb.in
+                {SUPPORT_EMAIL}
               </a>{" "}
               with “Privacy Request” in the subject line. We will respond within a
               reasonable time.
+            </p>
+            <p>
+              Under the Digital Personal Data Protection Act, 2023 (DPDP Act) you
+              are a <strong>Data Principal</strong>. You may request access to,
+              correction of, or erasure of your personal data, and you may nominate
+              another individual to exercise these rights on your behalf in the
+              event of death or incapacity. We act as the{" "}
+              <strong>Data Fiduciary</strong> for the data described in this policy
+              and process it only for the lawful purposes stated above.
             </p>
           </section>
 
@@ -210,20 +225,34 @@ export default function PrivacyPolicyPage() {
 
           <section>
             <h2 className="text-lg font-bold text-ink">
-              8. Contact us
+              8. Contact us & data protection requests
             </h2>
             <p>
-              Any questions about this Privacy Policy or our data practices:
+              Any questions about this Privacy Policy or our data practices, or to
+              submit a data access, correction or deletion request under the DPDP
+              Act, 2023, contact us at:
             </p>
             <div className="mt-3 flex flex-col gap-1 text-sm text-slate-600">
               <a
-                href="mailto:support@frpb.in"
+                href={mailtoHref(SUPPORT_EMAIL)}
                 className="text-brand-600 hover:underline"
               >
-                support@frpb.in
+                {SUPPORT_EMAIL}
               </a>
-              <p>FRPB, India</p>
+              <a
+                href={mailtoHref(LEGAL_EMAIL)}
+                className="text-brand-600 hover:underline"
+              >
+                {LEGAL_EMAIL}
+              </a>
+              <p>{LEGAL_LOCATION}</p>
             </div>
+            <p className="mt-3 text-sm text-slate-500">
+              Use the subject line “Data Access Request” for a copy of your data, or
+              “Data Deletion Request” to request erasure of your account data. We
+              acknowledge requests within a reasonable time and complete them
+              subject to any legal retention obligations described in section 5.
+            </p>
           </section>
 
           <section>

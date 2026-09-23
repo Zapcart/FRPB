@@ -39,6 +39,12 @@ import {
   storeCurrency,
 } from "@/lib/checkout/currency";
 import {
+  LEGAL_DISCLAIMER,
+  LEGAL_EMAIL,
+  SUPPORT_EMAIL,
+  mailtoHref,
+} from "@/config/legal";
+import {
   DUAL_PLANS,
   formatDualInr,
   formatDualUsd,
@@ -479,8 +485,27 @@ export default function PricingPage() {
         />
       </main>
 
-      <footer className="border-t border-slate-200 bg-slate-50/70 py-8 text-center text-sm text-slate-500">
-        © {new Date().getFullYear()} FRPB · support@frpb.in
+      <footer className="border-t border-slate-200 bg-slate-50/70 px-6 py-8 text-center text-sm text-slate-500">
+        {/* DPDP / legal disclaimer — site-wide small print. */}
+        <p className="mx-auto max-w-4xl text-xs leading-relaxed text-slate-400">
+          {LEGAL_DISCLAIMER}
+        </p>
+        <p className="mt-4 text-xs text-slate-500">
+          © {new Date().getFullYear()} FRPB ·{" "}
+          <a
+            href={mailtoHref(SUPPORT_EMAIL)}
+            className="transition hover:text-slate-900"
+          >
+            {SUPPORT_EMAIL}
+          </a>{" "}
+          ·{" "}
+          <a
+            href={mailtoHref(LEGAL_EMAIL)}
+            className="transition hover:text-slate-900"
+          >
+            {LEGAL_EMAIL}
+          </a>
+        </p>
       </footer>
     </div>
   );

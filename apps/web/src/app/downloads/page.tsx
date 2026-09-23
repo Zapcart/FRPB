@@ -17,6 +17,11 @@ import {
   SMARTSCREEN_NOTICE,
   resolveInstallerUrl,
 } from "@/config/download";
+import {
+  LEGAL_DISCLAIMER,
+  SUPPORT_EMAIL,
+  mailtoHref,
+} from "@/config/legal";
 
 export const metadata = pageMetadata({
   title: "Download FRPB for Windows 10/11",
@@ -202,17 +207,29 @@ export default function DownloadsPage() {
 
       {/* ================= FOOTER ================= */}
       <footer className="border-t border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-3 px-6 py-6 sm:flex-row">
-          <p className="text-xs text-slate-400">
-            © {new Date().getFullYear()} FRPB. All rights reserved.
+        <div className="mx-auto max-w-5xl px-6 py-6">
+          {/* DPDP / legal disclaimer — small print, kept visually subtle. */}
+          <p className="text-xs leading-relaxed text-slate-400">
+            {LEGAL_DISCLAIMER}
           </p>
-          <div className="flex items-center gap-4 text-xs text-slate-500">
-            <Link href="/" className="transition hover:text-slate-900">
-              Home
-            </Link>
-            <Link href="/pricing" className="transition hover:text-slate-900">
-              Pricing
-            </Link>
+          <div className="mt-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
+            <p className="text-xs text-slate-400">
+              © {new Date().getFullYear()} FRPB. All rights reserved.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-slate-500">
+              <Link href="/" className="transition hover:text-slate-900">
+                Home
+              </Link>
+              <Link href="/pricing" className="transition hover:text-slate-900">
+                Pricing
+              </Link>
+              <a
+                href={mailtoHref(SUPPORT_EMAIL)}
+                className="transition hover:text-slate-900"
+              >
+                {SUPPORT_EMAIL}
+              </a>
+            </div>
           </div>
         </div>
       </footer>
