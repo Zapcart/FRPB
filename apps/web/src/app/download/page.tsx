@@ -8,9 +8,9 @@ import { resolveInstallerUrl } from "@/config/download";
  * desktop installer. Resolution (see src/config/download.ts):
  *
  *   1. NEXT_PUBLIC_DOWNLOAD_URL — explicit override, used verbatim.
- *   2. DOWNLOAD_BASE_URL — treated as a base; <base>/FRPB-Setup.exe is used.
+ *   2. DOWNLOAD_BASE_URL — treated as a base; <base>/<installer>.exe is used.
  *   3. GitHub Releases — the built-in default, i.e.
- *      https://github.com/Zapcart/FRPB-Application/releases/download/v1.0.0/FRPB-Setup.exe
+ *      https://github.com/Zapcart/FRPB-Application/releases/download/v1.0.0/FRPB-Recovery-Setup-1.0.1.exe
  *
  * Read per request so a redeployed binary or environment change is picked up
  * immediately, without touching the code.

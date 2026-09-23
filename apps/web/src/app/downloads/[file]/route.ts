@@ -7,9 +7,9 @@ import { GITHUB_ASSET_ALIASES, GITHUB_RELEASES_BASE } from "@/config/download";
 /**
  * FRPB — GET /downloads/[file]
  *
- * Serves direct installer requests (e.g. /downloads/FRPB-Setup.exe, the
- * lowercase /downloads/frpb-setup.exe referenced in email templates, or the
- * macOS /downloads/FRPB-Setup.dmg) to a real file. Resolution order:
+ * Serves direct installer requests (e.g. /downloads/FRPB-Recovery-Setup-1.0.1.exe,
+ * the lowercase /downloads/frpb-recovery-setup-1.0.1.exe referenced in email
+ * templates, or the macOS /downloads/FRPB-Setup.dmg) to a real file. Resolution order:
  *
  *   1. Local static file — streams public/downloads/<file> (case-insensitive
  *      match against the on-disk asset) if present, forcing an
@@ -124,8 +124,8 @@ export async function GET(
   }
 
   // ── 5. GitHub Releases fallback — the pinned release's asset. ────────────
-  // Translate the public alias (FRPB-Setup.exe) to the canonical published
-  // asset name before redirecting. Base URL + aliases live in
+  // Translate the public alias (frpb-recovery-setup-1.0.1.exe) to the canonical
+  // published asset name before redirecting. Base URL + aliases live in
   // src/config/download.ts.
   const assetName = GITHUB_ASSET_ALIASES[requested.toLowerCase()] ?? requested;
   return NextResponse.redirect(

@@ -35,7 +35,7 @@ const nextConfig = {
           { key: "Content-Type", value: "application/octet-stream" },
           {
             key: "Content-Disposition",
-            value: 'attachment; filename="FRPB-Setup.exe"',
+            value: 'attachment; filename="FRPB-Recovery-Setup-1.0.1.exe"',
           },
           { key: "X-Content-Type-Options", value: "nosniff" },
         ],

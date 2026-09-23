@@ -161,7 +161,10 @@ function verifyEmailPayload(): void {
     html.includes(expiresAt.toISOString().slice(0, 10)),
     expiresAt.toISOString().slice(0, 10)
   );
-  check("body contains the Windows download link", html.includes("FRPB-Setup.exe"));
+  check(
+    "body contains the Windows download link",
+    html.includes("FRPB-Recovery-Setup-1.0.1.exe")
+  );
   check("body contains the macOS download link", html.includes("FRPB-Setup.dmg"));
 
   // Lifetime variant must NOT print a date.

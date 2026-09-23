@@ -87,7 +87,7 @@
     ],
     "win": {
       "icon": "build/frpb.ico",
-      "artifactName": "FRPB-Setup.exe",
+      "artifactName": "FRPB-Recovery-Setup-1.0.1.exe",
       "target": [
         {
           "target": "nsis",

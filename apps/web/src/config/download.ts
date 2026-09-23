@@ -17,7 +17,7 @@ export const GITHUB_REPO = "Zapcart/FRPB-Application";
 export const RELEASE_VERSION = "1.0.0";
 
 /** Canonical Windows installer asset name (matches electron-builder artifactName). */
-export const EXE_NAME = "FRPB-Setup.exe";
+export const EXE_NAME = "FRPB-Recovery-Setup-1.0.1.exe";
 
 /** Canonical macOS installer asset name. */
 export const DMG_NAME = "FRPB-Setup.dmg";
@@ -30,7 +30,7 @@ export const GITHUB_RELEASES_BASE = `https://github.com/${GITHUB_REPO}/releases/
 
 /**
  * Direct, ready-to-click URL for the Windows installer:
- * https://github.com/Zapcart/FRPB-Application/releases/download/v1.0.0/FRPB-Setup.exe
+ * https://github.com/Zapcart/FRPB-Application/releases/download/v1.0.0/FRPB-Recovery-Setup-1.0.1.exe
  */
 export const GITHUB_DOWNLOAD_URL = `${GITHUB_RELEASES_BASE}/${EXE_NAME}`;
 
@@ -39,6 +39,8 @@ export const GITHUB_DOWNLOAD_URL = `${GITHUB_RELEASES_BASE}/${EXE_NAME}`;
  * legacy links use the lowercase alias; GitHub stores the mixed-case asset.
  */
 export const GITHUB_ASSET_ALIASES: Record<string, string> = {
+  "frpb-recovery-setup-1.0.1.exe": EXE_NAME,
+  // Legacy alias retained so previously shared lowercase links keep resolving.
   "frpb-setup.exe": EXE_NAME,
   "frpb-setup.dmg": DMG_NAME,
 };
