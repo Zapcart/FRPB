@@ -164,8 +164,6 @@ export default function BlogPostPage({ params }: BlogPostPageProps) {
             steps: howToSteps,
             estimatedTime: post.estimatedTime,
             prerequisites: post.prerequisites,
-            deviceName:
-              post.brand && post.model ? `${post.brand} ${post.model}` : undefined,
           })}
         />
       )}

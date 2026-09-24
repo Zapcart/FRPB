@@ -278,8 +278,6 @@ export function howToSchema(guide: {
   estimatedTime?: string;
   /** Tools / prerequisites the reader must have. */
   prerequisites?: string[];
-  /** Product this how-to is about (the device, not the software). */
-  deviceName?: string;
 }): Record<string, unknown> {
   return {
     "@context": "https://schema.org",
@@ -291,9 +289,10 @@ export function howToSchema(guide: {
     ...(guide.prerequisites?.length
       ? { tool: guide.prerequisites.map((p) => ({ "@type": "HowToTool", name: p })) }
       : {}),
-    ...(guide.deviceName
-      ? { about: { "@type": "Product", name: guide.deviceName } }
-      : {}),
+    // NOTE: deliberately no nested `Product` node here. Google parses a Product
+    // on article pages as a Product snippet and then reports a critical
+    // "offers/review/aggregateRating missing" error. Device context belongs in
+    // the article text, not in a Product entity on a HowTo.
     supply: [{ "@type": "HowToSupply", name: "USB data cable" }],
     step: guide.steps.map((text, index) => ({
       "@type": "HowToStep",
