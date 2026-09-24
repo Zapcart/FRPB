@@ -20,7 +20,7 @@ import { prisma } from "@/lib/prisma";
 import { sha256 } from "@/lib/crypto/sha256";
 import { generateLicenseKey } from "@/lib/license/generate";
 import { normalizeEmail } from "@/lib/auth/user-identity";
-import { sendLicenseEmail } from "@/lib/email/resend";
+import { hasSentLicenseEmail, sendLicenseEmail } from "@/lib/email/resend";
 import { dualAmount, getDualPlan, type DualCurrency } from "@/config/plans";
 
 /** Razorpay orders expire 10 minutes after creation. */
@@ -97,6 +97,8 @@ function addDays(date: Date, days: number): Date {
 export interface GrantResult {
   licenseId: string;
   licenseKey: string;
+  /** Whether the license-delivery email was successfully dispatched. */
+  emailSent: boolean;
 }
 
 /**
@@ -113,13 +115,20 @@ export async function grantLicenseForOrder(
   const order = await client.paymentOrder.findUnique({ where: { orderId } });
   if (!order) return null;
 
-  // Already granted → return the existing license without re-minting.
+  // Already granted → return the existing license without re-minting. Do NOT
+  // resend the email; just report whether a delivery email ever went out.
   if (order.licenseId) {
     const existing = await client.license.findUnique({
       where: { id: order.licenseId },
       select: { id: true, key: true },
     });
-    if (existing) return { licenseId: existing.id, licenseKey: existing.key };
+    if (existing) {
+      return {
+        licenseId: existing.id,
+        licenseKey: existing.key,
+        emailSent: await hasSentLicenseEmail(existing.id),
+      };
+    }
   }
 
   const planSlug = order.planId as PlanSlug;
@@ -200,26 +209,43 @@ export async function grantLicenseForOrder(
         where: { id: settled.licenseId },
         select: { id: true, key: true },
       });
-      if (winner) return { licenseId: winner.id, licenseKey: winner.key };
+      if (winner) {
+        return {
+          licenseId: winner.id,
+          licenseKey: winner.key,
+          emailSent: await hasSentLicenseEmail(winner.id),
+        };
+      }
     }
     return null;
   }
 
-  // Best-effort delivery email — fired AFTER the transaction commits so a mail
-  // outage can never roll back a granted license, and never blocks the grant.
-  void sendLicenseEmail(
-    {
-      id: license.id,
-      key: license.key,
-      plan: { name: planRow.name },
-      expiresAt: license.expiresAt,
-    },
-    email
-  ).catch(() => {
-    // Failure is recorded in EmailLog by the adapter.
-  });
+  // Deliver the license email AFTER the transaction commits, so a mail outage
+  // can never roll back a granted license. The dispatch is AWAITED (rather than
+  // fire-and-forget) and any failure is logged here with the order/email context
+  // the adapter does not have. The previous empty `.catch(() => {})` swallowed
+  // errors silently, which hid dropped keys. The adapter still records the
+  // failure in EmailLog for the retry cron — the license stays granted.
+  let emailSent = false;
+  try {
+    await sendLicenseEmail(
+      {
+        id: license.id,
+        key: license.key,
+        plan: { name: planRow.name },
+        expiresAt: license.expiresAt,
+      },
+      email
+    );
+    emailSent = true;
+  } catch (err) {
+    console.error(
+      `[payment] license ${license.id} granted (order ${order.orderId}) but the delivery email to ${email} failed:`,
+      (err as Error)?.message ?? err
+    );
+  }
 
-  return { licenseId: license.id, licenseKey };
+  return { licenseId: license.id, licenseKey, emailSent };
 }
 
 /**

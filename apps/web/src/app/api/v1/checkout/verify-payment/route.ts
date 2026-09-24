@@ -100,6 +100,9 @@ async function handleVerify(req: NextRequest): Promise<Response> {
       success: true,
       licenseId: grant.licenseId,
       licenseKey: grant.licenseKey,
+      // False means the key email could not be dispatched (it is retried by the
+      // email-retry cron and is always visible on the customer dashboard).
+      emailSent: grant.emailSent,
     });
   } catch (err) {
     console.error(

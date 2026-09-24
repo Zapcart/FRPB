@@ -1,6 +1,11 @@
 // FRPB — email delivery adapter (Resend).
-// Logs every send in EmailLog; failures are recorded and re-sent by a cron job.
-// NEVER blocks the webhook — a license is granted regardless of email outcome.
+//
+// Every send is recorded in EmailLog and every failure is BOTH persisted and
+// logged loudly. The license-grant path AWAITS this adapter, so a missing API
+// key or a provider outage can never silently drop a customer's key.
+//
+// A mail failure NEVER rolls back a granted license: the row stays in
+// QUEUED/FAILED and GET /api/v1/cron/email-retry re-sends it.
 
 import { Resend } from "resend";
 import { prisma } from "@/lib/prisma";
@@ -12,23 +17,38 @@ import { GITHUB_RELEASES_BASE } from "@/config/download";
 // The client is only created on first send (webhook time).
 let resend: Resend | null = null;
 
+/** Whether the Resend API key is present. Lets callers fail loudly, not silently. */
+export function isEmailConfigured(): boolean {
+  return Boolean(process.env.RESEND_API_KEY);
+}
+
 function getResend(): Resend {
-  if (!resend) {
-    resend = new Resend(process.env.RESEND_API_KEY ?? "");
+  const key = process.env.RESEND_API_KEY;
+  if (!key) {
+    // Previously this constructed Resend with "" and let the send reject; that
+    // rejection was swallowed by the caller's empty catch. Throw a clear,
+    // actionable message instead.
+    throw new Error("RESEND_API_KEY is not configured — cannot send email");
   }
+  if (!resend) resend = new Resend(key);
   return resend;
 }
 
-export async function sendLicenseEmail(
-  license: {
-    id: string;
-    key: string;
-    plan: { name: string };
-    expiresAt: Date | null;
-  },
-  to: string
-): Promise<void> {
-  const { subject, html } = licenseDeliveredTemplate({
+function fromAddress(): string {
+  return process.env.EMAIL_FROM ?? "FRPB <no-reply@frpb.in>";
+}
+
+/** License fields needed to render the delivery email. */
+export interface LicenseEmailLicense {
+  id: string;
+  key: string;
+  plan: { name: string };
+  expiresAt: Date | null;
+}
+
+/** Build the license-delivery subject + HTML from current license state. */
+function buildLicenseEmail(license: LicenseEmailLicense): { subject: string; html: string } {
+  return licenseDeliveredTemplate({
     licenseKey: license.key,
     planName: license.plan.name,
     expiresAt: license.expiresAt,
@@ -37,34 +57,93 @@ export async function sendLicenseEmail(
     quickStartPdfUrl:
       process.env.QUICK_START_PDF_URL ?? "https://frpb.in/guides/frpb-quick-start.pdf",
   });
+}
 
-  const log = await prisma.emailLog.create({
-    data: { to, template: "license-delivered", licenseId: license.id, status: "QUEUED" },
-  });
+/** Persist a failure outcome; never let failure logging mask the failure. */
+async function recordFailure(logId: string, message: string): Promise<void> {
+  try {
+    await prisma.emailLog.update({
+      where: { id: logId },
+      data: {
+        status: "FAILED",
+        error: message.slice(0, 1000),
+        attempts: { increment: 1 },
+      },
+    });
+  } catch (err) {
+    console.error(
+      `[email] could not record EmailLog failure (row ${logId}):`,
+      (err as Error)?.message ?? err
+    );
+  }
+}
+
+/**
+ * Send one already-built email and keep its EmailLog row in sync.
+ *
+ * Throws on ANY failure AFTER recording it, so the caller can log with its own
+ * context (order id, customer email). The license grant is never rolled back.
+ */
+async function dispatch(input: {
+  to: string;
+  subject: string;
+  html: string;
+  logId: string;
+  licenseId: string;
+}): Promise<void> {
+  if (!isEmailConfigured()) {
+    const message = "RESEND_API_KEY is not configured — license email was not sent";
+    console.error(`[email] ${message} (to=${input.to}, license=${input.licenseId})`);
+    await recordFailure(input.logId, message);
+    throw new Error(message);
+  }
 
   try {
     const { data, error } = await getResend().emails.send({
-      from: process.env.EMAIL_FROM ?? "FRPB <no-reply@frpb.in>",
-      to,
-      subject,
-      html,
+      from: fromAddress(),
+      to: input.to,
+      subject: input.subject,
+      html: input.html,
     });
-    if (error) throw error;
+    if (error) throw new Error(error.message ?? String(error));
 
     await prisma.emailLog.update({
-      where: { id: log.id },
-      data: { status: "SENT", providerMsgId: data?.id, sentAt: new Date() },
+      where: { id: input.logId },
+      data: { status: "SENT", providerMsgId: data?.id, sentAt: new Date(), error: null },
     });
+    console.info(`[email] license email sent to ${input.to} (msg=${data?.id ?? "n/a"})`);
   } catch (err) {
-    await prisma.emailLog.update({
-      where: { id: log.id },
-      data: { status: "FAILED", error: (err as Error).message },
-    });
-    // License is already granted — never fail the webhook for an email.
-    // `retryFailedEmails()` re-sends rows stuck in QUEUED/FAILED; it is driven
-    // by GET /api/v1/cron/email-retry. The dashboard's "Reveal key" action is
-    // the customer-facing fallback if delivery never succeeds.
+    const message = (err as Error)?.message ?? String(err);
+    console.error(`[email] license email FAILED to ${input.to}: ${message}`);
+    await recordFailure(input.logId, message);
+    throw err instanceof Error ? err : new Error(message);
   }
+}
+
+/**
+ * Send the license-delivery email for a freshly granted license.
+ *
+ * Creates the EmailLog (QUEUED) row first, then dispatches. Throws on failure
+ * so the caller can log it — the license is already granted regardless.
+ */
+export async function sendLicenseEmail(license: LicenseEmailLicense, to: string): Promise<void> {
+  const { subject, html } = buildLicenseEmail(license);
+
+  let logId: string;
+  try {
+    const log = await prisma.emailLog.create({
+      data: { to, template: "license-delivered", licenseId: license.id, status: "QUEUED" },
+    });
+    logId = log.id;
+  } catch (err) {
+    console.error(
+      `[email] could not create EmailLog for ${to} (license ${license.id}):`,
+      (err as Error)?.message ?? err
+    );
+    throw err instanceof Error ? err : new Error(String(err));
+  }
+
+  await dispatch({ to, subject, html, logId, licenseId: license.id });
 }
 
 /** Attempts allowed per email before it is left alone. */
@@ -83,18 +162,16 @@ export interface EmailRetrySummary {
 /**
  * Re-send license-delivery emails that are stuck in QUEUED or FAILED.
  *
- * The webhook fires the delivery best-effort and never blocks the license
- * grant, so a transient Resend outage would otherwise leave a paying customer
- * without their key email. This drains that backlog.
+ * The grant path dispatches best-effort and never blocks the license, so a
+ * transient Resend outage would otherwise leave a paying customer without
+ * their key. This drains that backlog.
  *
  * Safety:
  *   - only rows within the retry window are touched (no endless retries)
  *   - `attempts` is capped so a permanently-bad address is not hammered
  *   - each attempt writes its outcome back to EmailLog for observability
  */
-export async function retryFailedEmails(
-  limit = 25
-): Promise<EmailRetrySummary> {
+export async function retryFailedEmails(limit = 25): Promise<EmailRetrySummary> {
   const summary: EmailRetrySummary = { scanned: 0, sent: 0, failed: 0, skipped: 0 };
 
   const since = new Date(Date.now() - EMAIL_RETRY_WINDOW_HOURS * 60 * 60 * 1000);
@@ -127,48 +204,41 @@ export async function retryFailedEmails(
       continue;
     }
 
-    const { subject, html } = licenseDeliveredTemplate({
-      licenseKey: license.key,
-      planName: license.plan.name,
-      expiresAt: license.expiresAt,
-      // Installers are hosted on GitHub Releases (see src/config/download.ts).
-      downloadUrl: process.env.DOWNLOAD_BASE_URL ?? GITHUB_RELEASES_BASE,
-      quickStartPdfUrl:
-        process.env.QUICK_START_PDF_URL ?? "https://frpb.in/guides/frpb-quick-start.pdf",
-    });
-
+    const { subject, html } = buildLicenseEmail(license);
     try {
-      const { data, error } = await getResend().emails.send({
-        from: process.env.EMAIL_FROM ?? "FRPB <no-reply@frpb.in>",
+      await dispatch({
         to: row.to,
         subject,
         html,
-      });
-      if (error) throw error;
-
-      await prisma.emailLog.update({
-        where: { id: row.id },
-        data: {
-          status: "SENT",
-          providerMsgId: data?.id,
-          sentAt: new Date(),
-          attempts: { increment: 1 },
-          error: null,
-        },
+        logId: row.id,
+        licenseId: license.id,
       });
       summary.sent++;
-    } catch (err) {
-      await prisma.emailLog.update({
-        where: { id: row.id },
-        data: {
-          status: "FAILED",
-          attempts: { increment: 1 },
-          error: (err as Error).message,
-        },
-      });
+    } catch {
+      // dispatch() already logged + persisted the failure — keep draining.
       summary.failed++;
     }
   }
 
   return summary;
+}
+
+/**
+ * Whether a license has at least one successfully delivered email.
+ * Backs the `emailSent` flag returned by the license-grant path.
+ */
+export async function hasSentLicenseEmail(licenseId: string): Promise<boolean> {
+  try {
+    const sent = await prisma.emailLog.findFirst({
+      where: { licenseId, template: "license-delivered", status: "SENT" },
+      select: { id: true },
+    });
+    return Boolean(sent);
+  } catch (err) {
+    console.error(
+      `[email] could not check delivery status for license ${licenseId}:`,
+      (err as Error)?.message ?? err
+    );
+    return false;
+  }
 }

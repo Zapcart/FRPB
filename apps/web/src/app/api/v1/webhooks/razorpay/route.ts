@@ -149,6 +149,9 @@ export async function POST(req: NextRequest): Promise<Response> {
       ok: true,
       granted: Boolean(grant),
       licenseId: grant?.licenseId ?? null,
+      // False means the key email could not be dispatched; it is retried by the
+      // email-retry cron and is always visible on the customer dashboard.
+      emailSent: grant?.emailSent ?? false,
     });
   } catch (err) {
     const message = (err as Error)?.message ?? String(err);
