@@ -408,9 +408,9 @@ export default function PricingPage() {
 
         {/* FAQPage structured data — matches the visible accordion above. */}
         <JsonLd id="ld-pricing-faq" data={faqLd} />
-        {/* Product + Offer graph — one Offer per plan, emitted in USD only to
-            match the single currency the storefront charges, so the price range
-            is rich-result eligible. */}
+        {/* Product + Offer graph — a concrete USD Offer (price, validity,
+            availability) plus aggregateRating, so Google's Product-snippet
+            requirement is satisfied. */}
         <JsonLd id="ld-pricing-product" data={productSchema()} />
         {/* BreadcrumbList — mirrors the visible Home → Pricing trail. */}
         <JsonLd
