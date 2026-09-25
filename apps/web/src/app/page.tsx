@@ -17,15 +17,8 @@ import {
   Check,
   ArrowRight,
   Menu,
-  ChevronRight,
   LifeBuoy,
   Mail,
-  Apple,
-  Monitor,
-  Play,
-  Star,
-  BadgeCheck,
-  Award,
   Usb,
   Terminal,
   Cable,
@@ -41,7 +34,7 @@ import {
   SUPPORT_EMAIL,
   mailtoHref,
 } from "@/config/legal";
-import SmoothScrollLink from "@/components/smooth-scroll-link";
+import Hero from "@/components/landing/hero";
 import JsonLd from "@/components/seo/json-ld";
 import FaqSection from "@/components/faq-section";
 import {
@@ -59,13 +52,14 @@ import {
 } from "@/lib/schema";
 import { HOME_FAQ } from "@/lib/faq";
 import { homeMetrics, SUPPORTED_CHIPSETS, SUPPORTED_MODES } from "@/lib/home-metrics";
+import type { HomeMetrics } from "@/lib/home-metrics";
 
 /**
  * Verifiable capability metrics derived from the shipped model catalog — see
  * lib/home-metrics.ts. Replaces the previously hardcoded "120,000+ devices
  * recovered" / "4.9/5 from 2,000+ reviews" social proof, which had no source.
  */
-const HOME_METRICS = homeMetrics();
+const HOME_METRICS: HomeMetrics = homeMetrics();
 
 const NAV_LINKS = [
   { label: "Features", href: "#features" },
@@ -266,242 +260,7 @@ export default function HomePage() {
       </header>
 
       {/* ================= HERO ================= */}
-      <section className="relative isolate overflow-hidden bg-gradient-to-b from-white via-slate-50 to-white">
-        {/* Animated background mesh: soft brand bloom + drifting grid */}
-        <div className="pointer-events-none absolute inset-0 -z-20 bg-hero-glow" />
-        <div className="pointer-events-none absolute inset-0 -z-20 bg-grid-slate bg-grid-60 animate-grid-pan [mask-image:radial-gradient(72%_62%_at_50%_0%,black,transparent)]" />
-        <div className="pointer-events-none absolute -left-24 top-10 -z-20 h-72 w-72 rounded-full bg-brand-500/10 blur-[110px] animate-aurora" />
-        <div className="pointer-events-none absolute -right-20 top-40 -z-20 h-80 w-80 rounded-full bg-accent-500/10 blur-[120px] animate-float-slow" />
-        <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
-
-        <div className="mx-auto max-w-7xl px-4 pb-16 pt-14 sm:px-6 sm:pt-20 lg:pt-24">
-          <div className="grid grid-cols-1 items-center gap-8 lg:grid-cols-12">
-            {/* ---- Left column: copy + CTAs + trust badges (7/12) ---- */}
-            <div className="lg:col-span-7 lg:pr-6">
-              {/* Subtle hero pill badge */}
-              <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-semibold text-slate-600 shadow-sm animate-fade-up">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-accent-500" />
-                </span>
-                FRPB Utility V1 — Android FRP Toolkit
-              </div>
-
-              {/* Headline — gradient typography with a slow pan */}
-              <h1 className="max-w-2xl text-[2rem] font-black leading-[1.06] tracking-tight text-ink sm:text-5xl lg:text-[3.4rem]">
-                All in One & One for All —{" "}
-                <span className="animate-gradient-pan bg-gradient-to-r from-brand-600 via-brand-500 to-accent-500 bg-[length:200%_auto] bg-clip-text text-transparent">
-                  Automated Android FRP Unlock
-                </span>
-              </h1>
-
-              <p className="mt-6 max-w-2xl text-base leading-relaxed text-slate-500 sm:text-lg">
-                The professional <span className="font-semibold text-ink">Android FRP unlock
-                and device utility</span> toolkit. Clear Factory Reset Protection, flash reset a
-                handset and install the right OEM drivers — driving MediaTek BROM, Qualcomm EDL
-                (9008), Samsung Download, Fastboot and ADB, with support for Samsung, Xiaomi, Vivo,
-                OPPO, Realme, Motorola and Pixel.
-              </p>
-
-              {/* Action buttons — two primary CTAs only */}
-              <div className="mt-9 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-                <Link
-                  href={downloadUrl}
-                  className="btn-accent btn-shine w-full px-8 py-3.5 text-sm uppercase tracking-wide shadow-blue-glow hover:-translate-y-0.5 sm:w-auto"
-                >
-                  <Download className="h-5 w-5" />
-                  Download for Windows
-                </Link>
-                <SmoothScrollLink
-                  targetId="pricing"
-                  ariaLabel="View pricing"
-                  className="btn-ghost w-full px-8 py-3.5 text-sm hover:-translate-y-0.5 sm:w-auto"
-                >
-                  View Pricing
-                  <ArrowRight className="h-4 w-4" />
-                </SmoothScrollLink>
-              </div>
-
-              {/* Platform compatibility indicators / trust badges */}
-              <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium text-slate-500">
-                <span className="inline-flex items-center gap-1.5">
-                  <Monitor className="h-4 w-4 text-slate-400" />
-                  Windows 11 / 10 / 8 / 7
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <Apple className="h-4 w-4 text-slate-400" />
-                  macOS 10.14+
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <ShieldCheck className="h-4 w-4 text-emerald-500" />
-                  Free trial · No credit card required
-                </span>
-              </div>
-            </div>
-
-            {/* ---- Right column: glassmorphic tech visual (5/12) ---- */}
-            <div className="relative lg:col-span-5">
-              {/* Gradient arched frame + bloom behind the glass card */}
-              <div className="pointer-events-none absolute -inset-6 -z-10">
-                <div className="h-full w-full rounded-[2.75rem] bg-gradient-to-br from-brand-500/15 via-accent-500/10 to-transparent blur-2xl" />
-              </div>
-
-              <div className="glass-hero relative">
-                <div className="overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white/70 shadow-card backdrop-blur-xl">
-                  {/* Card header */}
-                  <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 bg-white/60 px-5 py-4">
-                    <div className="flex items-center gap-2.5">
-                      <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-accent-500 text-white shadow-blue-glow">
-                        <Smartphone className="h-4 w-4" />
-                      </span>
-                      <div>
-                        <p className="text-sm font-bold leading-none text-ink">FRPB Engine</p>
-                        <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                          Device workspace
-                        </p>
-                      </div>
-                    </div>
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-emerald-600">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      Active
-                    </span>
-                  </div>
-
-                  {/* Live telemetry chips */}
-                  <div className="grid grid-cols-3 gap-2.5 px-5 pt-5">
-                    {[
-                      { icon: Usb, label: "USB", value: "Linked", tint: "text-brand-600" },
-                      { icon: Activity, label: "ADB", value: "Online", tint: "text-emerald-600" },
-                      { icon: Cpu, label: "BROM", value: "Ready", tint: "text-accent-600" },
-                    ].map((chip) => (
-                      <div
-                        key={chip.label}
-                        className="rounded-2xl border border-slate-200/80 bg-white/80 p-3 text-center shadow-sm"
-                      >
-                        <chip.icon className={`mx-auto h-4 w-4 ${chip.tint}`} />
-                        <p className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                          {chip.label}
-                        </p>
-                        <p className="text-xs font-bold text-ink">{chip.value}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Stylized device preview */}
-                  <div className="p-5">
-                    <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-b from-slate-50 to-white p-4 shadow-sm">
-                      <div className="flex items-center gap-3">
-                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-emerald-200 bg-emerald-50">
-                          <Smartphone className="h-5 w-5 text-emerald-600" />
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-bold text-ink">Galaxy S24 · SM-S928B</p>
-                          <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-500">
-                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-                            Qualcomm 9008 EDL detected
-                          </p>
-                        </div>
-                        <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-slate-500">
-                          EDL
-                        </span>
-                      </div>
-
-                      {/* Progress */}
-                      <div className="mt-4">
-                        <div className="mb-1.5 flex items-center justify-between text-[10px] font-semibold text-slate-500">
-                          <span>FRP bypass sequence</span>
-                          <span className="text-brand-600">75%</span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                          <div className="h-full w-3/4 rounded-full bg-gradient-to-r from-brand-500 to-accent-500" />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Live log terminal */}
-                    <div className="mt-3 rounded-2xl border border-slate-800/90 bg-slate-900 p-3 font-mono text-[10px] leading-relaxed shadow-sm">
-                      {[
-                        { c: "text-emerald-400", t: "[ok]  adb device authorized  ·  SM-S928B" },
-                        { c: "text-slate-400", t: "[usb] Qualcomm 9008 EDL interface bound" },
-                        { c: "text-accent-300", t: "[frp] bypass sequence 3/4 — verifying" },
-                      ].map((line) => (
-                        <div key={line.t} className={`flex gap-2 ${line.c}`}>
-                          <span className="text-slate-600">›</span>
-                          <span className="truncate">{line.t}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Floating glassmorphic engine badges */}
-                <div className="absolute -left-4 -top-4 hidden animate-float items-center gap-2 rounded-2xl border border-slate-200/80 bg-white/80 px-3.5 py-2.5 shadow-card backdrop-blur-xl sm:flex">
-                  <span className="grid h-7 w-7 place-items-center rounded-lg bg-brand-50 text-brand-600">
-                    <Cable className="h-4 w-4" />
-                  </span>
-                  <span className="text-[11px] font-bold text-ink">MTP</span>
-                  <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
-                </div>
-
-                <div className="absolute -right-4 top-24 hidden animate-float-slow items-center gap-2 rounded-2xl border border-slate-200/80 bg-white/80 px-3.5 py-2.5 shadow-card backdrop-blur-xl sm:flex">
-                  <span className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-50 text-emerald-600">
-                    <Activity className="h-4 w-4" />
-                  </span>
-                  <span className="text-[11px] font-bold text-ink">ADB</span>
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                </div>
-
-                <div className="absolute -bottom-4 left-8 hidden animate-float items-center gap-2 rounded-2xl border border-slate-200/80 bg-white/80 px-3.5 py-2.5 shadow-card backdrop-blur-xl sm:flex">
-                  <span className="grid h-7 w-7 place-items-center rounded-lg bg-accent-50 text-accent-600">
-                    <Cpu className="h-4 w-4" />
-                  </span>
-                  <span className="text-[11px] font-bold text-ink">BROM</span>
-                  <span className="h-1.5 w-1.5 rounded-full bg-accent-500" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Trust metrics row */}
-          <div className="mt-14 grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {[
-              {
-                icon: BadgeCheck,
-                value: HOME_METRICS.supportedModels,
-                label: "Models supported",
-                tint: "border-emerald-200 bg-emerald-50 text-emerald-600",
-              },
-              {
-                icon: Award,
-                value: HOME_METRICS.supportedModes,
-                label: "Boot modes supported",
-                tint: "border-brand-200 bg-brand-50 text-brand-600",
-              },
-              {
-                icon: Star,
-                value: HOME_METRICS.chipsetFamilies,
-                label: "Chipset families",
-                tint: "border-amber-200 bg-amber-50 text-amber-600",
-              },
-            ].map((stat) => (
-              <div
-                key={stat.label}
-                className="flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/80 px-5 py-4 shadow-sm transition-all hover:shadow-md"
-              >
-                <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border ${stat.tint}`}>
-                  <stat.icon className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="text-lg font-extrabold leading-none text-ink">{stat.value}</p>
-                  <p className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    {stat.label}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <Hero downloadUrl={downloadUrl} metrics={HOME_METRICS} />
 
       {/* ================= BRAND SLIDER ================= */}
       <section id="brands" className="border-y border-slate-200/80 bg-slate-50/60">

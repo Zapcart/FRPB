@@ -103,6 +103,9 @@ const config: Config = {
           "conic-gradient(from 210deg at 50% 50%, rgba(0,102,255,0.85), rgba(0,163,255,0.85), rgba(139,92,246,0.85), rgba(0,102,255,0.85))",
         "glass-sheen":
           "linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.02) 45%, transparent 100%)",
+        // Hero: soft radial ripple core (centre-anchored, fades to transparent).
+        "hero-ripple":
+          "radial-gradient(circle at 50% 38%, rgba(0,102,255,0.16) 0%, rgba(0,163,255,0.08) 34%, transparent 68%)",
       },
       backgroundSize: {
         "grid-60": "60px 60px",
@@ -139,6 +142,33 @@ const config: Config = {
           "20%": { opacity: "1" },
           "100%": { transform: "translateX(240%) skewX(-18deg)", opacity: "0" },
         },
+        // Hero entrance: fade in while scaling up (zero layout shift — transform
+        // + opacity only).
+        "fade-scale": {
+          "0%": { opacity: "0", transform: "translateY(16px) scale(0.96)" },
+          "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
+        },
+        // Expanding radial ripple ring behind the hero copy.
+        ripple: {
+          "0%": { transform: "scale(0.55)", opacity: "0.5" },
+          "70%": { opacity: "0.12" },
+          "100%": { transform: "scale(1.7)", opacity: "0" },
+        },
+        // Gentle vertical bob for floating capability tags.
+        "bounce-slow": {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-9px)" },
+        },
+        // Seamless horizontal loop for the trust-badge marquee (track is 2x).
+        marquee: {
+          "0%": { transform: "translateX(0)" },
+          "100%": { transform: "translateX(-50%)" },
+        },
+        // Slow rotation for the conic aurora bloom.
+        "spin-slow": {
+          "0%": { transform: "rotate(0deg)" },
+          "100%": { transform: "rotate(360deg)" },
+        },
       },
       animation: {
         float: "float 7s ease-in-out infinite",
@@ -149,6 +179,12 @@ const config: Config = {
         "fade-up": "fade-up 0.7s cubic-bezier(0.22,1,0.36,1) both",
         "grid-pan": "grid-pan 24s linear infinite",
         shine: "shine 1s ease-in-out",
+        "fade-scale": "fade-scale 0.8s cubic-bezier(0.22,1,0.36,1) both",
+        "fade-scale-slow": "fade-scale 1.1s cubic-bezier(0.22,1,0.36,1) both",
+        ripple: "ripple 4.2s ease-out infinite",
+        "bounce-slow": "bounce-slow 4.5s ease-in-out infinite",
+        marquee: "marquee 34s linear infinite",
+        "spin-slow": "spin-slow 28s linear infinite",
       },
     },
   },

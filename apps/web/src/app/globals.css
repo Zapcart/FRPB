@@ -172,6 +172,46 @@
     );
     filter: blur(48px);
   }
+
+  /* ---------- Hero (landing) ---------- */
+
+  /* Gradient headline fill — the highlight phrase in the h1. */
+  .text-gradient-brand {
+    @apply bg-gradient-to-r from-brand-600 via-brand-500 to-accent-500 bg-[length:200%_auto] bg-clip-text text-transparent;
+  }
+
+  /* Soft edge fade for the trust-badge marquee (hides the loop seam). */
+  .marquee-mask {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      black 8%,
+      black 92%,
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to right,
+      transparent 0,
+      black 8%,
+      black 92%,
+      transparent 100%
+    );
+  }
+
+  /* Prominent solid-neon CTA (hero primary). */
+  .btn-neon {
+    @apply inline-flex min-h-[52px] cursor-pointer touch-manipulation select-none items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-brand-500 to-accent-500 px-8 py-3.5 text-sm font-bold uppercase tracking-wide text-white shadow-[0_18px_50px_-12px_rgba(0,102,255,0.65)] ring-1 ring-white/30 transition hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_24px_60px_-12px_rgba(0,163,255,0.75)] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/60 active:translate-y-0 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  /* Glassmorphic secondary CTA (hero secondary). */
+  .btn-glass {
+    @apply inline-flex min-h-[52px] cursor-pointer touch-manipulation select-none items-center justify-center gap-2 rounded-2xl border border-white/70 bg-white/60 px-8 py-3.5 text-sm font-bold text-ink shadow-[0_10px_30px_-18px_rgba(15,23,42,0.35)] backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-brand-200 hover:bg-white hover:text-brand-700 hover:shadow-[0_18px_40px_-18px_rgba(0,102,255,0.45)] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400/50 active:translate-y-0 active:scale-[0.97] active:bg-white disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  /* Floating capability tag orbiting the hero product showcase. */
+  .hero-tag {
+    @apply pointer-events-none absolute hidden select-none items-center gap-2 rounded-2xl border border-white/70 bg-white/80 px-3.5 py-2.5 shadow-card backdrop-blur-xl sm:flex;
+  }
 }
 
 @keyframes frpb-shine {
@@ -202,7 +242,9 @@
   .btn-primary:active,
   .btn-accent:active,
   .btn-ghost:active,
-  .btn-ghost-dark:active {
+  .btn-ghost-dark:active,
+  .btn-neon:active,
+  .btn-glass:active {
     transform: none !important;
   }
 }
