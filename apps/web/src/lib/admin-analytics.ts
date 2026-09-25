@@ -247,7 +247,7 @@ async function getRecentLicenses(limit = 10) {
 }
 
 const PLAN_NAMES: Record<string, string> = {
-  MONTH_1: "1-Month Plan",
+  MONTH_1: "2-Month Plan",
   LIFETIME: "Lifetime Plan",
 };
 

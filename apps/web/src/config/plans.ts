@@ -11,9 +11,9 @@
 // checkout actually charges, which is exactly the class of bug this file is
 // meant to prevent. A runtime assertion below fails loudly if they drift.
 //
-//   Plan      INR        USD
-//   Month     ₹1,900     $20
-//   Lifetime  ₹13,999    $150
+//   Plan        INR        USD
+//   2 Months    ₹1,900     $20
+//   Lifetime    ₹13,999    $150
 //
 // GATEWAY:
 //   Razorpay Standard Web Checkout is the single, exclusive payment gateway,
@@ -67,10 +67,10 @@ export const DUAL_PLANS: readonly DualPlan[] = [
   {
     slug: "MONTH_1",
     orderPlanId: "MONTHLY",
-    name: "1 Month Plan",
+    name: "2 Month Plan",
     inr: 1900,
     usd: 20,
-    durationDays: 30,
+    durationDays: 60,
     deviceLimit: 1,
     features: [
       "Full device recovery toolkit",

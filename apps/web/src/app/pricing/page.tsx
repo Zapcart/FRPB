@@ -3,7 +3,7 @@
 // Amounts come straight from the plan definition so the displayed price always
 // matches the amount Razorpay actually charges — never a derived FX conversion.
 // Razorpay Standard Web Checkout is the single, exclusive payment gateway and
-// every tier settles in USD ($20 / month, $150 one-time). Checkout is gated
+// every tier settles in USD ($20 / 60 days, $150 one-time). Checkout is gated
 // behind authentication: guests are redirected to sign-up and the pending-plan
 // intent resumes the purchase for the selected plan automatically.
 
@@ -99,7 +99,7 @@ const PRICING_FAQS = [
 // Billing interval suffix, keyed by plan slug. All tiers are priced and charged
 // in USD; a lifetime plan renders a one-time label, never a recurring interval.
 const BILLING_SUFFIX: Record<PlanSlug, string> = {
-  MONTH_1: "/ month",
+  MONTH_1: "/ 2 months",
   LIFETIME: "one-time",
 };
 

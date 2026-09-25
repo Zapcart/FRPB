@@ -1,13 +1,13 @@
 // FRPB — Refund Policy
 // Server component. Static legal page explaining our refund policy for
-// monthly and lifetime plans.
+// 60-day and lifetime plans.
 
 import { pageMetadata } from "@/lib/seo";
 
 export const metadata = pageMetadata({
   title: "Refund Policy",
   description:
-    "FRPB refund policy — what is refundable, when, and how to request a refund for monthly and lifetime plans.",
+    "FRPB refund policy - what is refundable, when, and how to request a refund for 60-day and lifetime plans.",
   path: "/refund",
 });
 
@@ -73,10 +73,10 @@ export default function RefundPolicyPage() {
 
           <section>
             <h2 className="text-lg font-bold text-ink">
-              2. Monthly Subscriptions
+              2. 60-Day Plans
             </h2>
             <p>
-              For monthly subscription plans:
+              For 60-day (one-time) plans:
             </p>
             <ul className="mt-3 list-disc pl-6 space-y-1 text-slate-600">
               <li>
@@ -84,9 +84,9 @@ export default function RefundPolicyPage() {
                 date of purchase if you have not used the plan beyond a brief trial.
               </li>
               <li>
-                If your subscription is cancelled within the refund window and no
+                If your plan is cancelled within the refund window and no
                 significant recovery work has been performed, we will refund the amount
-                you paid for that billing period, excluding any taxes we were required to
+                you paid for that term, excluding any taxes we were required to
                 collect.
               </li>
               <li>
@@ -95,9 +95,9 @@ export default function RefundPolicyPage() {
                 a few business days.
               </li>
               <li>
-                After the seven-day window, monthly subscriptions are not
-                eligible for a refund. Cancellations after this window stop future
-                renewals but do not generate a refund for fees already paid.
+                After the seven-day window, 60-day plans are not eligible for a
+                refund. Because 60-day plans are one-time purchases and do not renew,
+                no further charges are made when the term ends.
               </li>
             </ul>
           </section>

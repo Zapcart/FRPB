@@ -59,13 +59,13 @@ export function formatMoney(
 export const PLANS: readonly PlanDefinition[] = [
   {
     slug: "MONTH_1",
-    name: "1-Month Plan",
+    name: "2-Month Plan",
     priceCents: 2000,   // $20
     currency: "USD",
     priceInr: 190000,   // ₹1,900
     usd: 20,
     inr: 1900,
-    durationDays: 30,
+    durationDays: 60,
     deviceLimit: 1,
     features: [
       "Full device recovery toolkit",

@@ -130,16 +130,16 @@ export default function TermsOfServicePage() {
           <section>
             <h2 className="text-lg font-bold text-ink">5. Plans and Payments</h2>
             <p>
-              Plans are offered on a monthly or lifetime basis as described on
+              Plans are offered on a 60-day or lifetime basis as described on
               our pricing page and in your order confirmation:
             </p>
             <ul className="mt-3 list-disc pl-6 space-y-1 text-slate-600">
               <li>
-                <strong>Monthly plans</strong> are subscriptions that renew
-                automatically at the end of each billing period unless you cancel before
-                the renewal date. You may cancel at any time; cancellation stops future
-                renewals but does not refund fees already paid, except where required by
-                law or our Refund Policy.
+                <strong>60-day plans</strong> are one-time purchases that grant
+                access for sixty (60) days from the date of purchase. They do not
+                renew automatically; when the term ends you may purchase a new plan
+                to continue using the Software. Fees already paid are not refunded,
+                except where required by law or our Refund Policy.
               </li>
               <li>
                 <strong>Lifetime plans</strong> are one-time purchases that grant

@@ -42,7 +42,7 @@ export const HOME_FAQ: readonly FaqItem[] = [
   {
     question: "Is the FRPB FRP lock removal app free to try?",
     answer:
-      "Yes. You can download FRPB and run the free trial with no credit card required. Paid monthly and lifetime licenses unlock the full FRP lock removal and flash reset toolkit across one to five devices. Every license verifies online over TLS with hashed device binding.",
+      "Yes. You can download FRPB and run the free trial with no credit card required. Paid 60-day and lifetime licenses unlock the full FRP lock removal and flash reset toolkit across one to five devices. Every license verifies online over TLS with hashed device binding.",
   },
   {
     question: "Which Windows versions does the FRPB desktop app support?",
