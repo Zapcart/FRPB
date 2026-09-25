@@ -16,6 +16,9 @@ import {
   Download,
   Monitor,
   CheckCircle2,
+  Check,
+  Sparkles,
+  X,
 } from "lucide-react";
 import type {
   ListLicensesItem,
@@ -23,6 +26,8 @@ import type {
   ApiEnvelope,
 } from "@frpb/shared";
 import { resolveInstallerUrl } from "@/config/download";
+import { DUAL_PLANS, formatDualUsd } from "@/config/plans";
+import { createClient } from "@/lib/supabase/client";
 
 interface LicenseWithDevices extends ListLicensesItem {
   devices: DashboardDeviceItem[];
@@ -34,6 +39,33 @@ interface LicenseWithDevices extends ListLicensesItem {
  * a stalled connection pool can never leave the dashboard hanging on a spinner.
  */
 const LIST_TIMEOUT_MS = 3000;
+
+/**
+ * Attempt to recover an expired Supabase session on the client BEFORE treating a
+ * 401 from the license API as a genuine sign-out.
+ *
+ * A 401 here almost always means the short-lived access token lapsed and the
+ * browser client has not rotated it yet (cold start / cookie-timing race) — not
+ * that the user's session is gone. Refreshing once and retrying prevents the
+ * spurious "auto-logout" users saw after clicking a dashboard control.
+ *
+ * Returns true when a usable session is present after the refresh attempt.
+ */
+async function refreshSession(): Promise<boolean> {
+  try {
+    const client = createClient();
+    const { data } = await client.auth.getSession();
+    if (data.session) return true;
+
+    const { data: refreshed, error } = await client.auth.refreshSession();
+    if (error) return false;
+    return Boolean(refreshed.session);
+  } catch {
+    // Supabase unconfigured or the refresh round trip failed — the caller
+    // decides what to do with the still-401 response.
+    return false;
+  }
+}
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -63,6 +95,9 @@ export default function DashboardPage() {
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [revealing, setRevealing] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  // In-dashboard plan chooser: lets a user without an active license pick the
+  // $20 (60-day) or $150 (lifetime) plan without leaving the dashboard.
+  const [chooserOpen, setChooserOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -74,14 +109,27 @@ export default function DashboardPage() {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), LIST_TIMEOUT_MS);
 
-    try {
-      const res = await fetch("/api/v1/license/list", {
+    const fetchList = () =>
+      fetch("/api/v1/license/list", {
         cache: "no-store",
         credentials: "include",
         signal: controller.signal,
       });
 
-      // The ONLY failure that changes behaviour: a genuinely missing session.
+    try {
+      let res = await fetchList();
+
+      // Recover an expired/rotating session once before concluding the user is
+      // signed out. Without this, a transient cookie-timing 401 bounced an
+      // authenticated user straight to /auth — the reported auto-logout.
+      if (res.status === 401) {
+        const recovered = await refreshSession();
+        if (recovered) {
+          res = await fetchList();
+        }
+      }
+
+      // Only a persistent, genuinely missing session changes behaviour.
       // Navigate client-side — we never clear the token and never hard-reload.
       if (res.status === 401) {
         router.replace("/auth?returnTo=/dashboard");
@@ -215,12 +263,55 @@ export default function DashboardPage() {
   // error card, toast or retry button here.
   if (!licenses.length) {
     return (
-      <EmptyState
-        icon={<KeyRound className="h-8 w-8 text-brand-500" />}
-        title="No active licenses yet"
-        body="Purchase a plan to unlock full device recovery features."
-        cta={{ href: "/pricing", label: "Choose Plan" }}
-      />
+      <div className="space-y-6">
+        {/* Post-payment reassurance. The webhook may still be provisioning the
+            license at this instant, so we show the banner even before the key
+            appears in the list below. */}
+        {checkoutSucceeded && (
+          <div className="flex items-start gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+            <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />
+            <div>
+              <p className="text-sm font-bold text-emerald-900">Payment successful 🎉</p>
+              <p className="mt-0.5 text-sm text-emerald-700">
+                Your payment is confirmed and your license key is being provisioned.
+                Refresh in a moment to see it here.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Prominent purchase prompt for users without an active license. */}
+        <div className="relative overflow-hidden rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 via-white to-accent-50 p-8 text-center shadow-card">
+          <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-brand-500 to-accent-500">
+            <KeyRound className="h-6 w-6 text-white" />
+          </span>
+          <h2 className="mt-4 text-xl font-bold tracking-tight text-slate-900">
+            No active license yet
+          </h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
+            Activate FRPB to unlock full device recovery. Choose the{" "}
+            <span className="font-semibold text-slate-900">{formatDualUsd(20)}</span>{" "}
+            60-day plan or the{" "}
+            <span className="font-semibold text-slate-900">{formatDualUsd(150)}</span>{" "}
+            lifetime plan.
+          </p>
+          <button
+            type="button"
+            onClick={() => setChooserOpen(true)}
+            className="btn-accent mt-6 inline-flex min-h-[48px] touch-manipulation items-center justify-center gap-2 px-6 py-3 text-sm font-bold text-white active:scale-[0.98]"
+          >
+            <Sparkles className="h-4 w-4" /> Choose Plan
+          </button>
+          <p className="mt-3 text-xs text-slate-400">
+            Prefer the full comparison?{" "}
+            <Link href="/pricing" className="font-semibold text-brand-600 hover:text-brand-700">
+              See all features
+            </Link>
+          </p>
+        </div>
+
+        <PlanChooser open={chooserOpen} onClose={() => setChooserOpen(false)} />
+      </div>
     );
   }
 
@@ -314,12 +405,13 @@ export default function DashboardPage() {
                 </span>
               </div>
             </div>
-            <Link
-              href="/#pricing"
+            <button
+              type="button"
+              onClick={() => setChooserOpen(true)}
               className="btn-ghost rounded-lg px-4 py-2 text-sm font-medium"
             >
               Upgrade plan
-            </Link>
+            </button>
           </div>
 
           {/* Download CTA */}
@@ -402,6 +494,107 @@ export default function DashboardPage() {
         Need another activation? Unbind a device above to free a slot — the same machine can
         re-activate anytime.
       </p>
+
+      <PlanChooser open={chooserOpen} onClose={() => setChooserOpen(false)} />
+    </div>
+  );
+}
+
+/**
+ * Modal plan chooser. Renders the two canonical tiers from `@/config/plans` so
+ * an authenticated user can pick the $20 (60-day) or $150 (lifetime) plan
+ * directly from the dashboard; each choice routes to the existing checkout
+ * page, which re-derives the charge server-side.
+ */
+function PlanChooser({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const router = useRouter();
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Choose a plan"
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-sm"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold tracking-tight text-slate-900">Choose your plan</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              One-time payment. Your license key is delivered instantly by email.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          {DUAL_PLANS.map((plan) => {
+            const highlighted = plan.slug === "LIFETIME";
+            return (
+              <div
+                key={plan.slug}
+                className={`flex flex-col rounded-2xl border p-5 ${
+                  highlighted ? "border-brand-300 bg-brand-50/50" : "border-slate-200 bg-white"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-slate-900">{plan.name}</p>
+                  {highlighted && (
+                    <span className="rounded-full border border-brand-200 bg-white px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brand-700">
+                      Best value
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-3 flex items-baseline gap-1.5">
+                  <span className="text-3xl font-black tracking-tight text-ink">
+                    {formatDualUsd(plan.usd)}
+                  </span>
+                  <span className="text-xs font-medium text-slate-400">
+                    {plan.durationDays ? `${plan.durationDays} days` : "one-time"}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-slate-400">
+                  {plan.deviceLimit} {plan.deviceLimit === 1 ? "device" : "devices"}
+                </p>
+
+                <ul className="mt-4 flex-1 space-y-2 text-sm">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2 text-slate-600">
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    router.push(`/checkout?plan=${plan.slug}&currency=USD`);
+                  }}
+                  className="btn-accent mt-5 inline-flex min-h-[44px] w-full touch-manipulation items-center justify-center px-4 py-2.5 text-sm font-bold text-white active:scale-[0.98]"
+                >
+                  Choose {plan.name}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

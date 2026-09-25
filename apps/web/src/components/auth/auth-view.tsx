@@ -8,10 +8,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Mail, Lock, User, ShieldCheck, Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import {
-  checkoutUrlFor,
-  readPendingPlan,
-} from "@/lib/checkout/pending-plan";
 import { PLANS, formatMoney, priceFor } from "@frpb/shared";
 import posthog from "posthog-js";
 import { isPostHogEnabled } from "@/app/providers";
@@ -89,24 +85,22 @@ export default function AuthView({
       posthog.capture("user_logged_in", { method: "email_password", mode });
     }
 
-    // Session is set — decide the destination.
+    // Session is set — always land on the dashboard.
     //
-    // Purchase funnel priority: if the visitor arrived from a pricing card,
-    // resume checkout with the EXACT plan/currency they picked. The intent is
-    // read from localStorage so it survives the email-confirmation round trip,
-    // where the URL query would otherwise have been lost.
+    // We deliberately DO NOT auto-resume checkout here. Even if a pending plan
+    // exists in storage (the visitor clicked a pricing card before signing in),
+    // a freshly-authenticated user must land on `/dashboard`, never straight on
+    // the $20 payment page. The dashboard surfaces a plan chooser for users
+    // without an active license, so purchase intent is preserved without
+    // hijacking the redirect.
     //
-    // Otherwise fall back to the server-sanitized `returnTo`, and finally to
-    // the dashboard when there is nothing more specific to honour.
-    let destination = returnTo || DASHBOARD_PATH;
-    const pending = readPendingPlan();
-    if (pending) {
-      destination = checkoutUrlFor(pending);
-      // NOT cleared here: the intent is cleared by CheckoutClient once the
-      // gateway session is actually created. Clearing at this point would lose
-      // the purchase if checkout subsequently failed or the user navigated
-      // away mid-flow.
-    }
+    // A caller-supplied `returnTo` is honoured only when it is an in-app path
+    // that is not itself a checkout route (the server already sanitizes it and
+    // defaults it to `/dashboard`).
+    const destination =
+      returnTo && !returnTo.startsWith("/checkout")
+        ? returnTo
+        : DASHBOARD_PATH;
 
     // Use router.push (not window.location.href) so Next.js handles the
     // transition without a full reload that could drop session cookies.
