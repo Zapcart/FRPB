@@ -1,4 +1,4 @@
-// FRPB — Razorpay webhook endpoint (payment.captured license gate).
+// FRPB — Razorpay webhook endpoint (payment.captured / order.paid license gate).
 //
 // SECURITY MODEL
 //   Licenses are granted ONLY after a server-verified Razorpay signal. There
@@ -44,9 +44,22 @@ interface RazorpayPaymentEntity {
   status?: string;
 }
 
+/** Minimal shape of the `order.paid` payload's order entity. */
+interface RazorpayOrderEntity {
+  id?: string;
+  amount?: number;
+  currency?: string;
+  receipt?: string;
+  status?: string;
+  notes?: Record<string, unknown>;
+}
+
 interface RazorpayWebhookBody {
   event?: string;
-  payload?: { payment?: { entity?: RazorpayPaymentEntity } };
+  payload?: {
+    payment?: { entity?: RazorpayPaymentEntity };
+    order?: { entity?: RazorpayOrderEntity };
+  };
 }
 
 /**
@@ -86,11 +99,20 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   const eventType = body.event ?? "unknown";
   const payment = body.payload?.payment?.entity ?? {};
+  const orderEntity = body.payload?.order?.entity ?? {};
 
-  // Acknowledge non-capture events without side effects (200 stops retries).
-  if (eventType !== "payment.captured") {
+  // Only the two settlement signals grant a license. Any other event type is
+  // acknowledged without side effects (a 200 stops Razorpay's retries).
+  const SETTLEMENT_EVENTS = new Set(["payment.captured", "order.paid"]);
+  if (!SETTLEMENT_EVENTS.has(eventType)) {
     return NextResponse.json({ ok: true, ignored: eventType });
   }
+
+  // Resolve the Razorpay order id from whichever entity this event carries:
+  //   - payment.captured → payload.payment.entity.order_id
+  //   - order.paid       → payload.order.entity.id
+  // Both map to the internal order's `providerTxnId`, so settlement is shared.
+  const razorpayOrderId = payment.order_id ?? orderEntity.id;
 
   // A failed DB connection is handled where it matters: the event reservation
   // below returns a non-2xx so Razorpay RETRIES the capture rather than us
@@ -101,7 +123,7 @@ export async function POST(req: NextRequest): Promise<Response> {
   // composite so idempotency still holds if the header is absent.
   const eventId =
     req.headers.get("x-razorpay-event-id") ??
-    `${eventType}:${payment.id ?? payment.order_id ?? rawBody.length}`;
+    `${eventType}:${razorpayOrderId ?? payment.id ?? rawBody.length}`;
 
   // 5. Idempotency gate — a duplicate delivery exits here.
   let firstDelivery: boolean;
@@ -126,16 +148,17 @@ export async function POST(req: NextRequest): Promise<Response> {
 
   // 6. Resolve the internal order via the Razorpay order id (stored as
   //    `providerTxnId` at creation). Without it there is nothing to settle.
-  const razorpayOrderId = payment.order_id;
   if (!razorpayOrderId) {
     await markWebhookEvent(eventId, {
       status: "IGNORED",
-      error: "payment.captured payload had no order_id",
+      error: `${eventType} payload had no order id`,
     });
     return NextResponse.json({ ok: true, ignored: "missing order_id" });
   }
 
-  // 7. Mark PAID (idempotent) and grant exactly one license.
+  // 7. Mark PAID (idempotent) and grant exactly one license. This call also
+  //    creates/updates the owning User row and stores the key as ACTIVE, so a
+  //    paid order always yields a dashboard-visible key even if the email fails.
   try {
     const grant = await markRazorpayOrderPaid({ providerTxnId: razorpayOrderId });
 
@@ -143,6 +166,23 @@ export async function POST(req: NextRequest): Promise<Response> {
       status: grant ? "PROCESSED" : "IGNORED",
       licenseId: grant?.licenseId ?? null,
       error: grant ? null : `No matching order for ${razorpayOrderId}`,
+    });
+
+    // Structured per-transaction log so a future "why didn't my key arrive?"
+    // ticket is answered from one grep: Payment ID, customer email, generated
+    // Key ID, and whether the delivery email actually went out.
+    console.info("[webhooks/razorpay] transaction", {
+      event: eventType,
+      paymentId: payment.id ?? null,
+      orderId: razorpayOrderId,
+      email: payment.email ?? null,
+      licenseId: grant?.licenseId ?? null,
+      emailStatus: grant
+        ? grant.emailSent
+          ? "SENT"
+          : "QUEUED_FOR_RETRY"
+        : "NOT_APPLICABLE",
+      granted: Boolean(grant),
     });
 
     return NextResponse.json({
@@ -155,9 +195,13 @@ export async function POST(req: NextRequest): Promise<Response> {
     });
   } catch (err) {
     const message = (err as Error)?.message ?? String(err);
-    console.error("[webhooks/razorpay] failed to settle order:", message, {
-      razorpayOrderId,
+    console.error("[webhooks/razorpay] transaction failed", {
+      event: eventType,
+      paymentId: payment.id ?? null,
+      orderId: razorpayOrderId,
+      email: payment.email ?? null,
       eventId,
+      error: message,
     });
     await markWebhookEvent(eventId, { status: "FAILED", error: message });
     // 5xx → Razorpay retries. The event row is already reserved so the retry

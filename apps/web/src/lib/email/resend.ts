@@ -35,7 +35,16 @@ function getResend(): Resend {
 }
 
 function fromAddress(): string {
-  return process.env.EMAIL_FROM ?? "FRPB <no-reply@frpb.in>";
+  // Canonical sender. Precedence:
+  //   1. RESEND_FROM_EMAIL — the explicit Resend "from" override;
+  //   2. EMAIL_FROM        — legacy alias still set in some environments;
+  //   3. the branded support address as a final, safe default.
+  // Falls back gracefully so a missing/renamed env var never blocks delivery.
+  return (
+    process.env.RESEND_FROM_EMAIL ??
+    process.env.EMAIL_FROM ??
+    "FRPB Support <support@frpb.in>"
+  );
 }
 
 /** License fields needed to render the delivery email. */

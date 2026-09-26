@@ -245,6 +245,19 @@ export async function grantLicenseForOrder(
     );
   }
 
+  // Structured per-transaction audit line (provider ref → email → key → mail
+  // status). Mirrors the webhook's log so BOTH settlement paths (signed verify
+  // callback and signed webhook) are equally greppable when diagnosing a
+  // missing key or a dropped delivery email.
+  console.info("[payment] license granted", {
+    orderId: order.orderId,
+    providerTxnId: order.providerTxnId,
+    email,
+    licenseId: license.id,
+    licenseStatus: license.status,
+    emailStatus: emailSent ? "SENT" : "QUEUED_FOR_RETRY",
+  });
+
   return { licenseId: license.id, licenseKey, emailSent };
 }
 
