@@ -24,6 +24,10 @@ import type {
   DeviceLogPayload,
   DeviceModelsResult,
   DeviceStatus,
+  FreeToolLogLine,
+  FreeToolOperationEvent,
+  FreeToolRunRequest,
+  FreeToolRunResult,
   FrpbBridge,
   HardwareSnapshot,
   LicenseProfile,
@@ -57,6 +61,7 @@ function createWebBridge(): FrpbBridge {
   const deviceInfoListeners = new Set<(info: DeviceInfoSnapshot) => void>();
   const autoDetectedListeners = new Set<(info: DeviceAutoDetected) => void>();
   const hardwareListeners = new Set<(snapshot: HardwareSnapshot) => void>();
+  const freeToolListeners = new Set<(event: FreeToolOperationEvent) => void>();
   // Mirrors the main-process `deviceLogSinkEnabled` flag driven by
   // `setLogSink`; raw chunks are only mirrored while a Console surface listens.
   let deviceLogSinkEnabled = true;
@@ -99,6 +104,7 @@ function createWebBridge(): FrpbBridge {
     "test-mode": "Samsung Test Mode (MTP)",
     brom: "MediaTek BROM / Preloader (VCOM)",
     "fastboot-recovery": "Fastboot / Recovery",
+    recovery: "Samsung FRP Recovery Wizard",
   };
 
   // Mirrors REBOOT_LABELS in electron/ipc/device.ts for the Quick Boot Switcher.
@@ -186,6 +192,74 @@ function createWebBridge(): FrpbBridge {
     } finally {
       emitRunState({ running: false, op: null });
     }
+  }
+
+  // Mock of the free-utilities run channel. Browser preview has no real device,
+  // so this validates the request the same way electron/ipc/free-tools.ts does
+  // (acknowledgement + lat/lng) and then streams a synthetic, honestly-labelled
+  // result. It never fabricates a "connected" device, mirroring the rest of the
+  // web bridge, but keeps the Free Utilities tab fully explorable.
+  function emitFreeTool(event: FreeToolOperationEvent): void {
+    freeToolListeners.forEach((cb) => cb(event));
+  }
+
+  async function simulateFreeTool(request: FreeToolRunRequest): Promise<FreeToolRunResult> {
+    const tool = request.tool;
+    const startedAt = Date.now();
+    const logs: FreeToolLogLine[] = [];
+    const push = (level: FreeToolLogLine["level"], message: string): void => {
+      logs.push({ level, message, at: Date.now() - startedAt });
+    };
+    const broadcast = (
+      phase: FreeToolRunResult["phase"],
+      progress: number | null,
+      message: string
+    ): FreeToolRunResult => {
+      const result: FreeToolRunResult = {
+        tool,
+        phase,
+        progress,
+        message,
+        success: phase === "success",
+        logs: [...logs],
+      };
+      emitFreeTool({ tool, result });
+      return result;
+    };
+
+    if (tool === "data-eraser" && !request.acknowledged) {
+      push("error", "The erase must be explicitly acknowledged.");
+      return broadcast("error", null, "Confirmation required before erasing.");
+    }
+    if (
+      tool === "virtual-location" &&
+      (typeof request.latitude !== "number" ||
+        typeof request.longitude !== "number" ||
+        !Number.isFinite(request.latitude) ||
+        !Number.isFinite(request.longitude))
+    ) {
+      push("error", "A valid latitude and longitude are required.");
+      return broadcast("error", null, "Enter valid coordinates first.");
+    }
+
+    const stages: Array<[number, string]> = [
+      [10, "Preparing tool…"],
+      [35, "Connecting to device…"],
+      [70, "Running operation…"],
+    ];
+    for (const [pct, message] of stages) {
+      push("info", message);
+      broadcast("running", pct, message);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
+    push("warn", "Web preview mode — no real device was touched.");
+    push("success", "Simulation complete.");
+    return broadcast(
+      "success",
+      100,
+      "Simulated in web preview mode — connect the FRPB desktop app to run the real tool."
+    );
   }
 
   // Browser-preview activation session. Persisted to localStorage (the browser
@@ -459,6 +533,27 @@ function createWebBridge(): FrpbBridge {
           brand: opts?.brand ?? null,
           chipset,
         });
+      },
+      // Browser preview has no hardware. Return a stable, obviously-synthetic
+      // fingerprint (seeded by the optional device label so different labels
+      // still differ) that can never collide with a real machine hash.
+      getHardwareId: async (deviceLabel?: string): Promise<string> => {
+        const seed = (deviceLabel ?? "web-preview").toLowerCase();
+        let hash = 0;
+        for (let i = 0; i < seed.length; i += 1) {
+          hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
+        }
+        return `WEB-PREVIEW-HWID-${hash.toString(16).padStart(8, "0")}`;
+      },
+    },
+    freeTools: {
+      run: (request: FreeToolRunRequest): Promise<FreeToolRunResult> =>
+        simulateFreeTool(request),
+      onEvent: (cb: (event: FreeToolOperationEvent) => void): (() => void) => {
+        freeToolListeners.add(cb);
+        return () => {
+          freeToolListeners.delete(cb);
+        };
       },
     },
     links: {

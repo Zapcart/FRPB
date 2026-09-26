@@ -5,11 +5,22 @@
 import type {
   ChipsetFamily,
   DeviceAutoDetected,
+  FreeToolLogLine,
+  FreeToolOperationEvent,
+  FreeToolRunRequest,
+  FreeToolRunResult,
   ModelCatalogEntry,
   VerifyStatus,
 } from "@frpb/shared";
 
-export type { DeviceAutoDetected, ModelCatalogEntry };
+export type {
+  DeviceAutoDetected,
+  FreeToolLogLine,
+  FreeToolOperationEvent,
+  FreeToolRunRequest,
+  FreeToolRunResult,
+  ModelCatalogEntry,
+};
 
 export interface LicenseProfile {
   key: string;
@@ -217,7 +228,8 @@ export type RebootMode = "bootloader" | "recovery" | "edl" | "system";
 export type OperationMode =
   | "test-mode" // Samsung Test Mode (MTP) — dial *#0*# / *#888# / *#808#
   | "brom" // MediaTek BROM / Preloader (VCOM) — hold Vol Up+Down, plug in
-  | "fastboot-recovery"; // Fastboot / Recovery — hold Vol Down + Power
+  | "fastboot-recovery" // Fastboot / Recovery — hold Vol Down + Power
+  | "recovery"; // Samsung FRP Recovery Wizard — Volume Up + Volume Down + Power
 
 /** Optional per-invocation engine guidance for an FRP/Flash operation. */
 export interface OperationOptions {
@@ -502,6 +514,21 @@ export interface FrpbBridge {
       brand?: string | null;
       chipset?: string | null;
     }) => Promise<ModelCatalogEntry[]>;
+    /** Stable hardware fingerprint — used for license binding. Device label is
+     *  an optional hint (e.g. device-serial or USB-path suffix) that makes the
+     *  hash vary across different physical phones on the same machine. */
+    getHardwareId: (deviceLabel?: string) => Promise<string>;
+  };
+  /**
+   * Free utilities (WhatsApp Transfer, Phone Transfer, Data Eraser, Virtual
+   * Location). Backed by electron/ipc/free-tools.ts; every call drives the
+   * official Android platform-tools binaries. `run` never rejects — failures are
+   * reported through `FreeToolRunResult.success === false` — and `onEvent`
+   * streams live progress for the running tool. Returns an unsubscribe function.
+   */
+  freeTools: {
+    run: (request: FreeToolRunRequest) => Promise<FreeToolRunResult>;
+    onEvent: (cb: (event: FreeToolOperationEvent) => void) => () => void;
   };
   links: { openExternal: (url: string) => Promise<void> };
   updater: {

@@ -24,9 +24,12 @@ import {
   Cable,
   Cpu,
   Activity,
+  MessageCircle,
+  Eraser,
+  MapPin,
   type LucideIcon,
 } from "lucide-react";
-import { PLANS } from "@frpb/shared";
+import { PLANS, FREE_TOOLS, FREE_TOOL_IDS, type FreeToolId } from "@frpb/shared";
 import { resolveInstallerUrl } from "@/config/download";
 import {
   LEGAL_DISCLAIMER,
@@ -63,6 +66,7 @@ const HOME_METRICS: HomeMetrics = homeMetrics();
 
 const NAV_LINKS = [
   { label: "Features", href: "#features" },
+  { label: "Free Tools", href: "#free-tools" },
   { label: "Supported Brands", href: "#brands" },
   { label: "Pricing", href: "#pricing" },
   { label: "Guides", href: "#guides" },
@@ -164,6 +168,18 @@ const PRICING_NOTES: Record<string, string> = {
 
 const PLAN_BADGES: Record<string, string> = {
   LIFETIME: "MOST POPULAR",
+};
+
+/**
+ * Icon per free utility, keyed by the stable FreeToolId so the mapping stays
+ * exhaustive at compile time. The shared metadata is data-only (no JSX), so the
+ * icon resolution lives here in the web layer.
+ */
+const FREE_TOOL_ICONS: Record<FreeToolId, LucideIcon> = {
+  "whatsapp-transfer": MessageCircle,
+  "phone-transfer": Smartphone,
+  "data-eraser": Eraser,
+  "virtual-location": MapPin,
 };
 
 export const metadata: Metadata = {
@@ -406,6 +422,65 @@ export default function HomePage() {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* ================= FREE UTILITIES & TOOLS ================= */}
+      <section
+        id="free-tools"
+        className="relative border-t border-slate-200/80 bg-gradient-to-b from-white to-slate-50 py-20 sm:py-24"
+      >
+        <div className="mx-auto max-w-7xl px-6">
+          <div className="mx-auto max-w-2xl text-center">
+            <span className="badge mb-4 border-emerald-200 bg-emerald-50 text-emerald-700">
+              <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+              100% free · No signup
+            </span>
+            <h2 className="text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
+              Free utilities & tools
+            </h2>
+            <p className="mt-4 text-base leading-relaxed text-slate-500">
+              Four standalone utilities that run entirely on your PC — transfer WhatsApp and
+              phone data, wipe a device, or mock your location. No license required.
+            </p>
+          </div>
+
+          <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {FREE_TOOL_IDS.map((id) => {
+              const tool = FREE_TOOLS[id];
+              const Icon = FREE_TOOL_ICONS[id];
+              return (
+                <Link
+                  key={tool.id}
+                  href={tool.path}
+                  className="group relative flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1.5 hover:border-emerald-300 hover:shadow-card-hover"
+                >
+                  <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 opacity-0 blur-3xl transition-opacity duration-500 group-hover:opacity-10" />
+                  <div className="relative flex h-full flex-col">
+                    <div className="mb-5 grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-sm transition duration-300 group-hover:-translate-y-0.5 group-hover:scale-105">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <h3 className="text-base font-bold text-ink">{tool.eyebrow}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-500">{tool.tagline}</p>
+                    <span className="mt-3 inline-flex w-fit rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                      {tool.target}
+                    </span>
+                    <span className="mt-auto inline-flex items-center gap-1.5 pt-5 text-sm font-bold text-emerald-600 transition group-hover:gap-2.5">
+                      Try For Free
+                      <ArrowRight className="h-4 w-4" />
+                    </span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+
+          <p className="mt-10 text-center text-sm text-slate-500">
+            Looking for FRP removal?{" "}
+            <Link href="/pricing" className="font-bold text-brand-600 hover:text-brand-700">
+              Compare the full toolkit →
+            </Link>
+          </p>
         </div>
       </section>
 

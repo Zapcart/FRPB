@@ -89,6 +89,39 @@ export function opLabel(op: OperationKind): string {
   return op === "flash-reset" ? "Flash Reset" : "FRP Bypass";
 }
 
+/** Samsung FRP — step-by-step recovery wizard guide (full flow). */
+const SAMSUNG_RECOVERY_GUIDE: ConnectionGuide = {
+  key: "recovery",
+  title: "Samsung FRP Recovery Wizard",
+  modeChip: "Samsung · Recovery Mode",
+  keyCombo: "Volume Up + Volume Down + Power (3 buttons together)",
+  listeningLabel: "Listening for Samsung device…",
+  waitHint:
+    "Samsung FRP ke liye recovery mode me phone ko lana hoga. 3 buttons ek sath dabaye rakhein: Volume Up + Volume Down + Power.",
+  steps: [
+    {
+      title: "Phone ko power off karein.",
+      detail: "Long-press Power → Power off. Lok se phone ko band karein.",
+    },
+    {
+      title: "3 buttons ek sath dabaye rakhein: Volume Up + Volume Down + Power.",
+      detail: "Ye 3 buttons ek sath dabaye rakhein — phone recovery mode me jayega.",
+    },
+    {
+      title: "Phone screen on hone ke baad sirf Volume Plus (+) aur Power button dabaye rakhein.",
+      detail: "Screen on hone ke baad sirf Volume Plus aur Power dabaye rakhein — recovery mode open hoga.",
+    },
+    {
+      title: "Recovery mode open hoga — waha aapko Android version ke baare me pata chalega.",
+      detail: "Recovery screen par aapko phone ka Android version dikhai dega. Version note kar lein.",
+    },
+    {
+      title: "Phone ko restart karein (FRP krne ke liye option aayega).",
+      detail: "Recovery se phone ko restart karein — phir FRP removal ke liye option aayega.",
+    },
+  ],
+};
+
 // ─── Locked-device connection guides ──────────────────────────────────────────
 //
 // An FRP-locked phone cannot open Android Settings, so "enable USB debugging"
@@ -98,7 +131,7 @@ export function opLabel(op: OperationKind): string {
 // engine waits live for that transport and reports progress in the operation
 // log while the user follows these steps.
 
-export type ConnectionGuideKey = "test-mode" | "brom" | "fastboot-recovery";
+export type ConnectionGuideKey = "test-mode" | "brom" | "fastboot-recovery" | "recovery";
 
 export interface ConnectionStep {
   title: string;
@@ -237,8 +270,8 @@ const EDL_GUIDE: ConnectionGuide = {
  *  screen and streamed into the live operation log while the engine waits. */
 export function connectionGuideFor(brand: string | null, method: MethodId): ConnectionGuide {
   if (method === "mediatek") return BROM_GUIDE;
-  if (brand === "Samsung") return TEST_MODE_GUIDE;
-  return FASTBOOT_RECOVERY_GUIDE;
+  if (brand === "Samsung") return SAMSUNG_RECOVERY_GUIDE;
+  return TEST_MODE_GUIDE;
 }
 
 /** Chipset/brand/mode → the wizard guide used before an operation starts.
@@ -252,5 +285,6 @@ export function wizardGuide(
     return chipset === "Qualcomm" ? EDL_GUIDE : BROM_GUIDE;
   }
   if (mode === "test-mode") return TEST_MODE_GUIDE;
+  if (mode === "recovery") return SAMSUNG_RECOVERY_GUIDE;
   return FASTBOOT_RECOVERY_GUIDE;
 }

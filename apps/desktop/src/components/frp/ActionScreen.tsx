@@ -267,6 +267,40 @@ export default function ActionScreen({
             </div>
           </div>
         )}
+
+        {/* Samsung-specific recovery wizard trigger (does NOT auto-advance into
+            an automated Engine flow — Samsung FRP is a guided, manual-wizard path).
+            This div is always mounted; it is hidden when the brand is not Samsung. */}
+        {brand === "Samsung" && detected && runningOp === null && (
+          <section className="frpb-card p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-accent-100 text-[11px] font-bold text-accent-700">
+                *
+              </span>
+              <h2 className="text-sm font-bold text-slate-900">Samsung FRP Recovery Wizard</h2>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              FRP-locked Samsung handsets are handled through a step-by-step guided wizard:
+              recovery mode → Android version readout → emergency dialer (*#0#*) →
+              Samsung USB driver → background brute-force attempt. Select the action below
+              to start the wizard in a separate window.
+            </p>
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                onClick={onFrpBypass}
+                disabled={busy}
+                className="frpb-btn-primary inline-flex items-center gap-2 px-4 py-2 text-sm"
+              >
+                <KeyRound className="h-4 w-4" />
+                Start Samsung FRP Wizard
+              </button>
+              <span className="text-[11px] text-slate-500 self-center">
+                HELD BY LICENSE: requires a valid FRPB license key
+              </span>
+            </div>
+          </section>
+        )}
       </section>
 
       {/* ── Dual progress + live stage console (Part 4) ─────────────────────── */}

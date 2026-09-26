@@ -11,6 +11,7 @@ import { useDevice } from "../hooks/useDevice";
 import DeviceMonitor from "./DeviceMonitor";
 import DriverCenter from "./DriverCenter";
 import FRPToolsScreen from "./FRPToolsScreen";
+import FreeUtilitiesScreen from "./FreeUtilitiesScreen";
 import DeviceInfoScreen from "./DeviceInfoScreen";
 import ConsoleLog from "./ConsoleLog";
 import UpdateModal from "./UpdateModal";
@@ -28,9 +29,16 @@ import {
   Info,
   Terminal,
   AlertTriangle,
+  Sparkles,
 } from "lucide-react";
 
-type Tab = "monitor" | "drivers" | "frp" | "device-info" | "console";
+type Tab =
+  | "monitor"
+  | "drivers"
+  | "frp"
+  | "free-tools"
+  | "device-info"
+  | "console";
 
 interface MainDashboardProps {
   profile: LicenseProfile;
@@ -384,6 +392,17 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
           FRP Unlock
         </button>
         <button
+          onClick={() => setTab("free-tools")}
+          className={`-mb-px inline-flex items-center gap-2 rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition ${
+            tab === "free-tools"
+              ? "border-brand-500 text-brand-700"
+              : "border-transparent text-slate-500 hover:text-slate-900"
+          }`}
+        >
+          <Sparkles className="h-4 w-4" />
+          Free Utilities
+        </button>
+        <button
           onClick={() => setTab("device-info")}
           className={`-mb-px inline-flex items-center gap-2 rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition ${
             tab === "device-info"
@@ -413,6 +432,13 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
         {tab === "drivers" && <DriverCenter />}
         {tab === "frp" && (
           <FRPToolsScreen
+            status={deviceStatus}
+            onRefresh={refreshDevice}
+            operationRunning={operationRunning}
+          />
+        )}
+        {tab === "free-tools" && (
+          <FreeUtilitiesScreen
             status={deviceStatus}
             onRefresh={refreshDevice}
             operationRunning={operationRunning}

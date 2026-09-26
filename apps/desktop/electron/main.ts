@@ -9,6 +9,7 @@ import { registerDeviceHandlers } from "./ipc/device";
 import { registerLinkHandlers } from "./ipc/links";
 import { registerUpdaterHandlers, checkForUpdatesOnLaunch } from "./ipc/updater";
 import { performReset, registerResetHandlers } from "./ipc/reset";
+import { registerFreeToolHandlers } from "./ipc/free-tools";
 import { getHardwareId } from "./utils/hardwareId";
 import { log } from "./utils/logger";
 
@@ -131,6 +132,7 @@ app.whenReady().then(async () => {
   registerLinkHandlers();
   registerUpdaterHandlers();
   registerResetHandlers();
+  registerFreeToolHandlers();
 
   // Dev-only clean-slate boot (opt-in via FRPB_RESET_ON_START=1).
   await resetOnStartIfRequested();

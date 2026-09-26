@@ -19,6 +19,13 @@
       "require": "./dist/analytics.js",
       "import": "./src/analytics.ts",
       "default": "./dist/analytics.js"
+    },
+    "./free-tools": {
+      "types": "./src/free-tools.ts",
+      "node": "./dist/free-tools.js",
+      "require": "./dist/free-tools.js",
+      "import": "./src/free-tools.ts",
+      "default": "./dist/free-tools.js"
     }
   },
   "scripts": {

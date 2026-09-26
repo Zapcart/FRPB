@@ -45,6 +45,7 @@ const MODE_TONE: Record<string, string> = {
   serial: "bg-slate-50 text-slate-600 border-slate-200",
   adb: "bg-slate-50 text-slate-600 border-slate-200",
   none: "bg-slate-50 text-slate-500 border-slate-200",
+  recovery: "bg-brand-50 text-brand-700 border-brand-200",
 };
 
 /**

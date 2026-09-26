@@ -64,13 +64,27 @@ function getLinuxMachineId(): string | null {
   }
 }
 
-export async function getHardwareId(): Promise<string> {
+export async function getHardwareId(opts?: { deviceLabel?: string }): Promise<string> {
   let seed = "";
 
   switch (process.platform) {
     case "win32": {
       const guid = await getWindowsMachineGuid();
-      seed = `win32:${guid ?? os.hostname()}`;
+      let identity = guid ?? os.hostname();
+
+      // Device label contribution (USB serial/MAC/vendor:product). Stable only
+      // across an active session (phones reconnect with different ports / on
+      // different buses) — tracked against the SRC device label so a genuine
+      // device swap (or multiple phones on one machine) invalidates the cache.
+      if (opts?.deviceLabel) {
+        const [raw] = opts.deviceLabel.split(" ");
+        if (raw) {
+          const v = typeof raw === "string" && raw.length > 0 ? raw : null;
+          if (v) identity += `|dev:${v}`;
+        }
+      }
+
+      seed = `win32:${identity}`;
       break;
     }
     case "darwin": {

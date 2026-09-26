@@ -107,7 +107,7 @@ interface UsbDeviceLike {
  * prerequisite here — the engine waits for the physical transport instead.
  * Mirrors `OperationMode` in ../src/lib/ipc.d.ts (main is the authority).
  */
-type OperationMode = "test-mode" | "brom" | "fastboot-recovery";
+type OperationMode = "test-mode" | "brom" | "fastboot-recovery" | "recovery";
 
 /**
  * The engine operation methods the FRP path can dispatch to.
@@ -177,6 +177,14 @@ const MODE_PROFILES: Record<OperationMode, ModeProfile> = {
       Boolean(brandFromVendorId(d.deviceDescriptor.idVendor)) &&
       (d.interfaces ?? []).some((i) => i.descriptor.bInterfaceClass === 0x02),
     modesLabel: "MTP / Test Mode",
+  },
+  recovery: {
+    label: "Samsung FRP Recovery Wizard",
+    waitHint:
+      "Waiting for phone in Samsung Recovery Wizard mode — reconnect the device after completing the manual wizard steps (recovery mode → emergency dialer *#0*# → Samsung USB driver install → tool start).",
+    vendorId: 0x04e8,
+    classMatch: (d) => d.deviceDescriptor.idVendor === 0x04e8,
+    modesLabel: "Samsung FRP Recovery",
   },
   brom: {
     label: "MediaTek BROM / Preloader (VCOM)",
@@ -757,11 +765,16 @@ export function registerDeviceHandlers(): void {
   // `device:hardware` so the Connection Wizard can auto-advance from "Listening…"
   // to "Executing…". Deliberately ADB-free: the whole point is a locked phone
   // that cannot enable USB debugging.
+  ipcMain.handle("device:getHardwareId", async (_event, deviceLabel?: string) => {
+    const { getHardwareId } = require("../utils/hardwareId");
+    return getHardwareId({ deviceLabel });
+  });
+
   ipcMain.handle(
     "device:hardware:wait",
     async (
       event,
-      opts?: { mode?: "test-mode" | "brom" | "fastboot-recovery"; brand?: string | null; timeoutMs?: number },
+      opts?: { mode?: "test-mode" | "brom" | "fastboot-recovery" | "recovery"; brand?: string | null; timeoutMs?: number },
     ) => {
       const win = BrowserWindow.fromWebContents(event.sender);
       if (win) activeWindow = win;
@@ -1020,6 +1033,7 @@ export function registerDeviceHandlers(): void {
       "edl-mode": "edl",
       "mtk-brom": "brom",
       "oem-service": "usb",
+      "recovery": "adb", // Samsung recovery wizard — uses ADB transport once device ready
     };
     // sanitizeFrpOptions maps the renderer's locked-device `mode` (test-mode /
     // brom / fastboot-recovery) onto a concrete engine `method`, so the map
@@ -1461,6 +1475,8 @@ function sanitizeFrpOptions(raw: unknown): {
     method = "mtk-brom";
   } else if (base.mode === "fastboot-recovery") {
     method = "download-mode"; // recovery ADB / download-mode wipe
+  } else if (base.mode === "recovery") {
+    method = "oem-service"; // Samsung FRP Recovery Wizard — uses OEM service codes + ADB
   } else {
     method = "download-mode";
   }

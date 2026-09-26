@@ -11,6 +11,9 @@ import type {
   DeviceLogPayload,
   DeviceModelsResult,
   DeviceStatus,
+  FreeToolOperationEvent,
+  FreeToolRunRequest,
+  FreeToolRunResult,
   FrpbBridge,
   HardwareSnapshot,
   LicenseProfile,
@@ -67,6 +70,8 @@ const bridge: FrpbBridge = {
       ipcRenderer.invoke("device:listModels"),
     getDeviceInfo: (): Promise<DeviceInfo> =>
       ipcRenderer.invoke("device:getDeviceInfo"),
+    getHardwareId: (deviceLabel?: string): Promise<string> =>
+      ipcRenderer.invoke("device:getHardwareId", deviceLabel),
     checkConsent: (): Promise<ConsentState> =>
       ipcRenderer.invoke("device:checkConsent"),
     acceptConsent: (operation: OperationKind): Promise<AcceptConsentResult> => {
@@ -113,7 +118,7 @@ const bridge: FrpbBridge = {
      */
     rescan: (): Promise<HardwareSnapshot> => ipcRenderer.invoke("device:rescan"),
     waitForHardware: (opts?: {
-      mode?: "test-mode" | "brom" | "fastboot-recovery";
+      mode?: "test-mode" | "brom" | "fastboot-recovery" | "recovery";
       brand?: string | null;
       timeoutMs?: number;
     }): Promise<HardwareSnapshot | null> => ipcRenderer.invoke("device:hardware:wait", opts),
@@ -125,6 +130,12 @@ const bridge: FrpbBridge = {
       chipset?: string | null;
     }): Promise<ModelCatalogEntry[]> =>
       ipcRenderer.invoke("device:searchModels", opts),
+  },
+  freeTools: {
+    run: (request: FreeToolRunRequest): Promise<FreeToolRunResult> =>
+      ipcRenderer.invoke("device:freeTool:run", request),
+    onEvent: (cb: (event: FreeToolOperationEvent) => void): (() => void) =>
+      onChannel<FreeToolOperationEvent>("device:freeTool:event", cb),
   },
   links: {
     openExternal: (url: string): Promise<void> =>

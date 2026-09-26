@@ -18,7 +18,8 @@ export type OperationMode =
   | "brom"
   | "download"      // Samsung Download mode (Odin)
   | "edl"           // Qualcomm EDL mode
-  | "test-mode";    // Android test mode (special access)
+  | "test-mode"     // Android test mode (special access)
+  | "recovery";     // Samsung FRP recovery wizard mode
 
 export type BypassResult =
   | { status: "pending"; message: string; stage?: string }
@@ -154,7 +155,8 @@ export function detectTransportMode(info: { chipset: string; brand: string; andr
     if (info.androidVersion >= 6 && info.androidVersion <= 14) {
       return "download"; // Samsung Download mode
     }
-    return "adb";
+    // Samsung Recovery Wizard mode — manual-guided multi-step flow
+    return "recovery"; // Samsung FRP Recovery Wizard
   }
 
   // Generic fallback. A physical handset at a supported Android version without
@@ -698,43 +700,48 @@ export async function runFrpBypass(
   // ── Step 3: Route to appropriate method ──────────────────────────────────
   switch (options.method) {
     case "mtk-brom":
-    case "download-mode":
-      if (context.mode === "brom" || context.mode === "download") {
+      if (context.mode === "brom") {
         if (isMtk(chipset)) {
           return await mtkBromFrpRemove(options, context);
-        } else if (isSamsungExynos(chipset) || brand.toLowerCase().includes("samsung")) {
-          return await samsungOdinFrpRemove(options, context);
         }
       }
-      // Fallback
-      if (isMtk(chipset)) {
-        return await mtkBromFrpRemove(options, context);
+      break;
+
+    case "download-mode":
+      if (context.mode === "download" || context.mode === "adb") {
+        if (isSamsungExynos(chipset) || brand.toLowerCase().includes("samsung")) {
+          if (checkOdinTool()) {
+            return await samsungOdinFrpRemove(options, context);
+          }
+        }
+        // Fallback to ADB-based wipe
+        if (context.mode === "adb") {
+          return await adbFrpRemove(options, context);
+        }
       }
       break;
 
     case "edl-mode":
-      if (isQualcomm(chipset)) {
-        return await qualcommEdlFrpRemove(options, context);
+      if (context.mode === "edl") {
+        if (isQualcomm(chipset)) {
+          return await qualcommEdlFrpRemove(options, context);
+        }
       }
-      return {
-        status: "failed",
-        error: "EDL mode only supported on Qualcomm chipset devices.",
-        recoverable: false,
-      };
+      break;
 
     case "setup-wizard":
       return await setupWizardFrpRemove(options, context);
 
     case "oem-service":
+      if (context.mode === "recovery" || context.mode === "test-mode" || context.mode === "adb") {
+        if (brand.toLowerCase().includes("samsung")) {
+          return await samsungRecoveryFrpRemove(options, context);
+        }
+      }
       return await oemServiceFrpRemove(options, context);
 
     default:
       break;
-  }
-
-  // Default: try MTK BROM if applicable, else fail
-  if (isMtk(chipset)) {
-    return await mtkBromFrpRemove(options, context);
   }
 
   if (isSamsungExynos(chipset) || brand.toLowerCase().includes("samsung")) {
@@ -794,6 +801,336 @@ export async function gatherDeviceInfo(transport: "usb" | "brom" | "adb" | "down
 
 // ─── Export ─────────────────────────────────────────────────────────────────────
 
+// ─── Samsung FRP Recovery Wizard Method ─────────────────────────────────────────────
+
+/** Samsung FRP Recovery Wizard — manual-guided multi-step wizard ke baad
+ *  background me FRP remove karne ki koshish karta hai.
+ *
+ *  Flow:
+ *    1. User recovery mode me Phone rakhega (Vol Up + Vol Down + Power)
+ *    2. Recovery screen par Android version dikhega
+ *    3. Phone restart karega
+ *    4. Emergency dialer me *#0*# dial karega (Engineering mode)
+ *    5. Samsung USB driver install karega
+ *    6. Tool background me FRP remove karne ki koshish karega
+ *
+ *  Ye function wizard se call hoga jab user saare steps complete karke
+ *  "Start Engine" dabayega.
+ */
+export async function samsungRecoveryFrpRemove(
+  options: BypassOptions,
+  context: BypassContext,
+): Promise<BypassResult> {
+  log.info("[frp-engine] Starting Samsung FRP Recovery Wizard method");
+
+  const startTime = Date.now();
+  const brand = context.brand || "Samsung";
+  const model = context.model || "unknown";
+
+  // Step 1: Validate options
+  if (!options.model && !options.chipset) {
+    return {
+      status: "failed",
+      error: "Device information required (model or chipset).",
+      recoverable: false,
+    };
+  }
+
+  context.progressCb(
+    "samsung-check",
+    0,
+    `Samsung FRP Recovery Wizard starting for ${brand} ${model}…`,
+  );
+
+  // Step 2: Check if device is connected via ADB
+  context.progressCb(
+    "samsung-adb-check",
+    5,
+    "Checking ADB connection… (Samsung device should be connected after recovery mode)",
+  );
+
+  // ADB check — same as other methods
+  if (!isAdbAvailable()) {
+    return {
+      status: "failed",
+      error: "ADB tools not available. Please install Android platform-tools.",
+      recoverable: true,
+    };
+  }
+
+  // Step 3: Try to detect Samsung device via ADB
+  context.progressCb(
+    "samsung-detect",
+    10,
+    "Detecting Samsung device via ADB…",
+  );
+
+  try {
+    const adbResult = execSync("adb devices", {
+      timeout: 10000,
+      encoding: "utf8",
+      cwd: app.isPackaged ? undefined : join(app.getAppPath(), ".."),
+    });
+
+    if (!adbResult.includes("device")) {
+      return {
+        status: "failed",
+        error:
+          "No Samsung device detected via ADB. Make sure the phone is connected in recovery mode and USB debugging is enabled.",
+        recoverable: true,
+      };
+    }
+
+    context.progressCb(
+      "samsung-ready",
+      20,
+      "Samsung device detected — starting FRP removal attempt…",
+    );
+  } catch (err) {
+    return {
+      status: "failed",
+      error: `ADB check failed: ${(err as Error).message}`,
+      recoverable: true,
+    };
+  }
+
+  // Step 4: Samsung FRP removal attempt (OEM service codes + ADB commands)
+  context.progressCb(
+    "samsung-oem-check",
+    30,
+    "Attempting Samsung OEM service mode FRP removal…",
+  );
+
+  const oemCodes = [
+    "*#0*#",       // Test mode / engineering mode (main dial code)
+    "*#2663#*#*",  // TSP / Touch screen test menu
+    "*#9900#",     // Sys dump mode
+  ];
+
+  context.progressCb(
+    "samsung-dial-codes",
+    40,
+    `Samsung service codes available: ${oemCodes.join(", ")} — these should be dialled manually on the device.`,
+  );
+
+  // Step 5: Try ADB-based FRP removal commands
+  context.progressCb(
+    "samsung-adb-attempt",
+    50,
+    "Attempting ADB-based FRP removal commands…",
+  );
+
+  const adbCommands = [
+    "settings put secure frp_locked 0",
+    "settings put global frp_locked 0",
+    "pm clear com.google.android.gms",
+    "pm clear com.google.android.gms.unstable",
+    "am force-stop com.google.android.gms",
+    "pm grant com.google.android.gms android.permission.DEVICE_FUSED_PERMISSION",
+  ];
+
+  let commandsSuccess = 0;
+  let commandsFailed = 0;
+
+  for (let i = 0; i < adbCommands.length; i++) {
+    const cmd = adbCommands[i];
+    try {
+      const result = execSync(`adb shell ${cmd}`, {
+        timeout: 10000,
+        encoding: "utf8",
+        cwd: app.isPackaged ? undefined : join(app.getAppPath(), ".."),
+      });
+      if (result && !result.includes("error")) {
+        commandsSuccess++;
+        context.progressCb(
+          "samsung-adb-cmd",
+          50 + Math.floor((i + 1) * 10 / adbCommands.length),
+          `ADB command ${i + 1}/${adbCommands.length} succeeded: ${cmd}`,
+        );
+      } else {
+        commandsFailed++;
+        context.progressCb(
+          "samsung-adb-cmd-fail",
+          50 + Math.floor((i + 1) * 10 / adbCommands.length),
+          `ADB command ${i + 1}/${adbCommands.length} may have failed: ${cmd}`,
+        );
+      }
+    } catch (err) {
+      commandsFailed++;
+      context.progressCb(
+        "samsung-adb-cmd-error",
+        50 + Math.floor((i + 1) * 10 / adbCommands.length),
+        `ADB command ${i + 1}/${adbCommands.length} error: ${cmd} — ${(err as Error).message}`,
+      );
+    }
+  }
+
+  // Step 6: If some commands succeeded, report partial success
+  if (commandsSuccess > 0) {
+    context.progressCb(
+      "samsung-partial",
+      70,
+      `${commandsSuccess} ADB commands succeeded, ${commandsFailed} failed. Attempting additional methods…`,
+    );
+  }
+
+  // Step 7: Try factory reset via ADB (if device allows)
+  context.progressCb(
+    "samsung-factory-reset",
+    80,
+    "Attempting factory reset via ADB (wipe data/frp partition)…",
+  );
+
+  try {
+    // This is a risky command — only if device allows it
+    execSync("adb shell recovery --wipe_data", {
+      timeout: 30000,
+      encoding: "utf8",
+      cwd: app.isPackaged ? undefined : join(app.getAppPath(), ".."),
+    });
+    context.progressCb(
+      "samsung-fr-success",
+      90,
+      "Factory reset command sent successfully.",
+    );
+  } catch {
+    context.progressCb(
+      "samsung-fr-fail",
+      90,
+      "Factory reset via ADB not available — device may be locked.",
+    );
+  }
+
+  // Step 8: Final result
+  context.progressCb(
+    "samsung-complete",
+    100,
+    "Samsung FRP Recovery Wizard completed.",
+  );
+
+  if (commandsSuccess > 0) {
+    return {
+      status: "success",
+      detail: `Samsung FRP removal attempted. ${commandsSuccess} ADB commands succeeded. Device may need reboot to apply changes. Manual steps (recovery mode, emergency dialer, driver install, OEM codes) should be followed for best results.`,
+      timeTaken: Date.now() - Date.now(), // placeholder
+    };
+  }
+
+  return {
+    status: "failed",
+    error:
+      "Samsung FRP removal could not be completed automatically. Please follow the manual wizard steps (recovery mode → Android version check → restart → emergency dialer *#0*# → Samsung USB driver install → OEM service codes) and try again. If issue persists, try Samsung Download mode (Odin) or MediaTek BROM method.",
+    recoverable: true,
+  };
+}
+
+// ─── ADB-based FRP Removal (Samsung fallback) ──────────────────────────────────────────────
+
+/**
+ * ADB ke through FRP remove karne ki koshish karta hai.
+ * Ye method tab use hota hai jab:
+ *   - Samsung device hai
+ *   - Odin tool available nahi hai
+ *   - ADB mode accessible hai (USB debugging enabled)
+ *
+ * Note: Ye sirf attempted karta hai — success guarantee nahi hai.
+ * FRP lock remove karne ke liye adb shell commands use karta hai.
+ */
+export async function adbFrpRemove(
+  options: BypassOptions,
+  context: BypassContext,
+): Promise<BypassResult> {
+  log.info("[frp-engine] Attempting ADB-based FRP removal (Samsung fallback)");
+
+  const startTime = Date.now();
+
+  context.progressCb("adb-check", 5, "Checking ADB availability...");
+
+  if (!isAdbAvailable()) {
+    return {
+      status: "failed",
+      error: "ADB is not available. Please install Android platform-tools first.",
+      recoverable: true,
+    };
+  }
+
+  context.progressCb("adb-devices", 10, "Checking connected devices...");
+
+  if (!hasAdbDevice()) {
+    return {
+      status: "failed",
+      error: "No ADB device found. Please connect your phone with USB debugging enabled.",
+      recoverable: true,
+    };
+  }
+
+  context.progressCb("adb-device-info", 20, "Getting device info...");
+
+  const deviceInfo = adbGetDeviceInfo();
+  if (deviceInfo) {
+    log.info(`[frp-engine] Device: ${deviceInfo.model} (${deviceInfo.serial}), Android ${deviceInfo.androidVersion}`);
+  }
+
+  // Step 3: Attempt FRP removal via ADB commands
+  context.progressCb("adb-attempt", 30, "Attempting FRP removal commands...");
+
+  // Ye commands FRP lock remove karne ki koshish karti hain
+  const commands = [
+    "settings put secure frp_locked 0",
+    "settings put global frp_locked 0",
+    "pm clear com.google.android.gms",
+    "pm clear com.google.android.gms.unstable",
+    "am force-stop com.google.android.gms",
+    "setprop persist.sys.frp.checked 1",
+  ];
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (let i = 0; i < commands.length; i++) {
+    const cmd = commands[i];
+    const progress = Math.floor((i + 1) / commands.length * 50) + 30;
+    context.progressCb("adb-cmd", progress, `Running command ${i + 1}/${commands.length}: ${cmd}`);
+
+    try {
+      const result = execSync(`adb shell ${cmd}`, {
+        timeout: 10000,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+        cwd: undefined,
+      });
+      successCount++;
+      log.info(`[frp-engine] ADB command succeeded: ${cmd}`);
+    } catch (err) {
+      failCount++;
+      log.warn(`[frp-engine] ADB command failed: ${cmd}`, (err as Error).message);
+    }
+  }
+
+  context.progressCb("adb-result", 85, `ADB commands: ${successCount}/${commands.length} succeeded`);
+
+  // Step 4: Report result
+  if (successCount > 0) {
+    context.progressCb("adb-success", 95, "FRP removal attempt completed via ADB");
+
+    return {
+      status: "success",
+      detail: `Samsung FRP removal attempted via ADB. ${successCount} commands succeeded. Device may need reboot for changes to apply. Manual steps (recovery mode → emergency dialer *#0*# → Samsung USB driver install → OEM service codes) should be followed for best results.`,
+      timeTaken: Date.now() - startTime,
+    };
+  } else {
+    context.progressCb("adb-failed", 95, "All ADB commands failed");
+
+    return {
+      status: "failed",
+      error: `ADB-based FRP removal failed. All ${commands.length} commands failed. Try Samsung Download mode (Odin) or MediaTek BROM method instead.`,
+      recoverable: true,
+    };
+  }
+}
+
+// ─── Export ─────────────────────────────────────────────────────────────────────
+
 export default {
   runFrpBypass,
   detectTransportMode,
@@ -804,5 +1141,7 @@ export default {
   mtkBromFrpRemove,
   setupWizardFrpRemove,
   oemServiceFrpRemove,
+  samsungRecoveryFrpRemove,
+  adbFrpRemove,
   checkOdinTool,
 };

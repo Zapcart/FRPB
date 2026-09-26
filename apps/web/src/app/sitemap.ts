@@ -6,6 +6,7 @@ import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/seo";
 import { BLOG_POSTS } from "@/lib/blog";
 import { BRAND_PAGE_ROUTES } from "@/config/brand-pages";
+import { FREE_TOOL_ROUTES } from "@frpb/shared";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
@@ -71,6 +72,16 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: route.priority,
   }));
 
+  // Free utility lead-magnet landing pages (WhatsApp Transfer, Phone Transfer,
+  // Data Eraser, Virtual Location). High-volume informational queries that feed
+  // the install funnel, so they are listed alongside the brand pages.
+  const freeToolPages: MetadataRoute.Sitemap = FREE_TOOL_ROUTES.map((route) => ({
+    url: `${SITE_URL}${route.path}`,
+    lastModified: now,
+    changeFrequency: route.changeFrequency,
+    priority: route.priority,
+  }));
+
   const posts: MetadataRoute.Sitemap = BLOG_POSTS.map((post) => ({
     url: `${SITE_URL}/blog/${post.slug}`,
     lastModified: new Date(post.dateModified),
@@ -84,5 +95,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // of them canonicalises to `/blog` (see the blog index metadata), so listing
   // them would only submit duplicate, non-canonical URLs. Keeping the sitemap
   // canonical-only concentrates crawl budget on URLs Google can actually index.
-  return [...pages, ...brandPages, ...posts];
+  return [...pages, ...brandPages, ...freeToolPages, ...posts];
 }

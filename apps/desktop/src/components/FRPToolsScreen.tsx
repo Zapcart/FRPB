@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import type { ChipsetFamily, DeviceAutoDetected } from "@frpb/shared";
 import type {
   ConsentState,
+  DeviceInfo,
   DeviceInfoSnapshot,
   DeviceLogPayload,
   DeviceModelsResult,
@@ -17,6 +18,7 @@ import type {
 import ActionScreen, { type ActionProgress } from "./frp/ActionScreen";
 import DisclaimerModal from "./frp/DisclaimerModal";
 import ConnectionWizardModal, { type WizardPhase } from "./frp/ConnectionWizardModal";
+import SamsungFrpWizard from "./frp/SamsungFrpWizard";
 import { wizardGuide, type ConnectionGuide, type ConnectionGuideKey } from "./frp/shared";
 
 interface LogEntry {
@@ -28,7 +30,7 @@ const MAX_LOG_ENTRIES = 200;
 
 /** Brand → locked-device transport mode used by the engine handshake. */
 const MODE_BY_BRAND: Record<string, ConnectionGuideKey> = {
-  Samsung: "test-mode",
+  Samsung: "recovery",
   Xiaomi: "brom",
   Redmi: "brom",
   POCO: "brom",
@@ -274,6 +276,9 @@ export default function FRPToolsScreen({
     wizardRef.current = wizard;
   }, [wizard]);
 
+  // Samsung FRP wizard (separate modal path — not the automated engine wizard).
+  const [samsungWizardOpen, setSamsungWizardOpen] = useState(false);
+
   // Wizard HARDWARE CONSOLE streaming.
   //
   // The wizard's console box previously showed ONLY hardware-detection lines
@@ -320,6 +325,10 @@ export default function FRPToolsScreen({
 
   // Continuous auto-read hardware snapshot (`device:info-updated`).
   const [hwInfo, setHwInfo] = useState<DeviceInfoSnapshot | null>(null);
+  // Android API level for the Samsung FRP Recovery Wizard. It lives on the full
+  // `DeviceInfo` snapshot (`extra.androidVersion`) rather than the lightweight
+  // `DeviceInfoSnapshot`, so it is fetched on-demand and parsed to a number.
+  const [androidVersion, setAndroidVersion] = useState<number | null>(null);
 
   // Refs avoid stale closures inside the long-lived operation-event subscription.
   const runningOpRef = useRef<OperationKind | null>(null);
@@ -441,6 +450,29 @@ export default function FRPToolsScreen({
       .catch(() => {});
     return unsubscribe;
   }, []);
+
+  // Full device info carries the real Android version string; refresh it whenever
+  // a device becomes authorised/connected and on manual re-scan.
+  useEffect(() => {
+    if (hwInfo?.connected !== true) {
+      setAndroidVersion(null);
+      return;
+    }
+    let cancelled = false;
+    window.frpb.device
+      .getDeviceInfo()
+      .then((info: DeviceInfo) => {
+        if (cancelled) return;
+        const parsed = Number.parseInt(info.extra?.androidVersion ?? "", 10);
+        setAndroidVersion(Number.isFinite(parsed) ? parsed : null);
+      })
+      .catch(() => {
+        if (!cancelled) setAndroidVersion(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hwInfo?.connected, hwInfo?.serial]);
 
   // Release the toast timer on unmount so it never fires into a dead tree.
   useEffect(() => {
@@ -654,6 +686,9 @@ export default function FRPToolsScreen({
     if (busy) return;
     if (!frpConsented) {
       openDisclaimer("frp-bypass");
+    } else if (brand === "Samsung") {
+      // Samsung ke liye separate wizard (manual-guided, multi-step)
+      setSamsungWizardOpen(true);
     } else {
       beginWizard("frp-bypass");
     }
@@ -787,18 +822,34 @@ export default function FRPToolsScreen({
 
       {/* Guided hardware Connection Wizard (key combo → listen → execute → success) */}
       {wizard && (
-        <ConnectionWizardModal
-          op={wizard.op}
-          guide={wizard.guide}
-          brand={selectedBrand ?? brand}
-          model={(selectedModel || modelInput).trim() || model}
-          lines={wizard.lines}
-          hardware={wizard.hardware}
-          phase={wizard.phase}
-          errorMessage={wizard.error}
-          onStart={() => void handleWizardStart()}
-          onCancel={handleWizardCancel}
-        />
+      <ConnectionWizardModal
+        op={wizard.op}
+        guide={wizard.guide}
+        brand={selectedBrand ?? brand}
+        model={(selectedModel || modelInput).trim() || model}
+        lines={wizard.lines}
+        hardware={wizard.hardware}
+        phase={wizard.phase}
+        errorMessage={wizard.error}
+        onStart={() => void handleWizardStart()}
+        onCancel={handleWizardCancel}
+      />
+      )}
+
+      {/* Samsung FRP Recovery Wizard (manual-guided multi-step path) */}
+      {samsungWizardOpen && brand === "Samsung" && (
+      <SamsungFrpWizard
+        open={samsungWizardOpen}
+        onClose={() => setSamsungWizardOpen(false)}
+        brand="Samsung"
+        model={(selectedModel || modelInput).trim() || model}
+        androidVersion={androidVersion}
+        onStartEngine={() => window.frpb.device.frpBypass({
+          brand: "Samsung",
+          mode: "recovery",
+          model: (selectedModel || modelInput).trim() || undefined,
+        })}
+      />
       )}
 
       {/* Explicit error toast — real non-zero exit codes / unauthorized ADB. */}

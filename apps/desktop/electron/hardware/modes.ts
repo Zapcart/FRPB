@@ -247,13 +247,14 @@ export const HARDWARE_GUIDES: Record<HardwareMode, HardwareGuide> = {
 };
 
 /** Transport-mode keys the renderer sends (mirrors `OperationMode`). */
-export type OperationMode = "test-mode" | "brom" | "fastboot-recovery";
+export type OperationMode = "test-mode" | "brom" | "fastboot-recovery" | "recovery";
 
 /** Which hardware mode an operation should wait for, given the user's selection. */
 export function targetModesFor(mode: OperationMode | undefined, brand?: string | null): HardwareMode[] {
   const b = `${brand ?? ""}`.toLowerCase();
   if (mode === "brom") return ["brom", "preloader"];
   if (mode === "fastboot-recovery") return ["fastboot", "download"];
+  if (mode === "recovery") return ["mtp", "adb"];
   // test-mode (Samsung) — accept the Samsung-specific transports first.
   if (b.includes("samsung")) return ["download", "mtp", "fastboot"];
   return ["mtp", "download", "fastboot"];
@@ -267,6 +268,7 @@ export function guideForOperation(
   const b = `${brand ?? ""}`.toLowerCase();
   if (mode === "brom") return BROM_GUIDE;
   if (mode === "fastboot-recovery") return FASTBOOT_GUIDE;
+  if (mode === "recovery") return MTP_GUIDE;
   if (b.includes("samsung")) return DOWNLOAD_GUIDE;
   return DOWNLOAD_GUIDE;
 }

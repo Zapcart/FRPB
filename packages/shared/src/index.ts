@@ -7,3 +7,4 @@ export * from "./api";
 export * from "./frp";
 export * from "./android-models";
 export * from "./analytics";
+export * from "./free-tools";
