@@ -117,7 +117,7 @@ export default function DownloadsPage() {
             </a>
 
             <p className="mt-4 text-xs text-slate-400">
-              {EXE_NAME} · ~91 MB · Windows 10/11 · Free trial available
+              {EXE_NAME} · ~91 MB · Windows 10/11 · Included with an FRPB Active License
             </p>
 
             {/* Browser / Windows SmartScreen first-launch guidance */}
@@ -181,8 +181,8 @@ export default function DownloadsPage() {
           <div className="mx-auto mt-6 max-w-3xl space-y-3">
             {[
               {
-                q: "Is FRPB free?",
-                a: "Yes — FRPB offers a free trial with no credit card required. A paid license unlocks the full FRP toolkit and priority support.",
+                q: "What do I need to run FRPB?",
+                a: "Download the desktop app for free, then activate an FRPB license key to unlock the full FRP toolkit, pro utilities and priority support.",
               },
               {
                 q: "Will it work on my Windows version?",

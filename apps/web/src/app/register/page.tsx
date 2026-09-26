@@ -14,7 +14,7 @@ export const metadata = {
   ...pageMetadata({
     title: "Create account",
     description:
-      "Create a free FRPB account to activate licenses and manage bound devices.",
+      "Create an FRPB account to activate licenses and manage bound devices.",
     path: "/register",
   }),
   robots: { index: false, follow: false },

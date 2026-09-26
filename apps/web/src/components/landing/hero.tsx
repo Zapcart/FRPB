@@ -207,8 +207,8 @@ export default function Hero({ downloadUrl, metrics }: HeroProps) {
                 macOS 10.14+
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <ShieldCheck className="h-4 w-4 text-emerald-500" />
-                Free trial · No credit card required
+                <ShieldCheck className="h-4 w-4 text-brand-500" />
+                Included with an FRPB Active License
               </span>
             </div>
           </div>

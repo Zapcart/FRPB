@@ -131,11 +131,11 @@ export default function BrandLandingPage({ content }: { content: BrandPageConten
               className="btn-accent mt-9 w-full max-w-md px-8 py-4 text-base shadow-blue-glow sm:w-auto"
             >
               <Download className="h-5 w-5" />
-              Download FRPB Free (v{RELEASE_VERSION})
+              Download Software (v{RELEASE_VERSION})
             </a>
 
             <p className="mt-4 text-xs text-slate-400">
-              {EXE_NAME} · Windows 10/11 · Free trial available
+              {EXE_NAME} · Windows 10/11 · Included with an FRPB Active License
             </p>
 
             {/* Browser / Windows SmartScreen first-launch guidance. */}

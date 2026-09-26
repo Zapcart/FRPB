@@ -18,6 +18,14 @@ import type { UpdaterStatus } from "../../src/lib/ipc";
 type ElectronUpdaterModule = typeof import("electron-updater");
 type AutoUpdater = ElectronUpdaterModule["autoUpdater"];
 
+// Master switch for the in-app auto-updater. DISABLED: the updater is no longer
+// exposed in the desktop UI, and invoking electron-updater in some packaged
+// builds failed to resolve a transitive dependency (`fs-extra`), which surfaced
+// a blocking error dialog to the end user. With the flag off we never touch
+// electron-updater at all — no launch check, no event wiring, no error dialogs.
+// Flip to `true` to restore the previous behaviour once packaging is verified.
+const AUTO_UPDATE_ENABLED = false;
+
 let autoUpdater: AutoUpdater | null = null;
 let updaterLoadError: string | null = null;
 let updateAvailable: UpdateInfo | null = null;
@@ -56,6 +64,18 @@ function loadAutoUpdater(): AutoUpdater | null {
 }
 
 export function registerUpdaterHandlers(): void {
+  // Disabled path: register benign, always-resolving IPC handlers so the
+  // renderer bridge never hits "No handler registered", then return without
+  // ever loading electron-updater. Nothing is broadcast, so no ERROR status —
+  // and therefore no error dialog — can ever be raised to the user.
+  if (!AUTO_UPDATE_ENABLED) {
+    const disabled = { started: false, error: "Auto-update is disabled." };
+    ipcMain.handle("check-for-updates", async () => disabled);
+    ipcMain.handle("download-update", async () => ({ started: false }));
+    ipcMain.handle("quit-and-install", async () => ({ started: false }));
+    return;
+  }
+
   const updater = loadAutoUpdater();
 
   if (updater) {
@@ -139,9 +159,11 @@ export function registerUpdaterHandlers(): void {
   });
 }
 
-// Boot-time background check. Fully guarded so a packaging/resolution failure
-// can never throw during main-process evaluation — it simply skips the check.
+// Boot-time background check. No-op while the updater is disabled, and fully
+// guarded otherwise so a packaging/resolution failure can never throw during
+// main-process evaluation — it simply skips the check.
 export function checkForUpdatesOnLaunch(): void {
+  if (!AUTO_UPDATE_ENABLED) return;
   if (!app.isPackaged) return;
   const up = loadAutoUpdater();
   if (!up) return;

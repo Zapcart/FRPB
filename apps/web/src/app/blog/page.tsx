@@ -86,7 +86,7 @@ export default function BlogIndexPage() {
             href="/downloads"
             className="text-sm font-semibold text-brand-600 transition hover:text-brand-700"
           >
-            Download free
+            Download software
           </Link>
         </nav>
       </header>
@@ -115,7 +115,7 @@ export default function BlogIndexPage() {
             Ready to run your first bypass?
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-white/85">
-            Download FRPB free from frpb.in and use the same one-click FRP bypass and flash reset
+            Download FRPB from frpb.in and use the same one-click FRP bypass and flash reset
             workflow covered in every guide above.
           </p>
           <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
@@ -123,7 +123,7 @@ export default function BlogIndexPage() {
               href="/downloads"
               className="inline-flex items-center gap-2 rounded-xl bg-white px-7 py-3.5 text-base font-bold text-brand-700 shadow-xl shadow-brand-900/30 transition hover:bg-brand-50"
             >
-              Download FRPB free
+              Download FRPB
               <ArrowRight className="h-4 w-4" />
             </Link>
             <Link

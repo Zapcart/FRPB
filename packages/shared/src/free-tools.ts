@@ -93,12 +93,12 @@ export interface FreeToolMeta {
 export const FREE_TOOLS: Record<FreeToolId, FreeToolMeta> = {
   "whatsapp-transfer": {
     id: "whatsapp-transfer",
-    title: "WhatsApp Transfer Tool — Move Chats to a New Phone Free",
+    title: "WhatsApp Transfer Tool — Move Chats to a New Phone",
     path: "/whatsapp-transfer-tool",
     eyebrow: "WhatsApp Transfer",
     tagline: "Move WhatsApp chats, photos and videos to a new Android phone in minutes.",
     description:
-      "Transfer WhatsApp chats, images, videos and attachments from one Android phone to another for free — no cloud backup, no data plan required. FRPB connects both devices over a local USB link and copies the WhatsApp media store directly, preserving chat history.",
+      "Transfer WhatsApp chats, images, videos and attachments from one Android phone to another — no cloud backup, no data plan required. FRPB connects both devices over a local USB link and copies the WhatsApp media store directly, preserving chat history.",
     keywords:
       "whatsapp transfer, move whatsapp chats, whatsapp data migration android, transfer whatsapp to new phone, whatsapp backup alternative",
     category: "transfer",
@@ -145,9 +145,9 @@ export const FREE_TOOLS: Record<FreeToolId, FreeToolMeta> = {
           "Yes. The transfer includes text messages, group chats, images, voice notes and videos stored in the WhatsApp media folder.",
       },
       {
-        question: "Is the WhatsApp Transfer tool really free?",
+        question: "Does the WhatsApp Transfer tool require a license?",
         answer:
-          "Yes — it is a free utility inside the FRPB desktop app. No license, no subscription and no watermark.",
+          "The utility is included with the FRPB desktop app and full module execution requires an active FRPB license key — no subscription and no watermark.",
       },
       {
         question: "Are my chats uploaded anywhere?",
@@ -159,12 +159,12 @@ export const FREE_TOOLS: Record<FreeToolId, FreeToolMeta> = {
 
   "phone-transfer": {
     id: "phone-transfer",
-    title: "Phone to Phone Transfer — Free Android Data Migration",
+    title: "Phone to Phone Transfer — Android Data Migration",
     path: "/phone-to-phone-transfer",
     eyebrow: "Phone Transfer",
     tagline: "Copy contacts, photos, videos, SMS and apps between any two Android phones.",
     description:
-      "Move contacts, call logs, SMS, photos, videos, music and documents from one Android phone to another for free. FRPB's Phone Transfer wizard runs over USB, works cross-brand, and never routes your personal data through a server.",
+      "Move contacts, call logs, SMS, photos, videos, music and documents from one Android phone to another. FRPB's Phone Transfer wizard runs over USB, works cross-brand, and never routes your personal data through a server.",
     keywords:
       "phone to phone transfer, android data transfer, transfer contacts photos android, switch android phones, copy data between phones",
     category: "transfer",
@@ -225,12 +225,12 @@ export const FREE_TOOLS: Record<FreeToolId, FreeToolMeta> = {
 
   "data-eraser": {
     id: "data-eraser",
-    title: "Android Data Eraser — Permanently Wipe Your Phone Free",
+    title: "Android Data Eraser — Permanently Wipe Your Phone",
     path: "/android-data-eraser",
     eyebrow: "Data Eraser",
     tagline: "Permanently erase all data from your Android phone before selling or trading it.",
     description:
-      "Securely and permanently erase every trace of data from your Android phone — accounts, messages, photos, apps and settings — for free. FRPB's Data Eraser performs a full factory wipe and partition erase so your personal data cannot be recovered.",
+      "Securely and permanently erase every trace of data from your Android phone — accounts, messages, photos, apps and settings. FRPB's Data Eraser performs a full factory wipe and partition erase so your personal data cannot be recovered.",
     keywords:
       "android data eraser, wipe android phone, factory reset android, erase phone before selling, permanently delete android data",
     category: "privacy",
@@ -282,22 +282,23 @@ export const FREE_TOOLS: Record<FreeToolId, FreeToolMeta> = {
           "No. The erase is irreversible once started. FRPB asks for explicit confirmation and warns you to back up first.",
       },
       {
-        question: "Is the Data Eraser free?",
-        answer: "Yes, it is a free utility inside the FRPB desktop app with no license required.",
+        question: "Does the Data Eraser require a license?",
+        answer:
+          "The utility is included with the FRPB desktop app and full module execution requires an active FRPB license key.",
       },
     ],
   },
 
   "virtual-location": {
     id: "virtual-location",
-    title: "Virtual Location Spoofer — Fake GPS on Android Free",
+    title: "Virtual Location Spoofer — Fake GPS on Android",
     path: "/virtual-location-spoofer",
     eyebrow: "Virtual Location",
     tagline: "Set any GPS location on your Android phone for games, apps and testing.",
     description:
-      "Simulate any GPS location on your Android phone for free. FRPB's Virtual Location tool mocks the location provider over ADB, so you can test location features, play location-based games and protect your privacy — no root required.",
+      "Simulate any GPS location on your Android phone. FRPB's Virtual Location tool mocks the location provider over ADB, so you can test location features, play location-based games and protect your privacy — no root required.",
     keywords:
-      "virtual location android, fake gps android, spoof location android, mock gps without root, location spoofer free",
+      "virtual location android, fake gps android, spoof location android, mock gps without root, location spoofer",
     category: "location",
     platform: "desktop",
     popularity: 70,
@@ -347,8 +348,9 @@ export const FREE_TOOLS: Record<FreeToolId, FreeToolMeta> = {
           "The mock provider stops when you disable it or disconnect. Re-enable it from the FRPB tab whenever you need it again.",
       },
       {
-        question: "Is the Virtual Location tool free?",
-        answer: "Yes — it is a free utility inside the FRPB desktop app with no license required.",
+        question: "Does the Virtual Location tool require a license?",
+        answer:
+          "The utility is included with the FRPB desktop app and full module execution requires an active FRPB license key.",
       },
     ],
   },

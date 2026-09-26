@@ -130,9 +130,9 @@ export default function FreeToolLandingPage({ content }: { content: FreeToolMeta
           <div className="pointer-events-none absolute inset-0 -z-10 bg-grid-slate [mask-image:radial-gradient(70%_60%_at_50%_0%,black,transparent)]" />
 
           <div className="flex flex-col items-center px-6 py-14 text-center sm:px-12 sm:py-16">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50/80 px-4 py-1.5 text-xs font-semibold text-emerald-700">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-brand-100 bg-brand-50/80 px-4 py-1.5 text-xs font-semibold text-brand-700">
               <Sparkles className="h-3.5 w-3.5" />
-              Free · {content.eyebrow}
+              Pro Utility · {content.eyebrow}
             </div>
 
             <h1 className="max-w-3xl text-3xl font-extrabold leading-tight tracking-tight text-ink sm:text-5xl">
@@ -156,11 +156,12 @@ export default function FreeToolLandingPage({ content }: { content: FreeToolMeta
               className="btn-accent mt-9 w-full max-w-md px-8 py-4 text-base shadow-blue-glow sm:w-auto"
             >
               <Download className="h-5 w-5" />
-              Try For Free (v{RELEASE_VERSION})
+              Download Software (v{RELEASE_VERSION})
             </a>
 
             <p className="mt-4 text-xs text-slate-400">
-              {EXE_NAME} · Windows 10/11 · No license required
+              {EXE_NAME} · Windows 10/11 · Included with an FRPB Active License — full module
+              execution requires an active license key.
             </p>
 
             <div className="mt-5 flex w-full max-w-md items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-left">
@@ -221,8 +222,8 @@ export default function FreeToolLandingPage({ content }: { content: FreeToolMeta
         {/* ================= TRUST STRIP ================= */}
         <section className="mt-12 flex flex-wrap items-center justify-center gap-2.5">
           <span className="badge">
-            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-            Free forever
+            <CheckCircle2 className="h-3.5 w-3.5 text-brand-500" />
+            License included
           </span>
           <span className="badge">
             <ShieldCheck className="h-3.5 w-3.5 text-brand-500" />
@@ -232,10 +233,10 @@ export default function FreeToolLandingPage({ content }: { content: FreeToolMeta
           <span className="badge">Windows 10 / 11 · x64</span>
         </section>
 
-        {/* ================= RELATED FREE TOOLS ================= */}
+        {/* ================= RELATED DESKTOP UTILITIES ================= */}
         <section className="mt-14">
           <h2 className="text-center text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">
-            More free FRPB utilities
+            More FRPB desktop utilities
           </h2>
           <div className="mt-8 grid gap-4 sm:grid-cols-3">
             {relatedTools.map((tool) => {
@@ -254,7 +255,7 @@ export default function FreeToolLandingPage({ content }: { content: FreeToolMeta
                     {tool.tagline}
                   </p>
                   <span className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600">
-                    Try for free
+                    Explore Tool
                     <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
                   </span>
                 </Link>
@@ -269,7 +270,7 @@ export default function FreeToolLandingPage({ content }: { content: FreeToolMeta
         items={content.faq}
         id="faq"
         heading="Frequently asked questions"
-        intro={`Everything users ask before using the free FRPB ${content.eyebrow} tool.`}
+        intro={`Everything users ask before running the FRPB ${content.eyebrow} tool — an active FRPB license key is required to execute the module.`}
       />
 
       {/* ================= FOOTER ================= */}

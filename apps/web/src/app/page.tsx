@@ -32,6 +32,8 @@ import {
 import { PLANS, FREE_TOOLS, FREE_TOOL_IDS, type FreeToolId } from "@frpb/shared";
 import { resolveInstallerUrl } from "@/config/download";
 import {
+  COMPANY_ADDRESS,
+  COMPANY_ENTITY,
   LEGAL_DISCLAIMER,
   LEGAL_EMAIL,
   SUPPORT_EMAIL,
@@ -66,7 +68,7 @@ const HOME_METRICS: HomeMetrics = homeMetrics();
 
 const NAV_LINKS = [
   { label: "Features", href: "#features" },
-  { label: "Free Tools", href: "#free-tools" },
+  { label: "Pro Tools", href: "#free-tools" },
   { label: "Supported Brands", href: "#brands" },
   { label: "Pricing", href: "#pricing" },
   { label: "Guides", href: "#guides" },
@@ -425,23 +427,24 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ================= FREE UTILITIES & TOOLS ================= */}
+      {/* ================= POWERFUL DESKTOP UTILITIES ================= */}
       <section
         id="free-tools"
         className="relative border-t border-slate-200/80 bg-gradient-to-b from-white to-slate-50 py-20 sm:py-24"
       >
         <div className="mx-auto max-w-7xl px-6">
           <div className="mx-auto max-w-2xl text-center">
-            <span className="badge mb-4 border-emerald-200 bg-emerald-50 text-emerald-700">
-              <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
-              100% free · No signup
+            <span className="badge mb-4 border-brand-200 bg-brand-50 text-brand-700">
+              <Sparkles className="h-3.5 w-3.5 text-brand-600" />
+              Pro Utility · Included with License
             </span>
             <h2 className="text-3xl font-extrabold tracking-tight text-ink sm:text-4xl">
-              Free utilities & tools
+              Powerful Desktop Utilities
             </h2>
             <p className="mt-4 text-base leading-relaxed text-slate-500">
               Four standalone utilities that run entirely on your PC — transfer WhatsApp and
-              phone data, wipe a device, or mock your location. No license required.
+              phone data, wipe a device, or mock your location. Included with an FRPB Active
+              License — download the desktop software to get started.
             </p>
           </div>
 
@@ -466,7 +469,7 @@ export default function HomePage() {
                       {tool.target}
                     </span>
                     <span className="mt-auto inline-flex items-center gap-1.5 pt-5 text-sm font-bold text-emerald-600 transition group-hover:gap-2.5">
-                      Try For Free
+                      Explore Tool
                       <ArrowRight className="h-4 w-4" />
                     </span>
                   </div>
@@ -500,7 +503,7 @@ export default function HomePage() {
               One license. Every tool.
             </h2>
             <p className="mt-4 text-base leading-relaxed text-slate-500">
-              Start free, then choose a plan that fits. Every plan unlocks the complete FRPB
+              Choose a plan that fits. Every license unlocks the complete FRPB
               toolkit — no feature gates, no hidden fees.
             </p>
           </div>
@@ -626,7 +629,7 @@ export default function HomePage() {
             </div>
             <p className="mt-5 text-xs text-slate-400">
               {SUPPORTED_MODES.length} boot modes · {SUPPORTED_CHIPSETS.length} chipset
-              families · free to download and try
+              families · download & activate with your license
             </p>
           </div>
         </div>
@@ -734,9 +737,14 @@ export default function HomePage() {
           </p>
 
           <div className="mt-6 flex flex-col items-center justify-between gap-4 border-t border-slate-200/80 pt-8 sm:flex-row">
-            <p className="text-xs text-slate-400">
-              © {new Date().getFullYear()} FRPB. All rights reserved.
-            </p>
+            <div className="text-center sm:text-left">
+              <p className="text-xs text-slate-400">
+                © {new Date().getFullYear()} {COMPANY_ENTITY}. All rights reserved.
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                Operated by {COMPANY_ENTITY} · {COMPANY_ADDRESS}
+              </p>
+            </div>
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-slate-400">
               <a
                 href={mailtoHref(SUPPORT_EMAIL)}

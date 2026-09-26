@@ -218,9 +218,9 @@ export default function FreeUtilitiesScreen({
             <Sparkles className="h-5 w-5" />
           </span>
           <div>
-            <h2 className="text-sm font-bold text-slate-900">Free Utilities & Tools</h2>
+            <h2 className="text-sm font-bold text-slate-900">Pro Utilities & Tools</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              Four no-cost tools included with FRPB Recovery. Pick one to run it on the
+              Four pro tools included with an FRPB Active License. Pick one to run it on the
               connected device.
             </p>
           </div>
@@ -262,7 +262,7 @@ export default function FreeUtilitiesScreen({
               </span>
               <span className="inline-flex items-center gap-1 rounded-full bg-white px-2.5 py-0.5 text-[11px] font-semibold text-brand-700 ring-1 ring-brand-100">
                 <Play className="h-3 w-3" />
-                Try For Free
+                Explore Tool
               </span>
             </button>
           );

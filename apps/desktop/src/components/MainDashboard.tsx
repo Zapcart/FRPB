@@ -6,7 +6,6 @@ import type {
   LogEntry,
   OperationRunState,
 } from "../lib/ipc";
-import { useUpdater } from "../hooks/useUpdater";
 import { useDevice } from "../hooks/useDevice";
 import DeviceMonitor from "./DeviceMonitor";
 import DriverCenter from "./DriverCenter";
@@ -14,7 +13,6 @@ import FRPToolsScreen from "./FRPToolsScreen";
 import FreeUtilitiesScreen from "./FreeUtilitiesScreen";
 import DeviceInfoScreen from "./DeviceInfoScreen";
 import ConsoleLog from "./ConsoleLog";
-import UpdateModal from "./UpdateModal";
 import logoUrl from "../assets/logo.png";
 import {
   Smartphone,
@@ -24,7 +22,6 @@ import {
   Infinity as InfinityIcon,
   Cpu,
   MonitorSmartphone,
-  RefreshCw,
   KeyRound,
   Info,
   Terminal,
@@ -184,14 +181,12 @@ function ConsoleLogTabContent({
 }
 
 /**
- * Post-activation shell: top bar with license status + update button, then a
- * three-tab workspace (Device Monitor / Driver Center / FRP Tools). The
- * UpdateModal overlays whenever the auto-updater reports an available update.
+ * Post-activation shell: top bar with license status, then a workspace of
+ * tabs (Device Monitor / Driver Center / FRP Tools / Pro Utilities / Device
+ * Info / Console Log).
  */
 export default function MainDashboard({ profile, onSignOut }: MainDashboardProps) {
   const [tab, setTab] = useState<Tab>("frp");
-  const [updaterOpen, setUpdaterOpen] = useState(false);
-  const { status: updaterStatus, check, download, install } = useUpdater();
   // Single global device state — shared by Device Monitor + FRP Tools so both
   // screens always render from the identical status object.
   const { status: deviceStatus, refresh: refreshDevice } = useDevice();
@@ -221,27 +216,6 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
   const operationRunning =
     runState?.running ?? deviceStatus?.running ?? false;
 
-  // Persistent update indicator for the header: covers "update available",
-  // live download progress, and "ready to install" so the user sees the state
-  // even with the modal closed. Clicking the button opens the modal and, once
-  // an update is staged, installs it directly.
-  const updatePercent =
-    typeof updaterStatus.percent === "number"
-      ? Math.min(Math.max(Math.round(updaterStatus.percent), 0), 100)
-      : null;
-  const hasUpdate =
-    updaterStatus.state === "AVAILABLE" ||
-    updaterStatus.state === "DOWNLOADING" ||
-    updaterStatus.state === "READY";
-  const updateLabel =
-    updaterStatus.state === "DOWNLOADING"
-      ? updatePercent != null
-        ? `${updatePercent}%`
-        : "Downloading…"
-      : updaterStatus.state === "READY"
-        ? "Restart"
-        : "Update";
-
   return (
     <div className="flex min-h-screen flex-col bg-slate-50">
       {/* Header */}
@@ -260,43 +234,6 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                if (updaterStatus.state === "READY") {
-                  install();
-                  return;
-                }
-                setUpdaterOpen(true);
-                if (!hasUpdate) check();
-              }}
-              className={`frpb-btn-ghost px-3 py-1.5 text-xs ${
-                hasUpdate
-                  ? "border-brand-200 bg-brand-50 text-brand-700 hover:border-brand-300 hover:bg-brand-100 hover:text-brand-800"
-                  : ""
-              }`}
-              title={
-                updaterStatus.state === "READY"
-                  ? "A new version is ready — click to restart and install"
-                  : hasUpdate
-                    ? "Update available"
-                    : "Check for updates"
-              }
-            >
-              <RefreshCw
-                className={`h-3.5 w-3.5 ${
-                  updaterStatus.state === "CHECKING" ? "animate-spin" : ""
-                }`}
-              />
-              Updates
-              {hasUpdate && (
-                <span className="frpb-badge border-brand-200 bg-white px-1.5 py-0 text-[10px] font-semibold text-brand-700">
-                  {updaterStatus.state !== "DOWNLOADING" && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-brand-500" />
-                  )}
-                  {updateLabel}
-                </span>
-              )}
-            </button>
             <button
               onClick={onSignOut}
               className="frpb-btn-ghost px-3 py-1.5 text-xs text-rose-600 hover:border-rose-200 hover:bg-rose-50"
@@ -400,7 +337,7 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
           }`}
         >
           <Sparkles className="h-4 w-4" />
-          Free Utilities
+          Pro Utilities
         </button>
         <button
           onClick={() => setTab("device-info")}
@@ -459,23 +396,6 @@ export default function MainDashboard({ profile, onSignOut }: MainDashboardProps
           />
         )}
       </main>
-
-      {/* Overlays */}
-      {updaterOpen && (
-        <div className="fixed inset-0 z-40">
-          <div
-            className="absolute inset-0 bg-slate-900/40"
-            onClick={() => setUpdaterOpen(false)}
-          />
-          <UpdateModal
-            open
-            status={updaterStatus}
-            onClose={() => setUpdaterOpen(false)}
-            onDownload={download}
-            onInstall={install}
-          />
-        </div>
-      )}
     </div>
   );
 }

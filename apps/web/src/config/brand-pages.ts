@@ -141,9 +141,9 @@ const samsung: BrandPageContent = {
         "No. FRPB detects whether the correct Samsung, Qualcomm or MediaTek driver is present and installs it with one click, including the Emergency Dial BROM mode driver for MTK Galaxies.",
     },
     {
-      question: "Is FRPB free to download for Samsung devices?",
+      question: "Do I need a license to use FRPB on Samsung devices?",
       answer:
-        "Yes. FRPB offers a free trial with no credit card required; paid licenses unlock the full FRP bypass and flash reset toolkit. The signed Samsung installer is served from the official GitHub Releases page.",
+        "The desktop app is included with an FRPB Active License, which unlocks the full FRP bypass and flash reset toolkit. The signed Samsung installer is served from the official GitHub Releases page.",
     },
   ],
 };
@@ -226,9 +226,9 @@ const xiaomi: BrandPageContent = {
         "FRPB supports Xiaomi, Redmi and Poco devices on MediaTek and Qualcomm Snapdragon chipsets. It auto-detects Download mode and MTK BROM mode so you do not choose the method manually.",
     },
     {
-      question: "Is the Xiaomi MIUI FRP tool free?",
+      question: "Do I need a license for the Xiaomi MIUI FRP tool?",
       answer:
-        "The download is free, with a free trial and no credit card required. Paid licenses unlock the full FRP toolkit. The installer is hosted on the official GitHub Releases page and is adware-free.",
+        "The Xiaomi MIUI FRP tool is included with an FRPB Active License, which unlocks the full FRP toolkit. The installer is hosted on the official GitHub Releases page and is adware-free.",
     },
   ],
 };
@@ -311,9 +311,9 @@ const vivoOppoRealme: BrandPageContent = {
         "BROM (Boot ROM) mode is the low-level MediaTek recovery mode FRPB uses to access the device before Android boots. This is what allows an authorised owner to clear the FRP lock when the standard recovery path is blocked.",
     },
     {
-      question: "Is the Vivo / Oppo / Realme FRP tool free to try?",
+      question: "Do I need a license for the Vivo / Oppo / Realme FRP tool?",
       answer:
-        "Yes — FRPB offers a free trial with no credit card required, and the Windows installer is served from the official GitHub Releases page with no bundled adware or toolbars.",
+        "The tool is included with an FRPB Active License, and the Windows installer is served from the official GitHub Releases page with no bundled adware or toolbars.",
     },
   ],
 };
@@ -396,9 +396,9 @@ const qualcommEdl: BrandPageContent = {
         "Yes. Beyond FRP removal, FRPB performs deep-flash recovery — raw firmware read-back and restore — to recover Snapdragon phones stuck in a boot loop or with corrupted partitions.",
     },
     {
-      question: "Is the Qualcomm EDL FRP tool free to download?",
+      question: "Do I need a license for the Qualcomm EDL FRP tool?",
       answer:
-        "The download is free, with a free trial and no credit card required. The signed Windows installer is hosted on the official GitHub Releases page and contains no adware or bundled toolbars.",
+        "The Qualcomm EDL FRP tool is included with an FRPB Active License. The signed Windows installer is hosted on the official GitHub Releases page and contains no adware or bundled toolbars.",
     },
   ],
 };
