@@ -1,22 +1,51 @@
 /**
  * FRPB — Central legal & compliance configuration.
  *
- * Single source of truth for the site-wide legal disclaimer and the contact
- * addresses required by the Digital Personal Data Protection (DPDP) Act, 2023.
+ * Single source of truth for the site-wide legal disclaimer, the contact
+ * addresses required by the Digital Personal Data Protection (DPDP) Act, 2023,
+ * and the company identity / processor disclosures reused by the legal pages
+ * and the global footer.
  *
- * Keeping this here (mirroring `config/download.ts`) means the disclaimer and
- * support/legal addresses are defined once and reused by every footer and the
- * privacy policy, so a future edit never has to be hunted down across files.
+ * Keeping this here (mirroring `config/download.ts`) means the disclaimer,
+ * support/legal addresses, operator identity and named sub-processors are
+ * defined once and reused everywhere, so a future edit never has to be hunted
+ * down across files.
  */
 
-/** Support mailbox — general help, account and product queries. */
+/** Support mailbox — general help, account, billing and product queries. */
 export const SUPPORT_EMAIL = "support@frpb.in";
 
-/** Legal/privacy mailbox — DPDP data-access, correction and erasure requests. */
+/** Legal/privacy mailbox — DPDP / GDPR / CCPA data-access and erasure requests. */
 export const LEGAL_EMAIL = "legal@frpb.in";
 
 /** Postal jurisdiction shown alongside the contact addresses. */
 export const LEGAL_LOCATION = "FRPB, India";
+
+/**
+ * Operator identity shown in every footer and legal page. Kept as discrete
+ * fields so the trade name, entity descriptor and jurisdiction are rendered
+ * consistently rather than being re-typed (and drifting) on each page.
+ */
+export const COMPANY_NAME = "FRPB";
+export const COMPANY_ENTITY = "FRPB (sole proprietorship)";
+export const COMPANY_ADDRESS = "India";
+export const COMPANY_JURISDICTION = "India";
+
+/** Canonical site origin, used for processing / cross-border disclosures. */
+export const LEGAL_WEBSITE = "https://frpb.in";
+
+/**
+ * Third-party sub-processors disclosed in the Privacy Policy. Naming them
+ * explicitly (rather than a generic "service providers" clause) satisfies the
+ * GDPR Article 13/14 transparency duty and the CCPA "service provider"
+ * disclosure requirement.
+ */
+export const DATA_PROCESSORS = {
+  payments: "Razorpay",
+  email: "Resend",
+  analytics: "PostHog",
+  auth: "Supabase",
+} as const;
 
 /**
  * Small-print disclaimer rendered in every site footer. FRPB is a recovery

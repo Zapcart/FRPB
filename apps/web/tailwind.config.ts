@@ -148,10 +148,13 @@ const config: Config = {
           "0%": { opacity: "0", transform: "translateY(16px) scale(0.96)" },
           "100%": { opacity: "1", transform: "translateY(0) scale(1)" },
         },
-        // Expanding radial ripple ring behind the hero copy.
+        // Expanding radial ripple ring behind the hero copy. One-shot: the
+        // final keyframe is held via `animation-fill-mode: forwards` so the ring
+        // resolves to opacity 0 and never lingers/repaints (fixes the "ring
+        // stays visible then pops out" glitch on first paint).
         ripple: {
           "0%": { transform: "scale(0.55)", opacity: "0.5" },
-          "70%": { opacity: "0.12" },
+          "60%": { opacity: "0.12" },
           "100%": { transform: "scale(1.7)", opacity: "0" },
         },
         // Gentle vertical bob for floating capability tags.
@@ -181,7 +184,7 @@ const config: Config = {
         shine: "shine 1s ease-in-out",
         "fade-scale": "fade-scale 0.8s cubic-bezier(0.22,1,0.36,1) both",
         "fade-scale-slow": "fade-scale 1.1s cubic-bezier(0.22,1,0.36,1) both",
-        ripple: "ripple 4.2s ease-out infinite",
+        ripple: "ripple 3s ease-out forwards",
         "bounce-slow": "bounce-slow 4.5s ease-in-out infinite",
         marquee: "marquee 34s linear infinite",
         "spin-slow": "spin-slow 28s linear infinite",

@@ -6,6 +6,12 @@ const nextConfig = {
   // trailing slash and Next 308-redirects the dotted variant, so the canonical
   // URL emitted in metadata always matches the served URL.
   trailingSlash: false,
+  // Gzip/Brotli-compress HTML + text responses at the edge (reduces transfer
+  // size for the document itself — the primary mobile LCP resource).
+  compress: true,
+  // Drop the `X-Powered-By: Next.js` fingerprint header (byte savings + a
+  // smaller disclosure surface).
+  poweredByHeader: false,
   images: {
     // Serve modern formats first; next/image falls back to the original PNG.
     formats: ["image/avif", "image/webp"],
@@ -18,6 +24,31 @@ const nextConfig = {
   },
   async headers() {
     return [
+      {
+        // Immutable, content-hashed build output (JS/CSS/fonts emitted by
+        // next/font). Safe to cache for a year — the single biggest win for
+        // repeat-visit LCP, since the browser skips the network entirely.
+        source: "/_next/static/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      {
+        // Non-hashed public media/font/icon assets: cache for a week with
+        // stale-while-revalidate so repeat loads serve instantly from disk
+        // while a fresh copy refreshes in the background.
+        source:
+          "/:path*.(png|jpg|jpeg|gif|svg|webp|avif|ico|woff|woff2|ttf|otf)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=604800, stale-while-revalidate=86400",
+          },
+        ],
+      },
       {
         // Public license/checkout/webhook endpoints are consumed by the desktop client
         source: "/api/:path*",

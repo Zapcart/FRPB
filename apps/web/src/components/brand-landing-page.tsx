@@ -7,6 +7,7 @@
 
 import Link from "next/link";
 import {
+  ArrowRight,
   CheckCircle2,
   Cpu,
   Download,
@@ -38,7 +39,11 @@ import {
   faqPageSchema,
   breadcrumbSchema,
 } from "@/lib/schema";
-import type { BrandIconKey, BrandPageContent } from "@/config/brand-pages";
+import {
+  BRAND_MONEY_LINKS,
+  type BrandIconKey,
+  type BrandPageContent,
+} from "@/config/brand-pages";
 
 /**
  * Resolve a data-only icon key to its lucide component. Keeps
@@ -62,6 +67,10 @@ const ICONS: Record<BrandIconKey, LucideIcon> = {
 
 export default function BrandLandingPage({ content }: { content: BrandPageContent }) {
   const href = resolveInstallerUrl();
+
+  // Cross-link the other brand money-pages with keyword-rich anchors so crawl
+  // equity and intent flow between the device-family guides.
+  const relatedGuides = BRAND_MONEY_LINKS.filter((guide) => guide.path !== content.path);
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
@@ -206,6 +215,34 @@ export default function BrandLandingPage({ content }: { content: BrandPageConten
           </span>
           <span className="badge">Windows 10 / 11 · x64</span>
         </section>
+
+        {/* ================= RELATED DEVICE GUIDES (internal linking) ================= */}
+        <section className="mt-14" aria-label="Related device guides">
+          <h2 className="text-center text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">
+            Related FRP bypass guides
+          </h2>
+          <p className="mx-auto mt-3 max-w-2xl text-center text-sm text-slate-500">
+            Working with a different chipset? Jump straight to the device family you need.
+          </p>
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {relatedGuides.map((guide) => (
+              <Link
+                key={guide.path}
+                href={guide.path}
+                className="card group flex flex-col p-6 transition hover:border-brand-200 hover:shadow-lg"
+              >
+                <h3 className="text-sm font-bold text-ink">{guide.anchor}</h3>
+                <p className="mt-1.5 flex-1 text-xs leading-relaxed text-slate-500">
+                  {guide.blurb}
+                </p>
+                <span className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600">
+                  Open guide
+                  <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
       </main>
 
       {/* ================= FAQ (visible) ================= */}
@@ -249,7 +286,14 @@ export default function BrandLandingPage({ content }: { content: BrandPageConten
       </footer>
 
       {/* ================= JSON-LD ================= */}
-      <JsonLd id="ld-software-application" data={softwareApplicationSchema()} />
+      <JsonLd
+        id="ld-software-application"
+        data={softwareApplicationSchema({
+          path: content.path,
+          name: `FRPB — ${content.eyebrow}`,
+          description: content.description,
+        })}
+      />
       <JsonLd id="ld-faq" data={faqPageSchema(content.faq)} />
       <JsonLd
         id="ld-breadcrumb"

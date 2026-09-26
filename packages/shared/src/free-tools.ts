@@ -93,14 +93,14 @@ export interface FreeToolMeta {
 export const FREE_TOOLS: Record<FreeToolId, FreeToolMeta> = {
   "whatsapp-transfer": {
     id: "whatsapp-transfer",
-    title: "WhatsApp Transfer Tool — Move Chats to a New Phone",
+    title: "WhatsApp Transfer Tool 2026 — Move Chats in Minutes (No Cloud)",
     path: "/whatsapp-transfer-tool",
     eyebrow: "WhatsApp Transfer",
-    tagline: "Move WhatsApp chats, photos and videos to a new Android phone in minutes.",
+    tagline: "Move WhatsApp chats, photos and videos to a new Android phone in minutes — no cloud backup needed.",
     description:
-      "Transfer WhatsApp chats, images, videos and attachments from one Android phone to another — no cloud backup, no data plan required. FRPB connects both devices over a local USB link and copies the WhatsApp media store directly, preserving chat history.",
+      "Transfer WhatsApp chats, images, videos and attachments to a new Android phone in about 5 minutes — no cloud backup, no data plan. FRPB copies the WhatsApp media store over a local USB link and preserves full chat history.",
     keywords:
-      "whatsapp transfer, move whatsapp chats, whatsapp data migration android, transfer whatsapp to new phone, whatsapp backup alternative",
+      "whatsapp transfer, whatsapp transfer tool 2026, move whatsapp chats, transfer whatsapp to new phone, whatsapp backup alternative",
     category: "transfer",
     platform: "desktop",
     popularity: 100,
@@ -159,14 +159,14 @@ export const FREE_TOOLS: Record<FreeToolId, FreeToolMeta> = {
 
   "phone-transfer": {
     id: "phone-transfer",
-    title: "Phone to Phone Transfer — Android Data Migration",
+    title: "Phone to Phone Transfer 2026 — Copy Android Data in 1 Click",
     path: "/phone-to-phone-transfer",
     eyebrow: "Phone Transfer",
-    tagline: "Copy contacts, photos, videos, SMS and apps between any two Android phones.",
+    tagline: "Copy contacts, photos, videos, SMS and apps between any two Android phones in 1 click.",
     description:
-      "Move contacts, call logs, SMS, photos, videos, music and documents from one Android phone to another. FRPB's Phone Transfer wizard runs over USB, works cross-brand, and never routes your personal data through a server.",
+      "Move contacts, call logs, SMS, photos, videos, music and documents between two Android phones in 1 click. FRPB's Phone Transfer wizard runs over USB, works cross-brand, and never uploads your data to a server.",
     keywords:
-      "phone to phone transfer, android data transfer, transfer contacts photos android, switch android phones, copy data between phones",
+      "phone to phone transfer, phone to phone transfer 2026, android data transfer, transfer contacts photos android, switch android phones",
     category: "transfer",
     platform: "desktop",
     popularity: 90,
@@ -225,14 +225,14 @@ export const FREE_TOOLS: Record<FreeToolId, FreeToolMeta> = {
 
   "data-eraser": {
     id: "data-eraser",
-    title: "Android Data Eraser — Permanently Wipe Your Phone",
+    title: "Android Data Eraser 2026 — Permanently Wipe Your Phone in 1 Click",
     path: "/android-data-eraser",
     eyebrow: "Data Eraser",
-    tagline: "Permanently erase all data from your Android phone before selling or trading it.",
+    tagline: "Permanently erase all data from your Android phone in 1 click before selling it.",
     description:
-      "Securely and permanently erase every trace of data from your Android phone — accounts, messages, photos, apps and settings. FRPB's Data Eraser performs a full factory wipe and partition erase so your personal data cannot be recovered.",
+      "Securely erase every trace of data from your Android phone in 1 click — accounts, messages, photos, apps and settings. FRPB's Data Eraser runs a full factory wipe and partition erase so your data cannot be recovered.",
     keywords:
-      "android data eraser, wipe android phone, factory reset android, erase phone before selling, permanently delete android data",
+      "android data eraser, android data eraser 2026, wipe android phone, factory reset android, erase phone before selling",
     category: "privacy",
     platform: "desktop",
     popularity: 80,
@@ -291,14 +291,14 @@ export const FREE_TOOLS: Record<FreeToolId, FreeToolMeta> = {
 
   "virtual-location": {
     id: "virtual-location",
-    title: "Virtual Location Spoofer — Fake GPS on Android",
+    title: "Virtual Location Spoofer 2026 — Fake GPS on Android (No Root)",
     path: "/virtual-location-spoofer",
     eyebrow: "Virtual Location",
-    tagline: "Set any GPS location on your Android phone for games, apps and testing.",
+    tagline: "Set any GPS location on your Android phone in 1 click — no root required.",
     description:
-      "Simulate any GPS location on your Android phone. FRPB's Virtual Location tool mocks the location provider over ADB, so you can test location features, play location-based games and protect your privacy — no root required.",
+      "Simulate any GPS location on your Android phone in 1 click, with no root. FRPB's Virtual Location tool mocks the location provider over ADB — perfect for testing location features, playing location-based games and protecting privacy.",
     keywords:
-      "virtual location android, fake gps android, spoof location android, mock gps without root, location spoofer",
+      "virtual location android, fake gps android 2026, spoof location android, mock gps without root, location spoofer",
     category: "location",
     platform: "desktop",
     popularity: 70,

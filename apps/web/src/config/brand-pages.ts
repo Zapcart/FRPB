@@ -68,12 +68,13 @@ export interface BrandPageContent {
  */
 const samsung: BrandPageContent = {
   path: "/samsung-frp-bypass",
-  title: "Samsung FRP Bypass Tool (2026) - One-Click Android 10-14 Unlock",
+  title: "Samsung FRP Bypass Tool 2026 — 1-Click Unlock Android 10–14",
   description:
-    "Bypass Samsung FRP lock on Android 10-14 with FRPB. One-click Galaxy unlock covering One UI, Knox security and Download / BROM mode — free Windows tool.",
+    "Bypass Samsung FRP in about 5 minutes on Android 10–14. 1-click Galaxy unlock for One UI + Knox with Download / BROM mode and auto Samsung drivers — free Windows tool.",
   keywords: [
     "samsung frp bypass",
     "samsung frp bypass tool 2026",
+    "1-click samsung frp bypass",
     "samsung frp unlock",
     "galaxy frp bypass",
     "samsung knox frp bypass",
@@ -153,11 +154,12 @@ const samsung: BrandPageContent = {
  */
 const xiaomi: BrandPageContent = {
   path: "/xiaomi-miui-frp-bypass",
-  title: "Xiaomi MIUI / HyperOS FRP Bypass Tool - Fast & Free Download",
+  title: "Xiaomi FRP Bypass 2026 — 1-Click MIUI / HyperOS Unlock",
   description:
-    "Reset MIUI and HyperOS FRP lock on Xiaomi, Redmi and Poco devices with FRPB. Free one-click download with Mi Account removal guidance for MediaTek and Snapdragon phones.",
+    "Remove MIUI & HyperOS FRP in 3 steps on Xiaomi, Redmi and Poco. 1-click Mi Account reset with auto MediaTek / Snapdragon drivers — free Windows download, no adware.",
   keywords: [
     "xiaomi frp bypass",
+    "xiaomi frp bypass 2026",
     "miui frp bypass",
     "hyperos frp bypass",
     "redmi frp unlock",
@@ -238,13 +240,14 @@ const xiaomi: BrandPageContent = {
  */
 const vivoOppoRealme: BrandPageContent = {
   path: "/vivo-oppo-realme-frp",
-  title: "Vivo, Oppo & Realme FRP Unlock Tool - MTK / BROM Mode Bypass",
+  title: "Vivo, Oppo & Realme FRP Bypass 2026 — 1-Click MTK BROM Unlock",
   description:
-    "Unlock FRP on Vivo, Oppo and Realme phones with FRPB. MediaTek BROM and Qualcomm EDL bypass with an automated one-click driver installer for Windows — free download.",
+    "Unlock FRP on Vivo, Oppo and Realme in 3 steps. 1-click MediaTek BROM & Qualcomm EDL bypass with auto driver install for ColorOS and Funtouch — free Windows download.",
   keywords: [
     "vivo frp unlock",
     "oppo frp bypass",
     "realme frp bypass",
+    "vivo oppo realme frp bypass 2026",
     "mtk brom frp",
     "vivo oppo realme frp tool",
     "mediatek frp bypass",
@@ -323,11 +326,12 @@ const vivoOppoRealme: BrandPageContent = {
  */
 const qualcommEdl: BrandPageContent = {
   path: "/qualcomm-edl-frp-tool",
-  title: "Qualcomm EDL Mode FRP Bypass Software - Deep Flash Recovery",
+  title: "Qualcomm EDL FRP Tool 2026 — 1-Click 9008 Deep Flash Bypass",
   description:
-    "Qualcomm EDL 9008 mode FRP bypass and deep-flash recovery with FRPB. Unlock Snapdragon devices via Emergency Download mode with automated drivers — free Windows tool.",
+    "Bypass FRP and recover Snapdragon phones in Qualcomm EDL 9008 mode. 1-click Sahara / Firehose deep flash with auto QDLoader drivers — free Windows tool, adware-free.",
   keywords: [
     "qualcomm edl tool",
+    "qualcomm edl frp tool 2026",
     "edl mode frp bypass",
     "qualcomm 9008 frp",
     "deep flash frp",
@@ -423,4 +427,36 @@ export const BRAND_PAGE_ROUTES: readonly {
   { path: xiaomi.path, changeFrequency: "weekly", priority: 0.8 },
   { path: vivoOppoRealme.path, changeFrequency: "weekly", priority: 0.8 },
   { path: qualcommEdl.path, changeFrequency: "weekly", priority: 0.8 },
+];
+
+/**
+ * Keyword-rich link descriptors for internal linking from supporting utility
+ * routes back to the primary brand money-pages. `anchor` doubles as the visible
+ * link text so the crawl path is both user-facing and keyword-aligned.
+ */
+export const BRAND_MONEY_LINKS: readonly {
+  path: string;
+  anchor: string;
+  blurb: string;
+}[] = [
+  {
+    path: samsung.path,
+    anchor: "Samsung FRP bypass tool (2026)",
+    blurb: "One-click Android 10–14 unlock for Galaxy devices.",
+  },
+  {
+    path: xiaomi.path,
+    anchor: "Xiaomi MIUI / HyperOS FRP bypass",
+    blurb: "Mi Account removal for Redmi, Poco and Mi phones.",
+  },
+  {
+    path: vivoOppoRealme.path,
+    anchor: "Vivo, Oppo & Realme FRP (MTK BROM)",
+    blurb: "MediaTek and Qualcomm unlock for ColorOS / Funtouch.",
+  },
+  {
+    path: qualcommEdl.path,
+    anchor: "Qualcomm EDL 9008 deep flash",
+    blurb: "Snapdragon Emergency Download recovery and repair.",
+  },
 ];

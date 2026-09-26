@@ -2,6 +2,7 @@
 // Renders the header/footer chrome used by /auth, /login and /register so the
 // three routes stay visually identical.
 
+import Image from "next/image";
 import Link from "next/link";
 
 export default function AuthShell({ children }: { children: React.ReactNode }) {
@@ -10,9 +11,12 @@ export default function AuthShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/80 backdrop-blur">
         <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2">
-            <img
+            <Image
               src="/logo.png"
               alt="FRPB"
+              width={32}
+              height={32}
+              priority
               className="h-8 w-8 shrink-0 rounded-lg"
             />
             <span className="text-lg font-bold tracking-tight text-slate-900">FRPB</span>

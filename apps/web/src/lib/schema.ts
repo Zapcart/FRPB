@@ -28,28 +28,47 @@ function billingDuration(days: number | null): string | undefined {
 }
 
 /**
+ * Optional route context so each programmatic landing page emits its own
+ * canonical `url`/name/description instead of the route-agnostic defaults.
+ */
+export interface SoftwareApplicationSchemaContext {
+  /** Route path this schema describes (e.g. "/samsung-frp-bypass"). */
+  path?: string;
+  /** Overrides the application name for a specific route/tool variant. */
+  name?: string;
+  /** Overrides the description for a specific route/tool variant. */
+  description?: string;
+}
+
+/**
  * SoftwareApplication rich-result for the landing page.
  *
  * Emits a single zero-price Offer (the app is free to download) plus an
  * aggregateRating so Google can render the "Free" badge and star rating in the
  * snippet. See the inline caveat on `aggregateRating` before shipping ratings.
+ *
+ * Pass `context` on programmatic brand/utility routes so each page advertises
+ * its own canonical `url` (defaults preserve the homepage behaviour).
  */
-export function softwareApplicationSchema(): Record<string, unknown> {
+export function softwareApplicationSchema(
+  context: SoftwareApplicationSchemaContext = {},
+): Record<string, unknown> {
+  const path = context.path ?? "/";
   return {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: PRODUCT_APPLICATION_NAME,
+    name: context.name ?? PRODUCT_APPLICATION_NAME,
     alternateName: SITE_NAME,
     applicationCategory: "UtilitiesApplication",
     // Windows-only desktop utility: the FRPB Setup installer targets Win 10/11.
     operatingSystem: "Windows 10, Windows 11",
     softwareVersion: RELEASE_VERSION,
-    url: absoluteUrl("/"),
+    url: absoluteUrl(path),
     downloadUrl: absoluteUrl("/downloads"),
     installUrl: absoluteUrl("/downloads"),
     image: absoluteUrl(OG_IMAGE_PATH),
     screenshot: absoluteUrl(OG_IMAGE_PATH),
-    description: PRODUCT_DESCRIPTION,
+    description: context.description ?? PRODUCT_DESCRIPTION,
     inLanguage: "en",
     isAccessibleForFree: true,
     publisher: organizationSchema(),

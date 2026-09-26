@@ -24,7 +24,14 @@ import {
 } from "@/lib/seo";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+// `display: "swap"` renders the fallback font immediately and swaps in Inter
+// once loaded — eliminates the render-blocking font request on mobile and the
+// invisible-text (FOIT) window that hurts LCP.
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

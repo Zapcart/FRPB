@@ -3,12 +3,19 @@
 // Not legal advice — have a qualified lawyer review before publishing if you
 // need a binding agreement in your jurisdiction.
 
+import Image from "next/image";
 import { pageMetadata } from "@/lib/seo";
+import {
+  COMPANY_JURISDICTION,
+  LEGAL_EMAIL,
+  SUPPORT_EMAIL,
+  mailtoHref,
+} from "@/config/legal";
 
 export const metadata = pageMetadata({
   title: "End User License Agreement",
   description:
-    "End User License Agreement for FRPB — the terms governing use of the FRPB desktop application, license scope and authorised device use.",
+    "End User License Agreement for FRPB — licensed (not sold) software, per-plan device activation limits, authorised repair-technician guardrails, and termination terms.",
   path: "/eula",
 });
 
@@ -19,9 +26,12 @@ export default function EULAPage() {
       <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-6">
           <a href="/" className="flex items-center gap-2.5">
-            <img
+            <Image
               src="/logo.png"
               alt="FRPB"
+              width={36}
+              height={36}
+              priority
               className="h-9 w-9 shrink-0 rounded-xl"
             />
             <span className="text-lg font-extrabold tracking-tight text-ink">
@@ -31,7 +41,7 @@ export default function EULAPage() {
 
           <nav className="hidden items-center gap-5 lg:flex">
             <a
-              href="#"
+              href="/"
               className="text-sm font-medium text-slate-600 transition hover:text-slate-900"
             >
               ← Back to home
@@ -65,63 +75,95 @@ export default function EULAPage() {
             <p>
               By installing, copying, accessing or using FRPB (“the Software”), you
               agree to be bound by this End User License Agreement (“Agreement”). If
-              you do not agree, do not install or use the Software.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-bold text-ink">2. License Grant</h2>
-            <p>
-              Subject to your compliance with this Agreement, FRPB grants you a
-              limited, non-exclusive, non-transferable, revocable licence to use the
-              Software for your personal or professional device recovery needs. The
-              scope of your use is governed by the plan you have purchased:
-            </p>
-            <ul className="mt-3 list-disc pl-6 space-y-1 text-slate-600">
-              <li>A 60-day plan permits use on the number of devices
-                permitted by that plan at any one time, for sixty (60) days from
-                the date of purchase.</li>
-              <li>A lifetime plan permits perpetual use under the same device limits,
-                subject to the restrictions below.</li>
-            </ul>
-            <p>
-              You may install the Software on any number of computers, but you may
-              activate and use it only on the devices covered by your licence. A device
-              is counted once it has been activated under your account.
-            </p>
-          </section>
-
-          <section>
-            <h2 className="text-lg font-bold text-ink">3. Ownership</h2>
-            <p>
-              The Software, including all copies, modifications and derivative works,
-              remains the property of FRPB or its licensors. This Agreement grants you
-              a right to use the Software — it does <em>not</em> transfer ownership.
-              All rights not expressly granted are reserved.
+              you do not agree, do not install or use the Software. This Agreement
+              takes effect on the earlier of your first installation, activation or
+              use of the Software.
             </p>
           </section>
 
           <section>
             <h2 className="text-lg font-bold text-ink">
-              4. Permitted Use
+              2. Licensed, Not Sold
             </h2>
             <p>
-              You may use the Software only to:
+              <strong>
+                The Software is licensed to you, not sold.
+              </strong>{" "}
+              You acquire no ownership interest in the Software. FRPB and its
+              licensors retain all right, title and interest in and to the Software,
+              including all copies, updates, modifications and derivative works. All
+              rights not expressly granted in this Agreement are reserved by FRPB.
+            </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-bold text-ink">3. License Grant</h2>
+            <p>
+              Subject to your compliance with this Agreement, FRPB grants you a
+              limited, <strong>non-exclusive, non-transferable, non-sublicensable and
+              revocable</strong> licence to use the Software for your personal or
+              professional<strong> device recovery and repair</strong> needs. The
+              scope of your use is defined by the plan you have purchased:
             </p>
             <ul className="mt-3 list-disc pl-6 space-y-1 text-slate-600">
-              <li>Recover, repair, reset or manage devices that you own or are
-                authorised in writing to service.</li>
-              <li>Perform legitimate device maintenance, diagnostics, driver
-                installation and firmware recovery.</li>
-              <li>Test the Software during the trial or evaluation period if one is
-                offered.</li>
+              <li>
+                <strong>60-Day Plan</strong> — permits activation on{" "}
+                <strong>one (1) device at a time</strong>, for sixty (60) days from
+                the date of purchase. A different device may be substituted only after
+                the previously bound device is deactivated through your dashboard.
+              </li>
+              <li>
+                <strong>Lifetime Plan</strong> — permits activation on up to{" "}
+                <strong>five (5) devices</strong> in total, on a perpetual basis,
+                subject to the restrictions below and to the activation/binding rules
+                shown in your dashboard.
+              </li>
             </ul>
             <p>
-              You are responsible for ensuring that any device recovery, reset or
-              unlock operation complies with applicable laws, the device manufacturer’s
-              terms, and the rights of any person or organisation that owns the device
-              or the data on it.
+              You may install the Software on any number of computers, but you may
+              activate and use it only on the specific number of devices permitted by
+              your plan. A device is counted once it has been activated under your
+              account; activation is bound to the device’s hardware identifier.
             </p>
+          </section>
+
+          <section>
+            <h2 className="text-lg font-bold text-ink">
+              4. Authorised Use — Device Ownership and Repair Technicians Only
+            </h2>
+            <p>
+              The Software is a professional recovery utility intended{" "}
+              <strong>strictly</strong> for:
+            </p>
+            <ul className="mt-3 list-disc pl-6 space-y-1 text-slate-600">
+              <li>
+                <strong>Authorised device owners</strong> — individuals who own the
+                device being serviced; and
+              </li>
+              <li>
+                <strong>Certified / professional repair technicians</strong> — who
+                have the lawful, documented authorisation of the device’s owner to
+                service that specific device.
+              </li>
+            </ul>
+            <p>
+              You represent and warrant that, for every device you service using the
+              Software, you either own the device or hold the device owner’s lawful
+              consent or written authorisation. You are solely responsible for
+              ensuring that any recovery, reset, unlock or FRP-removal operation
+              complies with applicable law, the device manufacturer’s terms, and the
+              rights of the device owner and any person whose data is on the device.
+            </p>
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <strong className="font-semibold">
+                Stolen-device and unauthorised-device disclaimer.
+              </strong>{" "}
+              Using FRPB to bypass, remove or defeat security protections on a device
+              you do not own or are not authorised in writing to service is strictly
+              prohibited and may be a criminal offence. FRPB does not support, and
+              expressly disclaims any involvement in, the servicing of stolen devices
+              or devices obtained without the owner’s consent.
+            </div>
           </section>
 
           <section>
@@ -133,12 +175,16 @@ export default function EULAPage() {
               <li>Use the Software to bypass, circumvent or remove security protections,
                 locks, FRP, activation locks, passcodes, encryption or any other
                 protection on a device you do not own or are not authorised to service.</li>
-              <li>Reverse engineer, decompile, disassemble, modify, translate, create
-                derivative works of, or attempt to derive the source code of the
-                Software, except to the extent this is expressly permitted by law.</li>
-              <li>Rent, lease, sublicense, sell, distribute, loan, share or otherwise
-                provide the Software to any third party, except that you may install it
-                on your own computers for your own use.</li>
+              <li>
+                <strong>Reverse engineer</strong>, decompile, disassemble, modify,
+                translate, create derivative works of, or otherwise attempt to derive
+                or discover the source code, underlying algorithms, activation logic
+                or licence-verification mechanisms of the Software, except to the
+                extent this is expressly permitted by mandatory applicable law.
+              </li>
+              <li>Rent, lease, sublicense, sell, resell, distribute, loan, share or
+                otherwise provide the Software or your licence key to any third party,
+                except that you may install it on your own computers for your own use.</li>
               <li>Remove, alter or obscure any copyright, trademark or proprietary
                 notice on the Software or its documentation.</li>
               <li>Use the Software in a manner that violates any law, regulation,
@@ -170,15 +216,18 @@ export default function EULAPage() {
               7. Subscription and Payments
             </h2>
             <p>
-              If you purchase a subscription plan:
+              If you purchase a subscription or licence plan:
             </p>
             <ul className="mt-3 list-disc pl-6 space-y-1 text-slate-600">
-              <li>Your subscription begins when payment is successfully processed.</li>
+              <li>Your licence begins when payment is successfully processed.</li>
               <li>The subscription renews automatically at the end of each billing
                 period unless you cancel before the renewal date.</li>
               <li>You may cancel at any time; cancellation stops future renewals but
                 does not refund fees already paid, except where the law requires
-                otherwise or as set out in our Refund Policy.</li>
+                otherwise or as set out in our{" "}
+                <a href="/refund" className="text-brand-600 hover:underline">
+                  Refund Policy
+                </a>.</li>
               <li>If a payment fails, your access may be suspended until payment is
                 successfully completed.</li>
               <li>Licenses are personal to the account that purchased them and may not
@@ -188,25 +237,36 @@ export default function EULAPage() {
 
           <section>
             <h2 className="text-lg font-bold text-ink">
-              8. Termination
+              8. Immediate Termination for Breach
             </h2>
             <p>
-              This licence continues until terminated. It terminates automatically:
+              We may suspend or terminate this licence <strong>immediately,
+              without prior notice</strong>, if you:
             </p>
             <ul className="mt-3 list-disc pl-6 space-y-1 text-slate-600">
-              <li>If you breach this Agreement and do not cure the breach within a
-                reasonable period after notice.</li>
-              <li>If you engage in fraud, abuse, or use the Software in violation of
-                applicable law.</li>
-              <li>Upon written request by FRPB where the Software is no longer
-                available, provided that any prepaid, non-refundable fees are not
-                refunded except as required by law.</li>
+              <li>breach any material term of this Agreement;</li>
+              <li>
+                attempt to reverse engineer, decompile, circumvent or disable the
+                Software’s licence-verification or activation mechanisms;
+              </li>
+              <li>
+                use the Software on a device you do not own or are not authorised to
+                service, or in violation of applicable law; or
+              </li>
+              <li>
+                engage in fraud, abuse, chargeback fraud, or share your licence key with
+                third parties.
+              </li>
             </ul>
             <p>
-              On termination, you must stop using the Software and uninstall it from all
-              computers. Sections that by their nature should survive — including
-              ownership, payments, liability limits and dispute resolution — remain in
-              effect after termination.
+              Termination also occurs automatically if you breach this Agreement and
+              do not cure the breach within a reasonable period after notice from us,
+              or upon written request by FRPB where the Software is no longer made
+              available. On termination you must immediately stop using the Software
+              and uninstall it from all computers, and your licence key will be
+              deactivated and rendered unusable. Sections that by their nature should
+              survive — including ownership, payments, liability limits, indemnity and
+              dispute resolution — remain in effect after termination.
             </p>
           </section>
 
@@ -242,11 +302,14 @@ export default function EULAPage() {
               POSSIBILITY OF SUCH DAMAGES.
             </p>
             <p>
-              FRPB’S TOTAL LIABILITY TO YOU FOR ANY CLAIM ARISING OUT OF THIS AGREEMENT
-              WILL NOT EXCEED THE AMOUNT YOU PAID TO FRPB IN THE TWELVE (12) MONTHS
-              IMMEDIATELY PRECEDING THE EVENT GIVING RISE TO THE CLAIM, OR ONE HUNDRED
-              U.S. DOLLARS (USD 100) IF YOU HAVE NOT PAID ANY FEES. THE FOREGOING
-              LIMITATIONS APPLY ONLY TO THE EXTENT NOT PROHIBITED BY LAW.
+              FRPB’S TOTAL AGGREGATE LIABILITY TO YOU FOR ANY AND ALL CLAIMS ARISING
+              OUT OF OR RELATING TO THIS AGREEMENT WILL BE{" "}
+              <strong>
+                LIMITED STRICTLY TO THE TOTAL AMOUNT ACTUALLY PAID BY YOU TO FRPB FOR
+                THE LICENCE GIVING RISE TO THE CLAIM
+              </strong>
+              , OR ONE HUNDRED U.S. DOLLARS (USD 100) IF YOU HAVE NOT PAID ANY FEES.
+              THE FOREGOING LIMITATIONS APPLY ONLY TO THE EXTENT NOT PROHIBITED BY LAW.
             </p>
           </section>
 
@@ -259,7 +322,9 @@ export default function EULAPage() {
               employees and agents from and against any claims, damages, losses and
               expenses (including reasonable legal fees) arising out of or relating to
               your breach of this Agreement, your use of the Software in violation of
-              applicable law, or your violation of any third party’s rights.
+              applicable law, or your violation of any third party’s rights — including
+              any claim brought by a device owner whose device you serviced without
+              authorisation.
             </p>
           </section>
 
@@ -268,11 +333,15 @@ export default function EULAPage() {
               12. Governing Law and Dispute Resolution
             </h2>
             <p>
-              This Agreement is governed by the laws of India, without regard to its
-              conflict of laws principles. Any dispute arising out of or relating to this
-              Agreement that cannot be resolved amicably shall be subject to the
-              exclusive jurisdiction of the courts located in India, unless mandatory law
-              provides otherwise.
+              This Agreement is governed by the laws of {COMPANY_JURISDICTION}, without
+              regard to its conflict of laws principles, and the United Nations
+              Convention on Contracts for the International Sale of Goods is expressly
+              excluded. Any dispute arising out of or relating to this Agreement shall
+              first be subject to good-faith negotiation for thirty (30) days, failing
+              which it shall be referred to and finally resolved by arbitration under
+              the Arbitration and Conciliation Act, 1996. The seat and venue of
+              arbitration shall be in {COMPANY_JURISDICTION}, the language shall be
+              English, and the award shall be final and binding.
             </p>
           </section>
 
@@ -302,12 +371,20 @@ export default function EULAPage() {
                 constitutes acceptance.
               </li>
               <li>
-                <strong>Contact.</strong> Questions about this Agreement should be sent to{" "}
+                <strong>Contact.</strong> Questions about this Agreement should be sent
+                to{" "}
                 <a
-                  href="mailto:support@frpb.in"
+                  href={mailtoHref(SUPPORT_EMAIL)}
                   className="text-brand-600 hover:underline"
                 >
-                  support@frpb.in
+                  {SUPPORT_EMAIL}
+                </a>{" "}
+                or{" "}
+                <a
+                  href={mailtoHref(LEGAL_EMAIL)}
+                  className="text-brand-600 hover:underline"
+                >
+                  {LEGAL_EMAIL}
                 </a>
                 .
               </li>

@@ -45,6 +45,7 @@ import {
   type FreeToolIconKey,
   type FreeToolMeta,
 } from "@frpb/shared";
+import { BRAND_MONEY_LINKS } from "@/config/brand-pages";
 
 /**
  * Resolve a data-only icon key to its lucide component. Keeps the shared
@@ -263,6 +264,34 @@ export default function FreeToolLandingPage({ content }: { content: FreeToolMeta
             })}
           </div>
         </section>
+
+        {/* ================= RELATED DEVICE GUIDES (internal linking) ================= */}
+        <section className="mt-14" aria-label="Related device guides">
+          <h2 className="text-center text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">
+            Related FRP bypass guides
+          </h2>
+          <p className="mx-auto mt-3 max-w-2xl text-center text-sm text-slate-500">
+            Looking for a full device-family walkthrough? Explore the dedicated FRP bypass guides.
+          </p>
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {BRAND_MONEY_LINKS.map((guide) => (
+              <Link
+                key={guide.path}
+                href={guide.path}
+                className="card group flex flex-col p-6 transition hover:border-brand-200 hover:shadow-lg"
+              >
+                <h3 className="text-sm font-bold text-ink">{guide.anchor}</h3>
+                <p className="mt-1.5 flex-1 text-xs leading-relaxed text-slate-500">
+                  {guide.blurb}
+                </p>
+                <span className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-brand-600">
+                  Open guide
+                  <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
       </main>
 
       {/* ================= FAQ (visible) ================= */}
@@ -300,7 +329,14 @@ export default function FreeToolLandingPage({ content }: { content: FreeToolMeta
       </footer>
 
       {/* ================= JSON-LD ================= */}
-      <JsonLd id="ld-software-application" data={softwareApplicationSchema()} />
+      <JsonLd
+        id="ld-software-application"
+        data={softwareApplicationSchema({
+          path: content.path,
+          name: `FRPB ${content.eyebrow}`,
+          description: content.tagline,
+        })}
+      />
       <JsonLd id="ld-faq" data={faqPageSchema(content.faq)} />
       <JsonLd
         id="ld-howto"
