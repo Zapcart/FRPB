@@ -11,10 +11,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Facebook, Instagram, Send, Sparkles, X } from "lucide-react";
 
-/** External community destinations. Instagram URL is provided verbatim. */
+/** External community destinations. */
 const TELEGRAM_URL = "https://t.me/frpbnetwork";
-const INSTAGRAM_URL =
-  "https://www.instagram.com/frpb.unlock?stkn=aWJvZW83b2F2am04";
+const INSTAGRAM_URL = "https://www.instagram.com/frpbofficial";
 /** Facebook page is not published yet — button renders disabled as a placeholder. */
 const FACEBOOK_URL: string | null = null;
 

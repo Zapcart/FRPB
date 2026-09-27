@@ -1,10 +1,15 @@
 // FRPB — Edge middleware.
-// Refresh the Supabase session cookies on every matched request so a
-// near-expiry token is transparently renewed before it lapses (the previous
-// matcher only ran on /dashboard, so /pricing and /checkout could silently
-// log the user out). Cookies are refreshed everywhere; a redirect to the
-// login entry only ever happens for the genuinely protected /dashboard tree
-// when there is no valid user — public routes are never force-logged-out.
+// Runs ONLY on the genuinely protected trees (/dashboard, /admin). The matcher
+// deliberately EXCLUDES public marketing routes, /pricing, /checkout and /auth:
+// a `createServerClient().getUser()` call performs a network round trip to
+// Supabase, and paying that on every cold public landing was the dominant
+// middleware latency cost (it also sits in front of the checkout funnel).
+// Auth on public routes is resolved lazily by server components / the client
+// session when those pages actually need it.
+//
+// On the protected trees, the Supabase session is refreshed so a near-expiry
+// token is transparently renewed before it lapses, and unauthenticated visitors
+// are bounced to the login entry with the deep link preserved.
 //
 // Also stamps the original pathname onto the request as `x-pathname` so
 // server-component layouts (e.g. the dashboard shell) can preserve the
@@ -178,9 +183,9 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Run on every page/route so the session is refreshed app-wide, while
-  // skipping static assets and the public download binaries for speed.
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|logo.png|downloads|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|css|js|map|txt|woff|woff2)$).*)",
-  ],
+  // Scope the middleware to the protected trees only. Public landing, /pricing,
+  // /checkout and /auth never enter here, so no Supabase getUser() network call
+  // is paid on a cold public page load. Static assets/binaries are implicitly
+  // excluded because they never match these prefixes.
+  matcher: ["/dashboard/:path*", "/admin/:path*"],
 };

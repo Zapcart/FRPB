@@ -6,9 +6,10 @@
 // directives; per-route copy lives in each page's `metadata` export.
 
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Inter } from "next/font/google";
 import { SessionProvider } from "@/components/session-provider";
-import SocialUpdatesWidget from "@/components/SocialUpdatesWidget";
+import FloatingWidgets from "@/components/floating-widgets";
 import PageViewTracker from "@/components/analytics/page-view-tracker";
 import { PostHogProvider } from "./providers";
 import {
@@ -98,9 +99,24 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <SessionProvider>{children}</SessionProvider>
           {/* First-party page-view beacon → admin "VISITORS (30D)" metric. */}
           <PageViewTracker />
-          {/* Site-wide floating community widget (bottom-right). */}
-          <SocialUpdatesWidget />
+          {/* Site-wide floating widgets (bottom-right), both code-split with
+              next/dynamic `{ ssr: false }` inside FloatingWidgets so they stay
+              out of the primary hydration bundle and never block first
+              interaction on low-end mobile CPUs. The support assistant sits
+              above the community widget (bottom-28 vs bottom-5) so the two
+              never overlap. */}
+          <FloatingWidgets />
         </PostHogProvider>
+        {/* Razorpay Standard Checkout SDK — background-preloaded with
+            `lazyOnload` so it is warm well before any purchase click, without
+            competing with the main bundle for bandwidth during initial load.
+            loadRazorpayCheckout() adopts this exact tag (id + src match) rather
+            than injecting a duplicate <script>. */}
+        <Script
+          src="https://checkout.razorpay.com/v1/checkout.js"
+          strategy="lazyOnload"
+          id="razorpay-checkout-sdk"
+        />
       </body>
     </html>
   );

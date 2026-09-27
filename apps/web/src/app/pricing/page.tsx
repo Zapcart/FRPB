@@ -146,25 +146,27 @@ export default function PricingPage() {
    */
   async function handlePurchase(planSlug: PlanSlug) {
     if (processingPlan) return;
+
+    // ── Synchronous, network-free work FIRST ────────────────────────────────
+    // These run on the click's own task, so React flips the button to its
+    // spinner before ANY await yields to the event loop — the UI responds in
+    // ~0ms and never waits on the auth round trip or order creation below.
     setCheckoutError(null);
     setCheckoutNotice(null);
     setProcessingPlan(planSlug);
-
-    // Persist the USD purchase intent so the auth round trip and the checkout
-    // page resume with the exact plan the visitor selected.
     savePendingPlan(planSlug, "USD");
 
-    // Read (never mutate) the auth state to prefill the payer email.
+    // ── Single cached session read ──────────────────────────────────────────
+    // getSession() is the one optimized call: the browser client hydrates the
+    // session snapshot from cookies/local storage, so a signed-in buyer resolves
+    // WITHOUT a network hop. The previous unconditional dual getSession() +
+    // getUser() pattern added a full getUser() network round trip to every
+    // purchase click, blocking checkout start on Supabase latency.
     let email: string | null = null;
     try {
       const supabase = createClient();
       const { data: sessionData } = await supabase.auth.getSession();
-      let user = sessionData.session?.user ?? null;
-      if (!user) {
-        const { data } = await supabase.auth.getUser();
-        user = data.user ?? null;
-      }
-      email = user?.email ?? null;
+      email = sessionData.session?.user?.email ?? null;
     } catch {
       email = null;
     }
@@ -311,7 +313,7 @@ export default function PricingPage() {
                   {processingPlan === card.slug ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Opening secure checkout…
+                      Opening Secure Gateway…
                     </>
                   ) : (
                     <>

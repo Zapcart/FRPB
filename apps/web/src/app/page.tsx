@@ -8,7 +8,6 @@ import Image from "next/image";
 import Link from "next/link";
 import type { Metadata } from "next";
 import {
-  ShieldCheck,
   Download,
   BookOpen,
   Sparkles,
@@ -18,7 +17,6 @@ import {
   ArrowRight,
   Menu,
   LifeBuoy,
-  Mail,
   Usb,
   Terminal,
   Cable,
@@ -31,15 +29,9 @@ import {
 } from "lucide-react";
 import { PLANS, FREE_TOOLS, FREE_TOOL_IDS, type FreeToolId } from "@frpb/shared";
 import { resolveInstallerUrl } from "@/config/download";
-import {
-  COMPANY_ADDRESS,
-  COMPANY_ENTITY,
-  LEGAL_DISCLAIMER,
-  LEGAL_EMAIL,
-  SUPPORT_EMAIL,
-  mailtoHref,
-} from "@/config/legal";
 import Hero from "@/components/landing/hero";
+import DeviceShowcase from "@/components/DeviceShowcase";
+import Footer from "@/components/Footer";
 import JsonLd from "@/components/seo/json-ld";
 import FaqSection from "@/components/faq-section";
 import {
@@ -299,6 +291,9 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ================= DUAL DEVICE SHOWCASE ================= */}
+      <DeviceShowcase downloadUrl={downloadUrl} />
 
       {/* ================= CAPABILITY STRIP ================= */}
       <section aria-label="Supported recovery transports" className="border-b border-slate-200/80 bg-white">
@@ -639,131 +634,7 @@ export default function HomePage() {
       <FaqSection items={HOME_FAQ} />
 
       {/* ================= FOOTER ================= */}
-      <footer id="eula" className="border-t border-slate-200/80 bg-slate-50">
-        <div className="mx-auto max-w-7xl px-6 py-14">
-          <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
-            <div>
-              <Link href="/" className="flex items-center gap-2.5">
-                <Image
-                  src="/logo.png"
-                  alt="FRPB — FRP bypass and Android device recovery tool"
-                  width={72}
-                  height={72}
-                  loading="lazy"
-                  className="h-9 w-9 shrink-0 rounded-xl object-cover ring-1 ring-slate-200"
-                />
-                <span className="text-lg font-extrabold tracking-tight text-ink">FRPB</span>
-              </Link>
-              <p className="mt-4 max-w-xs text-sm leading-relaxed text-slate-500">
-                The professional Android FRP unlock and device utility suite. Built for
-                technicians, repair shops and authorized device owners.
-              </p>
-              <div className="mt-5 flex items-center gap-2 text-xs text-slate-400">
-                <ShieldCheck className="h-4 w-4 text-emerald-500" />
-                Secure license verification · TLS encrypted
-              </div>
-            </div>
-
-            <div>
-              <h4 className="text-sm font-bold text-ink">Product</h4>
-              <ul className="mt-4 space-y-2.5 text-sm">
-                {[
-                  // Keyword-rich anchors: the link text itself describes the
-                  // destination so it passes contextual relevance to the target.
-                  { label: "FRP Bypass Tool Features", href: "#features" },
-                  { label: "Supported Android Brands", href: "#brands" },
-                  { label: "Check FRPB Pricing Plans", href: "/pricing" },
-                  { label: "Download for Windows & macOS", href: downloadUrl },
-                ].map((item) => (
-                  <li key={item.label}>
-                    <Link
-                      href={item.href}
-                      className="text-slate-500 transition hover:text-brand-600"
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="text-sm font-bold text-ink">Resources</h4>
-              <ul className="mt-4 space-y-2.5 text-sm">
-                {[
-                  { label: "Android FRP Recovery Guides", href: "#guides" },
-                  { label: "FRP Bypass Blog & Tutorials", href: "/blog" },
-                  { label: "Install Android USB Drivers", href: "#features" },
-                  { label: "Sign in", href: "/auth" },
-                  { label: "Dashboard", href: "/dashboard" },
-                ].map((item) => (
-                  <li key={item.label}>
-                    <Link
-                      href={item.href}
-                      className="text-slate-500 transition hover:text-brand-600"
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="text-sm font-bold text-ink">Legal</h4>
-              <ul className="mt-4 space-y-2.5 text-sm">
-                {[
-                  { label: "End User License Agreement", href: "/eula" },
-                  { label: "Privacy Policy", href: "/privacy" },
-                  { label: "Refund Policy", href: "/refund" },
-                  { label: "Terms of Service", href: "/terms" },
-                ].map((item) => (
-                  <li key={item.label}>
-                    <Link
-                      href={item.href}
-                      className="text-slate-500 transition hover:text-brand-600"
-                    >
-                      {item.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          {/* DPDP / legal disclaimer — site-wide small print. */}
-          <p className="mt-10 max-w-4xl text-xs leading-relaxed text-slate-400">
-            {LEGAL_DISCLAIMER}
-          </p>
-
-          <div className="mt-6 flex flex-col items-center justify-between gap-4 border-t border-slate-200/80 pt-8 sm:flex-row">
-            <div className="text-center sm:text-left">
-              <p className="text-xs text-slate-400">
-                © {new Date().getFullYear()} {COMPANY_ENTITY}. All rights reserved.
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                Operated by {COMPANY_ENTITY} · {COMPANY_ADDRESS}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-slate-400">
-              <a
-                href={mailtoHref(SUPPORT_EMAIL)}
-                className="flex items-center gap-1.5 transition hover:text-slate-600"
-              >
-                <Mail className="h-3.5 w-3.5" />
-                {SUPPORT_EMAIL}
-              </a>
-              <a
-                href={mailtoHref(LEGAL_EMAIL)}
-                className="flex items-center gap-1.5 transition hover:text-slate-600"
-              >
-                <Mail className="h-3.5 w-3.5" />
-                {LEGAL_EMAIL}
-              </a>
-            </div>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

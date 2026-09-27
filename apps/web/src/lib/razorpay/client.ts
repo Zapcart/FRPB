@@ -53,9 +53,30 @@ declare global {
 }
 
 const SCRIPT_ID = "razorpay-checkout-js";
+// id used by the global `<Script strategy="lazyOnload">` preload in the root
+// layout. Tracked separately so the loader can ADOPT that tag instead of
+// injecting a duplicate <script> when a purchase is clicked before the
+// background preload has finished downloading.
+const PRELOAD_SCRIPT_ID = "razorpay-checkout-sdk";
 const SCRIPT_SRC = "https://checkout.razorpay.com/v1/checkout.js";
 
 let loadPromise: Promise<RazorpayConstructor> | null = null;
+
+/**
+ * Locate an already-present checkout.js tag — injected by an earlier
+ * `loadRazorpayCheckout()` call, the layout's `<Script id="razorpay-checkout-sdk">`
+ * preload, or any other embed. Matching by `src` as a final fallback guarantees
+ * the SDK is never downloaded twice.
+ */
+function findExistingScript(): HTMLScriptElement | null {
+  const byLoaderId = document.getElementById(SCRIPT_ID) as HTMLScriptElement | null;
+  if (byLoaderId) return byLoaderId;
+  const byPreloadId = document.getElementById(
+    PRELOAD_SCRIPT_ID
+  ) as HTMLScriptElement | null;
+  if (byPreloadId) return byPreloadId;
+  return document.querySelector<HTMLScriptElement>(`script[src^="${SCRIPT_SRC}"]`);
+}
 
 /**
  * Resolve the public Razorpay key id, or `null` when the deployment has not
@@ -79,14 +100,15 @@ export function loadRazorpayCheckout(): Promise<RazorpayConstructor> {
     );
   }
 
+  // Fast path: the global `<Script>` preload (or a prior checkout) already
+  // attached the SDK, so resolve synchronously with NO script tags and NO
+  // network round trip — the purchase modal can open on the click's own task.
   const existingCtor = window.Razorpay;
   if (existingCtor) return Promise.resolve(existingCtor);
   if (loadPromise) return loadPromise;
 
   loadPromise = new Promise<RazorpayConstructor>((resolve, reject) => {
-    const existingScript = document.getElementById(
-      SCRIPT_ID
-    ) as HTMLScriptElement | null;
+    const existingScript = findExistingScript();
     const script = existingScript ?? document.createElement("script");
 
     const onLoad = () => {

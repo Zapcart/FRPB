@@ -139,7 +139,7 @@ export default function CheckoutPanel({
         {processing ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
-            Processing…
+            Opening Secure Gateway…
           </>
         ) : (
           <>Pay {displayPrice}</>
