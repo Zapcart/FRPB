@@ -60,6 +60,15 @@ const SCRIPT_ID = "razorpay-checkout-js";
 const PRELOAD_SCRIPT_ID = "razorpay-checkout-sdk";
 const SCRIPT_SRC = "https://checkout.razorpay.com/v1/checkout.js";
 
+// Abort the checkout.js download after 5s so a stalled CDN never leaves the
+// purchase button stuck in a spinner. The rejected message is surfaced verbatim
+// by the checkout UI (see `startRazorpayCheckout`).
+const RAZORPAY_LOAD_TIMEOUT_MS = 5_000;
+
+/** User-facing copy shown when the payment SDK cannot be reached. */
+export const RAZORPAY_NETWORK_ERROR_MESSAGE =
+  "Network issue: Unable to connect to payment gateway. Please check your internet connection and try again.";
+
 let loadPromise: Promise<RazorpayConstructor> | null = null;
 
 /**
@@ -111,28 +120,55 @@ export function loadRazorpayCheckout(): Promise<RazorpayConstructor> {
     const existingScript = findExistingScript();
     const script = existingScript ?? document.createElement("script");
 
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    // Idempotent teardown: detach listeners and the timeout so a late `load`
+    // (or the timer) can never resolve/reject twice or leak a pending timer.
+    const cleanup = () => {
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      script.removeEventListener("load", onLoad);
+      script.removeEventListener("error", onError);
+    };
+
+    const settle = (action: () => void) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      action();
+    };
+
     const onLoad = () => {
       const ctor = window.Razorpay;
       if (ctor) {
-        resolve(ctor);
+        settle(() => resolve(ctor));
         return;
       }
       loadPromise = null;
-      reject(
-        new Error(
-          "Razorpay checkout.js loaded but window.Razorpay is unavailable."
+      settle(() =>
+        reject(
+          new Error(
+            "Razorpay checkout.js loaded but window.Razorpay is unavailable."
+          )
         )
       );
     };
 
     const onError = () => {
       loadPromise = null;
-      reject(
-        new Error(
-          "Failed to load Razorpay checkout.js — check the network connection and retry."
-        )
-      );
+      settle(() => reject(new Error(RAZORPAY_NETWORK_ERROR_MESSAGE)));
     };
+
+    // Hard 5s deadline: a hung/hijacked CDN request must not leave the purchase
+    // button spinning indefinitely. Clearing `loadPromise` lets the next click
+    // start a fresh attempt.
+    timer = setTimeout(() => {
+      loadPromise = null;
+      settle(() => reject(new Error(RAZORPAY_NETWORK_ERROR_MESSAGE)));
+    }, RAZORPAY_LOAD_TIMEOUT_MS);
 
     script.addEventListener("load", onLoad, { once: true });
     script.addEventListener("error", onError, { once: true });

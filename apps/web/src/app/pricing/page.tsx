@@ -36,6 +36,7 @@ import {
 } from "@/config/legal";
 import { DUAL_PLANS, formatDualUsd } from "@/config/plans";
 import { startRazorpayCheckout } from "@/lib/razorpay/checkout-flow";
+import ErrorBoundary from "@/components/error-boundary";
 
 /**
  * Trust / conversion badges rendered under the pricing grid. Addresses the four
@@ -255,8 +256,9 @@ export default function PricingPage() {
           </p>
         </div>
 
-        <div className="mx-auto mt-12 grid max-w-4xl gap-6 grid-cols-1 md:grid-cols-2">
-          {PLAN_CARDS.map((card) => {
+        <ErrorBoundary label="pricing plans">
+          <div className="mx-auto mt-12 grid max-w-4xl gap-6 grid-cols-1 md:grid-cols-2">
+            {PLAN_CARDS.map((card) => {
             const popular = card.slug === "LIFETIME";
             return (
               <div
@@ -324,8 +326,9 @@ export default function PricingPage() {
                 </button>
               </div>
             );
-          })}
-        </div>
+            })}
+          </div>
+        </ErrorBoundary>
 
         {/* Razorpay checkout feedback — inline, replaces the old method modal */}
         {(checkoutError || checkoutNotice) && (

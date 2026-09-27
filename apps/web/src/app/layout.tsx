@@ -114,7 +114,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             than injecting a duplicate <script>. */}
         <Script
           src="https://checkout.razorpay.com/v1/checkout.js"
-          strategy="lazyOnload"
+          strategy="afterInteractive"
           id="razorpay-checkout-sdk"
         />
       </body>

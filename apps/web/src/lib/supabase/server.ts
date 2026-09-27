@@ -79,9 +79,16 @@ export async function getOptionalUser(): Promise<AuthenticatedUser | null> {
   if (!isSupabaseConfigured()) return null;
   try {
     const supabase = createClient();
+    // Cookie-first: `getSession()` reads the cached session from the request
+    // cookies (a local storage read — NO network round trip), whereas the old
+    // `getUser()` ALWAYS called the Supabase Auth server on every SSR pass.
+    // The middleware (`updateSession`) keeps these cookies refreshed, so the
+    // cached session is authoritative for this prefill-only helper on public
+    // surfaces. Actual authorization still re-validates on the write paths.
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
+    const user = session?.user;
     if (!user?.email) return null;
     return { id: user.id, email: user.email };
   } catch (err) {

@@ -2,13 +2,13 @@
 //
 // The root layout is a Server Component, where `next/dynamic({ ssr: false })`
 // is not permitted. This thin client wrapper exists solely to code-split the
-// two non-critical, site-wide widgets — the "Follow Updates" community popover
-// and the support assistant — OUT of the primary hydration bundle.
+// non-critical, site-wide "Follow Updates" community popover OUT of the primary
+// hydration bundle.
 //
-// Both are deferred with `ssr: false`, so they are fetched as separate client
-// chunks AFTER the initial HTML/paint. They never compete for main-thread time
-// during first interaction, which matters most on low-end mobile CPUs where a
-// large synchronous hydration bundle delays the first tap response.
+// It is deferred with `ssr: false`, so it is fetched as a separate client chunk
+// AFTER the initial HTML/paint. It never competes for main-thread time during
+// first interaction, which matters most on low-end mobile CPUs where a large
+// synchronous hydration bundle delays the first tap response.
 
 "use client";
 
@@ -19,15 +19,6 @@ const SocialUpdatesWidget = dynamic(
   { ssr: false }
 );
 
-const SupportWidget = dynamic(() => import("@/components/SupportWidget"), {
-  ssr: false,
-});
-
 export default function FloatingWidgets() {
-  return (
-    <>
-      <SocialUpdatesWidget />
-      <SupportWidget />
-    </>
-  );
+  return <SocialUpdatesWidget />;
 }

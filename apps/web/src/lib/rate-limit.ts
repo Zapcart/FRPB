@@ -92,8 +92,25 @@ export async function rateLimit(
   const redis = getRedis();
   let count: number;
   if (redis) {
-    count = await redis.incr(redisKey);
-    if (count === 1) await redis.expire(redisKey, windowSeconds);
+    try {
+      count = await redis.incr(redisKey);
+      if (count === 1) await redis.expire(redisKey, windowSeconds);
+    } catch (err) {
+      // FAIL OPEN. A degraded/unreachable rate-limit store (Redis timeout,
+      // quota, cold-start DNS failure) must NEVER block telemetry or throw into
+      // the request path. Log with context and treat the request as allowed;
+      // the in-process fallback is intentionally skipped here so a flapping
+      // store cannot silently deny traffic either.
+      console.error(
+        `[rate-limit] store error for key "${key}" — failing open:`,
+        err
+      );
+      return {
+        allowed: true,
+        remaining: max,
+        resetAt: windowStart + windowSeconds,
+      };
+    }
   } else {
     count = mem.incr(redisKey, windowSeconds);
   }

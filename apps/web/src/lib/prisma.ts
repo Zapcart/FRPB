@@ -93,6 +93,14 @@ function resolveDatasourceUrl(): string | undefined {
  */
 function applyServerlessPoolTuning(url: string): string {
   try {
+    // Serverless connection budget. PgBouncer (port 6543) multiplexes many
+    // client connections onto few Postgres backends, but each serverless
+    // instance still opens its OWN pool. Never hold more than 5 connections per
+    // instance — an over-provisioned pool is the classic source of
+    // P1001/P1002/P1017 (surfaced to customers as a 503 DB_UNAVAILABLE).
+    const POOLER_CONNECTION_LIMIT = "5";
+    const POOLER_CONNECTION_LIMIT_NUM = 5;
+
     const parsed = new URL(url);
     const isTransactionPooler = parsed.port === "6543";
     const defaults: Record<string, string> = {
@@ -102,7 +110,7 @@ function applyServerlessPoolTuning(url: string): string {
       // itself times out (which yields an unparseable platform 500/503).
       pool_timeout: "20",
     };
-    if (isTransactionPooler) defaults.connection_limit = "10";
+    if (isTransactionPooler) defaults.connection_limit = POOLER_CONNECTION_LIMIT;
 
     let mutated = false;
     for (const [key, value] of Object.entries(defaults)) {
@@ -111,6 +119,23 @@ function applyServerlessPoolTuning(url: string): string {
         mutated = true;
       }
     }
+
+    // ENFORCE the cap even when an operator (or a stale `.env`) supplies a
+    // higher value: the pooler default is deliberately low, so an inherited
+    // `connection_limit=10` must be clamped down rather than trusted.
+    if (isTransactionPooler) {
+      const existing = parsed.searchParams.get("connection_limit");
+      const existingLimit =
+        existing === null ? Number.NaN : Number.parseInt(existing, 10);
+      if (
+        Number.isFinite(existingLimit) &&
+        existingLimit > POOLER_CONNECTION_LIMIT_NUM
+      ) {
+        parsed.searchParams.set("connection_limit", POOLER_CONNECTION_LIMIT);
+        mutated = true;
+      }
+    }
+
     return mutated ? parsed.toString() : url;
   } catch {
     // Not a parseable URL — hand it back untouched so Prisma reports the real

@@ -2,15 +2,13 @@
 // Pairs the /iospic.png and /androidpic.png device renders around a central
 // glass card with quick platform toggles and the primary gradient CTA.
 //
-// Client component: the only interactivity is graceful image-load fallback
-// (renders a stylised phone mockup if a render asset is missing), so it owns
-// a tiny amount of local state and no async work.
-
-"use client";
+// Server component: fully static markup with ZERO client JavaScript. Every
+// motion is expressed with lightweight Tailwind CSS transitions, so this
+// section adds no hydration cost and its CTA links (native <a> elements)
+// respond instantly on touch/click without any main-thread work.
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
 import {
   ArrowRight,
   AtSign,
@@ -22,7 +20,6 @@ import {
   ScanFace,
   ShieldAlert,
   Smile,
-  Smartphone,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
@@ -52,48 +49,50 @@ export interface DeviceShowcaseProps {
   downloadUrl: string;
 }
 
-/** A single device render inside a responsive phone-shaped container. */
+/**
+ * A single device render inside a fixed-ratio phone-shaped frame.
+ *
+ * Both platforms share the exact same container size and `aspect-[9/19]`
+ * ratio, so the two mockups read as perfectly balanced columns on desktop and
+ * as a compact, evenly-sized pair on mobile.
+ */
 function DeviceRender({
   src,
   alt,
   label,
   badgeClassName,
+  className = "",
   priority = false,
 }: {
   src: string;
   alt: string;
   label: string;
   badgeClassName: string;
+  /** Grid-placement helper so each frame can be positioned per breakpoint. */
+  className?: string;
   /**
    * Next.js `priority` — preloads the render (adds a <link rel="preload"> and
-   * skips native lazy loading) so the hero device frame paints with the LCP
-   * instead of being fetched late and blocking the main thread once it lands.
+   * skips native lazy loading) so the device frame paints with the LCP instead
+   * of being fetched late.
    */
   priority?: boolean;
 }) {
-  const [failed, setFailed] = useState(false);
-
   return (
-    <div className="flex w-full max-w-[220px] flex-col items-center">
+    <div
+      className={`flex w-full max-w-[220px] flex-col items-center ${className}`}
+    >
       <div className="relative aspect-[9/19] w-full overflow-hidden rounded-[2rem] border border-slate-200 bg-gradient-to-b from-slate-100 to-white shadow-card-hover ring-1 ring-black/5">
-        {!failed ? (
-          <Image
-            src={src}
-            alt={alt}
-            fill
-            sizes="(max-width: 1024px) 40vw, 220px"
-            className="object-contain p-2"
-            priority={priority}
-            loading={priority ? undefined : "lazy"}
-            onError={() => setFailed(true)}
-          />
-        ) : (
-          /* Fallback mockup — keeps the layout intact if the asset is absent. */
-          <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-gradient-to-b from-brand-50 to-accent-50 p-4 text-center">
-            <Smartphone className="h-10 w-10 text-brand-400" />
-            <span className="text-xs font-semibold text-slate-500">{label}</span>
-          </div>
-        )}
+        {/* `text-transparent` keeps a broken-alt render invisible so the
+            gradient frame degrades gracefully if an asset is ever missing. */}
+        <Image
+          src={src}
+          alt={alt}
+          fill
+          sizes="(max-width: 1024px) 40vw, 220px"
+          className="object-contain p-2 text-transparent"
+          priority={priority}
+          loading={priority ? undefined : "lazy"}
+        />
       </div>
       <span
         className={`mt-3 inline-flex items-center rounded-full px-3 py-1 text-[11px] font-bold ${badgeClassName}`}
@@ -104,7 +103,11 @@ function DeviceRender({
   );
 }
 
-/** Vertical pill list flanking the centre card. */
+/**
+ * Vertical pill list flanking the centre card. Hidden below `lg` so the mobile
+ * layout stays compact and clutter-free (no wrapped pill cards on small
+ * screens) — the pills only flank the card on large breakpoints.
+ */
 function PillColumn({
   pills,
   align,
@@ -114,7 +117,7 @@ function PillColumn({
 }) {
   return (
     <ul
-      className={`flex flex-wrap justify-center gap-2.5 lg:flex-col lg:justify-start ${
+      className={`hidden flex-wrap justify-center gap-2.5 lg:flex lg:flex-col lg:justify-start ${
         align === "left" ? "lg:items-end" : "lg:items-start"
       }`}
     >
@@ -159,14 +162,18 @@ export default function DeviceShowcase({ downloadUrl }: DeviceShowcaseProps) {
           </p>
         </div>
 
-        {/* Showcase grid: pills → centre card → pills */}
+        {/* Showcase grid: pills → centre card → pills (pills collapse away on
+            mobile, leaving only the balanced device card). */}
         <div className="mt-14 grid items-center gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.7fr)_minmax(0,1fr)]">
           <PillColumn pills={IOS_PILLS} align="left" />
 
           {/* Centre card */}
           <div className="glass-hero relative overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 shadow-card-hover sm:p-8">
-            <div className="grid items-center gap-6 lg:grid-cols-[1fr_auto_1fr]">
+            {/* Mobile: two evenly-sized device frames side by side, then the
+                copy + CTAs full-width beneath. Desktop (`lg`): iOS | copy | Android. */}
+            <div className="grid grid-cols-2 items-center gap-4 sm:gap-6 lg:grid-cols-[1fr_auto_1fr]">
               <DeviceRender
+                className="col-start-1 row-start-1 justify-self-center"
                 src="/iospic.png"
                 alt="iPhone running the FRPB iOS screen and Apple ID unlock flow"
                 label="iOS"
@@ -175,7 +182,7 @@ export default function DeviceShowcase({ downloadUrl }: DeviceShowcaseProps) {
               />
 
               {/* Middle content block */}
-              <div className="order-last flex flex-col items-center text-center lg:order-none">
+              <div className="col-span-2 row-start-2 flex flex-col items-center text-center lg:col-span-1 lg:col-start-2 lg:row-start-1">
                 <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-brand-500 to-accent-500 text-white shadow-glow">
                   <KeyRound className="h-7 w-7" />
                 </div>
@@ -224,6 +231,7 @@ export default function DeviceShowcase({ downloadUrl }: DeviceShowcaseProps) {
               </div>
 
               <DeviceRender
+                className="col-start-2 row-start-1 justify-self-center lg:col-start-3"
                 src="/androidpic.png"
                 alt="Android phone running the FRPB Google FRP and pattern unlock flow"
                 label="Android"

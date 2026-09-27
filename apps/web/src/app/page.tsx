@@ -31,6 +31,7 @@ import { PLANS, FREE_TOOLS, FREE_TOOL_IDS, type FreeToolId } from "@frpb/shared"
 import { resolveInstallerUrl } from "@/config/download";
 import Hero from "@/components/landing/hero";
 import DeviceShowcase from "@/components/DeviceShowcase";
+import ErrorBoundary from "@/components/error-boundary";
 import Footer from "@/components/Footer";
 import JsonLd from "@/components/seo/json-ld";
 import FaqSection from "@/components/faq-section";
@@ -293,7 +294,9 @@ export default function HomePage() {
       </section>
 
       {/* ================= DUAL DEVICE SHOWCASE ================= */}
-      <DeviceShowcase downloadUrl={downloadUrl} />
+      <ErrorBoundary label="device showcase">
+        <DeviceShowcase downloadUrl={downloadUrl} />
+      </ErrorBoundary>
 
       {/* ================= CAPABILITY STRIP ================= */}
       <section aria-label="Supported recovery transports" className="border-b border-slate-200/80 bg-white">
