@@ -84,8 +84,8 @@ function DeviceRender({
   priority?: boolean;
 }) {
   return (
-    <div className="flex w-full max-w-[220px] flex-col items-center">
-      <div className="relative aspect-[9/19] w-full overflow-hidden rounded-[2rem] border border-gray-100 bg-gradient-to-b from-slate-100 to-white shadow-xl dark:border-zinc-800 dark:from-zinc-900 dark:to-zinc-950">
+    <div className="mx-auto flex w-full max-w-[220px] flex-col items-center">
+      <div className="relative aspect-[9/19] w-full overflow-hidden rounded-[2rem] border border-gray-100 bg-gradient-to-b from-slate-100 to-white shadow-xl md:aspect-[9/19] dark:border-zinc-800 dark:from-zinc-900 dark:to-zinc-950">
         {/* `text-transparent` keeps a broken-alt render invisible so the
             gradient frame degrades gracefully if an asset is ever missing. */}
         <Image
@@ -193,12 +193,12 @@ export default function DeviceShowcase({ downloadUrl }: DeviceShowcaseProps) {
 
           {/* Frame grid. Mobile: only the active frame + feature. Desktop:
               iOS | feature | Android side-by-side. */}
-          <div className="mt-10 grid grid-cols-1 items-center gap-8 md:grid-cols-[1fr_auto_1fr]">
-            {/* iOS frame — hidden on mobile unless active. */}
+          <div className="mt-10 grid grid-cols-1 items-center gap-8 px-4 md:grid-cols-[1fr_auto_1fr] md:px-0">
+            {/* iOS frame — flex-centred on mobile, hidden unless active. */}
             <div
               className={`${
-                activeTab === "ios" ? "block" : "hidden"
-              } order-1 justify-center md:order-none md:col-start-1 md:row-start-1 md:block`}
+                activeTab === "ios" ? "flex" : "hidden"
+              } order-1 w-full justify-center md:order-none md:col-start-1 md:row-start-1 md:flex`}
             >
               <DeviceRender
                 src="/iospic.png"
@@ -247,8 +247,8 @@ export default function DeviceShowcase({ downloadUrl }: DeviceShowcaseProps) {
             {/* Android frame — hidden on mobile unless active. */}
             <div
               className={`${
-                activeTab === "android" ? "block" : "hidden"
-              } order-1 justify-center md:order-none md:col-start-3 md:row-start-1 md:block`}
+                activeTab === "android" ? "flex" : "hidden"
+              } order-1 w-full justify-center md:order-none md:col-start-3 md:row-start-1 md:flex`}
             >
               <DeviceRender
                 src="/androidpic.png"
