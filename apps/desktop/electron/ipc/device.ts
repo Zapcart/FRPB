@@ -209,9 +209,12 @@ const MODE_PROFILES: Record<OperationMode, ModeProfile> = {
 let pollTimer: NodeJS.Timeout | null = null;
 
 // ─── Consent gate (in-memory; resets on app restart by design) ───────────────
-const CONSENT_OPS = ["flash-reset", "frp-bypass", "unlock-screen", "reboot-mode"] as const;
-type ConsentOp = (typeof CONSENT_OPS)[number];
-const consentGrantedFor = new Set<ConsentOp>();
+import {
+  getConsentState,
+  acceptConsentOp,
+  isConsentGranted,
+  type ConsentOp,
+} from "../utils/consent-state";
 
 // ─── One-click boot-mode switcher ────────────────────────────────────────────
 // Supported reboot targets surfaced by the Home screen "Quick Boot Switcher"
@@ -1001,26 +1004,9 @@ export function registerDeviceHandlers(): void {
     };
   });
 
-  ipcMain.handle("device:checkConsent", () => ({
-    flashReset: consentGrantedFor.has("flash-reset"),
-    frpBypass: consentGrantedFor.has("frp-bypass"),
-    unlockScreen: consentGrantedFor.has("unlock-screen"),
-  }));
+  ipcMain.handle("device:checkConsent", () => getConsentState());
 
-  ipcMain.handle("device:acceptConsent", (_event, operation: unknown) => {
-    const op = String(operation);
-    if (!CONSENT_OPS.includes(op as ConsentOp)) {
-      return { ok: false, error: `Unknown operation: ${op}` };
-    }
-    consentGrantedFor.add(op as ConsentOp);
-    log.info(`[device] consent granted for ${op}`);
-    return {
-      ok: true,
-      flashReset: consentGrantedFor.has("flash-reset"),
-      frpBypass: consentGrantedFor.has("frp-bypass"),
-      unlockScreen: consentGrantedFor.has("unlock-screen"),
-    };
-  });
+  ipcMain.handle("device:acceptConsent", (_event, operation: unknown) => acceptConsentOp(operation));
 
   // Single handler for device:frpBypass — sanitizes + delegates to runFrpBypass.
   ipcMain.handle("device:frpBypass", async (event, options: unknown) => {

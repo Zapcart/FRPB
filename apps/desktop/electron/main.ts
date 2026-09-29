@@ -10,6 +10,18 @@ import { registerLinkHandlers } from "./ipc/links";
 import { registerUpdaterHandlers, checkForUpdatesOnLaunch } from "./ipc/updater";
 import { performReset, registerResetHandlers } from "./ipc/reset";
 import { registerFreeToolHandlers } from "./ipc/free-tools";
+import {
+  registerIcloudLockHandlers,
+} from "./ipc/icloud-lock";
+import {
+  registerSamsungAccountHandlers,
+} from "./ipc/samsung-account";
+import {
+  registerBootloopHandlers,
+} from "./ipc/bootloop";
+import {
+  registerDataRecoveryHandlers,
+} from "./ipc/data-recovery";
 import { getHardwareId } from "./utils/hardwareId";
 import { log } from "./utils/logger";
 
@@ -133,6 +145,10 @@ app.whenReady().then(async () => {
   registerUpdaterHandlers();
   registerResetHandlers();
   registerFreeToolHandlers();
+  registerIcloudLockHandlers();
+  registerSamsungAccountHandlers();
+  registerBootloopHandlers();
+  registerDataRecoveryHandlers();
 
   // Dev-only clean-slate boot (opt-in via FRPB_RESET_ON_START=1).
   await resetOnStartIfRequested();

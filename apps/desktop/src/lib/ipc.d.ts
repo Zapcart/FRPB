@@ -191,6 +191,11 @@ export interface ConsentState {
   flashReset: boolean;
   frpBypass: boolean;
   unlockScreen: boolean;
+  rebootMode: boolean;
+  icloudBypass: boolean;
+  samsungAccount: boolean;
+  bootloopRecovery: boolean;
+  dataRecovery: boolean;
 }
 
 export interface AcceptConsentResult {
@@ -198,6 +203,11 @@ export interface AcceptConsentResult {
   flashReset?: boolean;
   frpBypass?: boolean;
   unlockScreen?: boolean;
+  rebootMode?: boolean;
+  icloudBypass?: boolean;
+  samsungAccount?: boolean;
+  bootloopRecovery?: boolean;
+  dataRecovery?: boolean;
   error?: string;
 }
 
@@ -209,7 +219,127 @@ export interface OperationResult {
   detail?: string;
 }
 
-export type OperationKind = "flash-reset" | "frp-bypass" | "unlock-screen" | "reboot-mode";
+export interface IcloudBypassOptions {
+  /** Apple device IMEI (15 digits). If omitted, the engine will attempt to read from a connected device. */
+  imei?: string;
+  /** Optional Apple ID associated with the lock (for logging/verification). */
+  appleId?: string;
+  /** iCloud lock model identifier, e.g. "iPhone14,2". */
+  model?: string;
+  /** iOS version when known. */
+  iosVersion?: string;
+}
+
+export interface IcloudBypassResult {
+  success: boolean;
+  message: string;
+  requestId?: string;
+  detail?: string;
+}
+
+export interface IcloudStatus {
+  requestId: string;
+  status: "pending" | "processing" | "completed" | "failed" | "not-found";
+  message: string;
+  /** Approximate percentage of completion (0-100). */
+  progress: number;
+}
+
+export interface SamsungAccountOptions {
+  brand: string;
+  model?: string;
+  method?: "find-my-mobile" | "oem-service" | "adb";
+  androidVersion?: number;
+}
+
+export interface SamsungAccountResult {
+  success: boolean;
+  message: string;
+  detail?: string;
+  /** Whether the Samsung account was removed. */
+  accountRemoved?: boolean;
+}
+
+export interface BootloopOptions {
+  /** Chipset family: "MediaTek" | "Qualcomm" | "Samsung Exynos" | "Unknown" */
+  chipset?: string;
+  brand?: string;
+  model?: string;
+  /** Local path to a firmware package file (.tar.md5, .mbn, .img, etc.). If omitted, the engine lists available packages. */
+  firmwarePath?: string;
+  androidVersion?: number;
+}
+
+export interface BootloopResult {
+  success: boolean;
+  message: string;
+  detail?: string;
+  /** Whether the device rebooted successfully after flash. */
+  rebooted?: boolean;
+}
+
+export interface FirmwarePackage {
+  id: string;
+  brand: string;
+  model: string;
+  chipset: string;
+  androidVersion: string;
+  filename: string;
+  sizeBytes: number;
+  /** Local path if already downloaded, null if needs download. */
+  localPath?: string;
+}
+
+export interface DataRecoveryOptions {
+  brand?: string;
+  model?: string;
+  /** Specific paths to scan (e.g. ["/sdcard/DCIM", "/sdcard/Pictures"]). If omitted, scans common media locations. */
+  paths?: string[];
+}
+
+export interface DataRecoveryItem {
+  /** Unique identifier for this item. */
+  id: string;
+  /** Human-readable name. */
+  name: string;
+  /** Category: "photo" | "video" | "contact" | "call-log" | "sms" | "document" | "other" */
+  category: string;
+  /** Source path on the device. */
+  sourcePath: string;
+  /** Estimated size in bytes (0 when unknown). */
+  sizeBytes: number;
+  /** Whether the item appears to be recoverable (vs already accessible). */
+  recoverable: boolean;
+  /** Local destination path after extraction (set after extract). */
+  localPath?: string;
+}
+
+export interface DataRecoveryScanResult {
+  success: boolean;
+  items: DataRecoveryItem[];
+  totalSizeBytes: number;
+  message: string;
+}
+
+export interface DataRecoveryExtractResult {
+  success: boolean;
+  message: string;
+  extractedCount: number;
+  extractedBytes: number;
+  details?: string;
+}
+
+export type OperationKind =
+  | "flash-reset"
+  | "frp-bypass"
+  | "unlock-screen"
+  | "reboot-mode"
+  | "icloud-bypass"
+  | "samsung-account"
+  | "bootloop-recovery"
+  | "data-recovery"
+  | "data-recovery-scan"
+  | "data-recovery-extract";
 
 /**
  * Reboot targets offered by the Home screen "Quick Boot Switcher" panel. Mapped
@@ -518,6 +648,37 @@ export interface FrpbBridge {
      *  an optional hint (e.g. device-serial or USB-path suffix) that makes the
      *  hash vary across different physical phones on the same machine. */
     getHardwareId: (deviceLabel?: string) => Promise<string>;
+    /**
+     * iCloud activation-lock bypass (Apple). Consent-gated: the caller must have
+     * granted `icloudBypass` consent first. Returns a request id whose progress
+     * can be polled via `icloudStatus`.
+     */
+    icloudBypass: (options?: IcloudBypassOptions) => Promise<IcloudBypassResult>;
+    /** Poll the status of a previously started iCloud bypass request. */
+    icloudStatus: (requestId: string) => Promise<IcloudStatus>;
+    /** Detect the currently connected Apple device's iCloud lock status. */
+    icloudDetect: () => Promise<IcloudStatus | null>;
+    /**
+     * Samsung account / FRP removal (Android). Consent-gated (`samsungAccount`).
+     */
+    samsungAccountBypass: (
+      options?: SamsungAccountOptions,
+    ) => Promise<SamsungAccountResult>;
+    /**
+     * Bootloop recovery via firmware flash. Consent-gated (`bootloopRecovery`).
+     */
+    bootloopRecovery: (options?: BootloopOptions) => Promise<BootloopResult>;
+    /** List firmware packages available for bootloop recovery. */
+    listFirmwarePackages: () => Promise<FirmwarePackage[]>;
+    /** Scan a connected device for recoverable data (non-destructive). */
+    dataRecoveryScan: (
+      options?: DataRecoveryOptions,
+    ) => Promise<DataRecoveryScanResult>;
+    /** Extract the selected recoverable items to a local destination path. */
+    dataRecoveryExtract: (
+      itemIds: string[],
+      destPath: string,
+    ) => Promise<DataRecoveryExtractResult>;
   };
   /**
    * Free utilities (WhatsApp Transfer, Phone Transfer, Data Eraser, Virtual

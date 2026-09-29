@@ -17,3 +17,16 @@
 # the repository or build output.
 [build]
   environment = { SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_ANON_KEY,NEXT_PUBLIC_POSTHOG_KEY,NEXT_PUBLIC_RAZORPAY_KEY_ID" }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DATABASE SCHEMA SYNC
+# ─────────────────────────────────────────────────────────────────────────────
+# Prisma migrations are applied automatically during the web app build
+# (@frpb/web -> build -> node scripts/migrate-deploy.mjs), which runs
+# `prisma migrate deploy` against DATABASE_URL/DIRECT_URL before `next build`.
+# This guarantees the shipped serverless functions boot against a schema that
+# already contains the referral engine tables (ReferralCode, Referral,
+# Commission, PayoutRequest).
+#
+# The migrate step is skipped automatically when no database URL is present
+# (e.g. local builds) and can be forced off with SKIP_PRISMA_MIGRATE=1.

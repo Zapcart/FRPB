@@ -17,6 +17,8 @@
     "test": "turbo run test",
     "prisma:generate": "pnpm --filter @frpb/web prisma:generate",
     "prisma:migrate": "pnpm --filter @frpb/web prisma:migrate",
+    "prisma:deploy": "pnpm --filter @frpb/web prisma:deploy",
+    "db:deploy": "pnpm --filter @frpb/web db:deploy",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,prisma,css}\""
   },
   "devDependencies": {

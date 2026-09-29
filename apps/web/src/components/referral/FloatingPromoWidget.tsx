@@ -36,7 +36,10 @@ export default function FloatingPromoWidget({ email }: FloatingPromoWidgetProps)
     }
   }, []);
 
-  function handleDismiss() {
+  function handleDismiss(event: React.MouseEvent<HTMLButtonElement>) {
+    // Stop the click bubbling to any parent/card handler so dismissing never
+    // also triggers an unintended action (e.g. opening the modal).
+    event.stopPropagation();
     setVisible(false);
     try {
       window.sessionStorage.setItem(DISMISS_KEY, "1");
@@ -45,10 +48,17 @@ export default function FloatingPromoWidget({ email }: FloatingPromoWidgetProps)
     }
   }
 
+  // "Get Referral Link" ALWAYS opens the modal — it is never gated by auth here.
+  // The modal resolves the session itself and shows a sign-in CTA when signed
+  // out, so a signed-out click is a graceful upsell rather than a dead end.
+  function handleGetLink() {
+    setModalOpen(true);
+  }
+
   return (
     <>
       {visible && (
-        <div className="fixed bottom-6 right-6 z-40 print:hidden">
+        <div className="fixed bottom-20 right-6 z-50 print:hidden">
           <div className="relative w-full max-w-sm rounded-xl border border-blue-500/30 bg-gradient-to-br from-blue-900 to-indigo-950 p-4 text-white shadow-2xl">
             <button
               type="button"
@@ -75,7 +85,7 @@ export default function FloatingPromoWidget({ email }: FloatingPromoWidgetProps)
 
             <button
               type="button"
-              onClick={() => setModalOpen(true)}
+              onClick={handleGetLink}
               className="mt-3 inline-flex min-h-[44px] w-full touch-manipulation items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-indigo-500 px-4 text-sm font-semibold text-white shadow-lg shadow-indigo-900/40 transition hover:from-blue-400 hover:to-indigo-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
               <Share2 className="h-4 w-4" /> Get Referral Link

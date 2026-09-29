@@ -16,6 +16,17 @@ import type {
   FreeToolRunResult,
   FrpbBridge,
   HardwareSnapshot,
+  IcloudBypassOptions,
+  IcloudBypassResult,
+  IcloudStatus,
+  SamsungAccountOptions,
+  SamsungAccountResult,
+  BootloopOptions,
+  BootloopResult,
+  FirmwarePackage,
+  DataRecoveryOptions,
+  DataRecoveryScanResult,
+  DataRecoveryExtractResult,
   LicenseProfile,
   LicenseSession,
   ModelCatalogEntry,
@@ -74,15 +85,8 @@ const bridge: FrpbBridge = {
       ipcRenderer.invoke("device:getHardwareId", deviceLabel),
     checkConsent: (): Promise<ConsentState> =>
       ipcRenderer.invoke("device:checkConsent"),
-    acceptConsent: (operation: OperationKind): Promise<AcceptConsentResult> => {
-      if (operation !== "flash-reset" && operation !== "frp-bypass" && operation !== "unlock-screen") {
-        return Promise.resolve({
-          ok: false,
-          error: `Unknown operation: ${String(operation)}`,
-        });
-      }
-      return ipcRenderer.invoke("device:acceptConsent", operation);
-    },
+    acceptConsent: (operation: OperationKind): Promise<AcceptConsentResult> =>
+      ipcRenderer.invoke("device:acceptConsent", operation),
     flashReset: (options?: OperationOptions): Promise<OperationResult> =>
       ipcRenderer.invoke("device:flashReset", options),
     frpBypass: (options?: OperationOptions): Promise<OperationResult> =>
@@ -130,6 +134,30 @@ const bridge: FrpbBridge = {
       chipset?: string | null;
     }): Promise<ModelCatalogEntry[]> =>
       ipcRenderer.invoke("device:searchModels", opts),
+    /** Apple iCloud Activation Lock bypass */
+    icloudBypass: (options?: IcloudBypassOptions): Promise<IcloudBypassResult> =>
+      ipcRenderer.invoke("device:icloudBypass", options),
+    /** Poll iCloud bypass status by request ID */
+    icloudStatus: (requestId: string): Promise<IcloudStatus> =>
+      ipcRenderer.invoke("device:icloudStatus", requestId),
+    /** Detect connected Apple device and return IMEI/state */
+    icloudDetect: (): Promise<IcloudStatus | null> =>
+      ipcRenderer.invoke("device:icloudDetect"),
+    /** Samsung Account (Knox/Find My Mobile) lock bypass */
+    samsungAccountBypass: (options?: SamsungAccountOptions): Promise<SamsungAccountResult> =>
+      ipcRenderer.invoke("device:samsungAccountBypass", options),
+    /** Bootloop/Brick recovery — full firmware flash */
+    bootloopRecovery: (options?: BootloopOptions): Promise<BootloopResult> =>
+      ipcRenderer.invoke("device:bootloopRecovery", options),
+    /** List available firmware packages for bootloop recovery */
+    listFirmwarePackages: (): Promise<FirmwarePackage[]> =>
+      ipcRenderer.invoke("device:listFirmwarePackages"),
+    /** Data recovery — scan connected device for recoverable data */
+    dataRecoveryScan: (options?: DataRecoveryOptions): Promise<DataRecoveryScanResult> =>
+      ipcRenderer.invoke("device:dataRecoveryScan", options),
+    /** Data recovery — extract selected items to local disk */
+    dataRecoveryExtract: (itemIds: string[], destPath: string): Promise<DataRecoveryExtractResult> =>
+      ipcRenderer.invoke("device:dataRecoveryExtract", itemIds, destPath),
   },
   freeTools: {
     run: (request: FreeToolRunRequest): Promise<FreeToolRunResult> =>

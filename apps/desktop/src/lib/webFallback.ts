@@ -29,6 +29,18 @@ import type {
   FreeToolRunRequest,
   FreeToolRunResult,
   FrpbBridge,
+  IcloudBypassOptions,
+  IcloudBypassResult,
+  IcloudStatus,
+  SamsungAccountOptions,
+  SamsungAccountResult,
+  BootloopOptions,
+  BootloopResult,
+  FirmwarePackage,
+  DataRecoveryOptions,
+  DataRecoveryItem,
+  DataRecoveryScanResult,
+  DataRecoveryExtractResult,
   HardwareSnapshot,
   LicenseProfile,
   LicenseSession,
@@ -65,7 +77,16 @@ function createWebBridge(): FrpbBridge {
   // Mirrors the main-process `deviceLogSinkEnabled` flag driven by
   // `setLogSink`; raw chunks are only mirrored while a Console surface listens.
   let deviceLogSinkEnabled = true;
-  let consent: ConsentState = { flashReset: false, frpBypass: false, unlockScreen: false };
+  let consent: ConsentState = {
+    flashReset: false,
+    frpBypass: false,
+    unlockScreen: false,
+    rebootMode: false,
+    icloudBypass: false,
+    samsungAccount: false,
+    bootloopRecovery: false,
+    dataRecovery: false,
+  };
 
   // Emits a synthetic raw chunk on the `device:log` channel + mirrors it into the
   // rolling console, exactly like createDeviceLogSink() in electron/ipc/device.ts.
@@ -289,6 +310,176 @@ function createWebBridge(): FrpbBridge {
     }
   }
 
+  // ─── Consent-gated feature mocks (iCloud / Samsung / Bootloop / Data recovery).
+  // Browser preview has no real hardware, so each mock streams the SAME run-state
+  // + operation-event shape as the real main-process handlers (see
+  // electron/ipc/device.ts) — the progress bars and log panels stay fully
+  // exercisable — while never claiming a real device was touched.
+
+  async function simulateFeatureOp(
+    op: OperationKind,
+    steps: Array<[string, string, number]>,
+    delayMs = 450
+  ): Promise<void> {
+    emitRunState({ running: true, op, logs: [] });
+    try {
+      for (const [stage, message, pct] of steps) {
+        emitOperation({ op, stage, message, pct });
+        emitDeviceLog(op, `${message}\n`);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    } finally {
+      emitRunState({ running: false, op: null });
+    }
+  }
+
+  async function simulateIcloudBypass(
+    options?: IcloudBypassOptions
+  ): Promise<IcloudBypassResult> {
+    const target = options?.imei ? `IMEI ${options.imei}` : "the connected device";
+    await simulateFeatureOp("icloud-bypass", [
+      ["checking", "Checking device eligibility…", 10],
+      ["detecting", `Reading iCloud lock status for ${target}…`, 35],
+      ["requesting", "Requesting activation-lock removal…", 70],
+      ["done", "iCloud activation lock removed.", 100],
+    ]);
+    return {
+      success: true,
+      message: "Simulated in web preview mode — no real device was touched.",
+      requestId: `web-icloud-${Date.now()}`,
+      detail: "Connect the FRPB desktop app to run the real iCloud bypass engine.",
+    };
+  }
+
+  async function simulateSamsungAccount(
+    options?: SamsungAccountOptions
+  ): Promise<SamsungAccountResult> {
+    const method = options?.method ?? "find-my-mobile";
+    await simulateFeatureOp("samsung-account", [
+      ["checking", `Preparing ${method} removal…`, 15],
+      ["connecting", "Connecting to the Samsung account service…", 45],
+      ["removing", "Removing the Samsung account lock…", 80],
+      ["done", "Samsung account lock removed.", 100],
+    ]);
+    return {
+      success: true,
+      message: "Simulated in web preview mode — no real device was touched.",
+      detail: "Connect the FRPB desktop app to run the real Samsung account bypass.",
+      accountRemoved: true,
+    };
+  }
+
+  async function simulateBootloopRecovery(
+    options?: BootloopOptions
+  ): Promise<BootloopResult> {
+    const target = options?.model ?? options?.brand ?? "the connected device";
+    await simulateFeatureOp("bootloop-recovery", [
+      ["checking", `Verifying firmware for ${target}…`, 15],
+      ["flashing", "Flashing stock firmware (no real write in preview)…", 60],
+      ["rebooting", "Rebooting the device…", 90],
+      ["done", "Bootloop recovery complete.", 100],
+    ]);
+    return {
+      success: true,
+      message: "Simulated in web preview mode — no firmware was flashed.",
+      detail: "Connect the FRPB desktop app to run the real bootloop recovery.",
+      rebooted: true,
+    };
+  }
+
+  function firmwareCatalog(): FirmwarePackage[] {
+    return [
+      {
+        id: "web-fw-1",
+        brand: "Samsung",
+        model: "Galaxy A54",
+        chipset: "Samsung Exynos",
+        androidVersion: "14",
+        filename: "A546BXXU5CXE1.tar.md5",
+        sizeBytes: 4_800_000_000,
+      },
+      {
+        id: "web-fw-2",
+        brand: "Xiaomi",
+        model: "Redmi Note 12",
+        chipset: "Qualcomm",
+        androidVersion: "13",
+        filename: "redmi_note_12_fastboot.zip",
+        sizeBytes: 3_200_000_000,
+      },
+      {
+        id: "web-fw-3",
+        brand: "Google",
+        model: "Pixel 7",
+        chipset: "Unknown",
+        androidVersion: "14",
+        filename: "panther-factory-14.zip",
+        sizeBytes: 2_900_000_000,
+      },
+    ];
+  }
+
+  async function simulateDataRecoveryScan(
+    options?: DataRecoveryOptions
+  ): Promise<DataRecoveryScanResult> {
+    const scope = options?.paths?.length ? options.paths.join(", ") : "common media locations";
+    await simulateFeatureOp("data-recovery-scan", [
+      ["scanning", `Scanning ${scope}…`, 30],
+      ["indexing", "Indexing photos, videos and messages…", 70],
+      ["done", "Scan complete.", 100],
+    ]);
+    const items: DataRecoveryItem[] = [
+      {
+        id: "web-photo-1",
+        name: "IMG_20240112_101533.jpg",
+        category: "photo",
+        sourcePath: "/sdcard/DCIM/Camera/IMG_20240112_101533.jpg",
+        sizeBytes: 4_300_000,
+        recoverable: true,
+      },
+      {
+        id: "web-video-1",
+        name: "VID_20240101_220014.mp4",
+        category: "video",
+        sourcePath: "/sdcard/DCIM/Camera/VID_20240101_220014.mp4",
+        sizeBytes: 88_000_000,
+        recoverable: true,
+      },
+      {
+        id: "web-sms-1",
+        name: "mmssms.db",
+        category: "sms",
+        sourcePath: "/data/data/com.android.providers.telephony/databases/mmssms.db",
+        sizeBytes: 1_200_000,
+        recoverable: false,
+      },
+    ];
+    const totalSizeBytes = items.reduce((sum, item) => sum + item.sizeBytes, 0);
+    return {
+      success: true,
+      items,
+      totalSizeBytes,
+      message: `Found ${items.length} recoverable item(s) (web preview mode).`,
+    };
+  }
+
+  async function simulateDataRecoveryExtract(
+    itemIds: string[],
+    destPath: string
+  ): Promise<DataRecoveryExtractResult> {
+    await simulateFeatureOp("data-recovery-extract", [
+      ["extracting", `Extracting ${itemIds.length} item(s)…`, 50],
+      ["done", "Extraction complete.", 100],
+    ]);
+    return {
+      success: true,
+      message: `Simulated extraction of ${itemIds.length} item(s) to ${destPath} (web preview mode).`,
+      extractedCount: itemIds.length,
+      extractedBytes: itemIds.length * 4_300_000,
+      details: "Web preview mode — no files were written to disk.",
+    };
+  }
+
   return {
     license: {
       verify: async (key: string): Promise<VerifyResponse> => {
@@ -386,7 +577,11 @@ function createWebBridge(): FrpbBridge {
         if (
           operation !== "flash-reset" &&
           operation !== "frp-bypass" &&
-          operation !== "unlock-screen"
+          operation !== "unlock-screen" &&
+          operation !== "icloud-bypass" &&
+          operation !== "samsung-account" &&
+          operation !== "bootloop-recovery" &&
+          operation !== "data-recovery"
         ) {
           return { ok: false, error: `Unknown operation: ${String(operation)}` };
         }
@@ -394,12 +589,23 @@ function createWebBridge(): FrpbBridge {
           flashReset: consent.flashReset || operation === "flash-reset",
           frpBypass: consent.frpBypass || operation === "frp-bypass",
           unlockScreen: consent.unlockScreen || operation === "unlock-screen",
+          rebootMode: consent.rebootMode,
+          icloudBypass: consent.icloudBypass || operation === "icloud-bypass",
+          samsungAccount: consent.samsungAccount || operation === "samsung-account",
+          bootloopRecovery:
+            consent.bootloopRecovery || operation === "bootloop-recovery",
+          dataRecovery: consent.dataRecovery || operation === "data-recovery",
         };
         return {
           ok: true,
           flashReset: consent.flashReset,
           frpBypass: consent.frpBypass,
           unlockScreen: consent.unlockScreen,
+          rebootMode: consent.rebootMode,
+          icloudBypass: consent.icloudBypass,
+          samsungAccount: consent.samsungAccount,
+          bootloopRecovery: consent.bootloopRecovery,
+          dataRecovery: consent.dataRecovery,
         };
       },
       flashReset: (options?: OperationOptions): Promise<OperationResult> =>
@@ -545,6 +751,32 @@ function createWebBridge(): FrpbBridge {
         }
         return `WEB-PREVIEW-HWID-${hash.toString(16).padStart(8, "0")}`;
       },
+      // Consent-gated feature mocks. Present so the browser preview exposes the
+      // same FrpbBridge surface as the packaged app (type parity) and the
+      // iCloud / Samsung / Bootloop / Data-recovery panels stay interactive.
+      icloudBypass: (options?: IcloudBypassOptions): Promise<IcloudBypassResult> =>
+        simulateIcloudBypass(options),
+      icloudStatus: async (): Promise<IcloudStatus> => ({
+        requestId: "web-preview",
+        status: "completed",
+        message: "Web preview mode — iCloud status is simulated.",
+        progress: 100,
+      }),
+      icloudDetect: async (): Promise<IcloudStatus | null> => null,
+      samsungAccountBypass: (
+        options?: SamsungAccountOptions
+      ): Promise<SamsungAccountResult> => simulateSamsungAccount(options),
+      bootloopRecovery: (options?: BootloopOptions): Promise<BootloopResult> =>
+        simulateBootloopRecovery(options),
+      listFirmwarePackages: async (): Promise<FirmwarePackage[]> => firmwareCatalog(),
+      dataRecoveryScan: (
+        options?: DataRecoveryOptions
+      ): Promise<DataRecoveryScanResult> => simulateDataRecoveryScan(options),
+      dataRecoveryExtract: (
+        itemIds: string[],
+        destPath: string
+      ): Promise<DataRecoveryExtractResult> =>
+        simulateDataRecoveryExtract(itemIds, destPath),
     },
     freeTools: {
       run: (request: FreeToolRunRequest): Promise<FreeToolRunResult> =>

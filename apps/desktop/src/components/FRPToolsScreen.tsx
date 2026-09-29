@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Power, RotateCcw, Terminal, Zap } from "lucide-react";
+import { AlertTriangle, Power, RotateCcw, Terminal, Zap, Apple, Lock, Wifi, Cpu, HardDrive, Database, Download, Search, FolderOpen } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ChipsetFamily, DeviceAutoDetected } from "@frpb/shared";
 import type {
@@ -10,6 +10,18 @@ import type {
   DeviceModelsResult,
   DeviceStatus,
   HardwareSnapshot,
+  IcloudBypassOptions,
+  IcloudBypassResult,
+  IcloudStatus,
+  SamsungAccountOptions,
+  SamsungAccountResult,
+  BootloopOptions,
+  BootloopResult,
+  FirmwarePackage,
+  DataRecoveryOptions,
+  DataRecoveryScanResult,
+  DataRecoveryExtractResult,
+  DataRecoveryItem,
   OperationEvent,
   OperationKind,
   OperationResult,
@@ -250,19 +262,16 @@ export default function FRPToolsScreen({
   const [opProgress, setOpProgress] = useState<ActionProgress | null>(null);
   const [opLog, setOpLog] = useState<LogEntry[]>([]);
   const [result, setResult] = useState<OperationResult | null>(null);
-  // Which Quick Boot Switcher target is currently being requested (spinner).
   const [rebootingMode, setRebootingMode] = useState<RebootMode | null>(null);
-  // Explicit error toast (non-zero exit code / unauthorized ADB / spawn failure).
   const [toast, setToast] = useState<{ message: string; tone: "error" | "info" } | null>(
     null
   );
   const toastTimerRef = useRef<number | null>(null);
 
-  // G. Auto-detection engine ("device:auto-detected") — drives the header badge
-  // and auto-sets the brand context the instant a phone is plugged in.
+  // G. Auto-detection engine
   const [autoDetected, setAutoDetected] = useState<DeviceAutoDetected | null>(null);
 
-  // H. Guided hardware Connection Wizard (ADB-free low-level interface workflow).
+  // H. Guided hardware Connection Wizard
   const [wizard, setWizard] = useState<{
     op: OperationKind;
     guide: ConnectionGuide;
@@ -276,24 +285,47 @@ export default function FRPToolsScreen({
     wizardRef.current = wizard;
   }, [wizard]);
 
-  // Samsung FRP wizard (separate modal path — not the automated engine wizard).
+  // Samsung FRP wizard
   const [samsungWizardOpen, setSamsungWizardOpen] = useState(false);
 
-  // Wizard HARDWARE CONSOLE streaming.
-  //
-  // The wizard's console box previously showed ONLY hardware-detection lines
-  // (describeHardwareLines), so once the listen loop handed over to the engine
-  // the panel went silent — which read as "nothing is happening" even while a
-  // flash/FRP operation was streaming output. This pipes the real operation
-  // traffic into the same box for the lifetime of the wizard:
-  //
-  //   device:operation:event → staged engine progress (WIPE / REBOOT / DONE …)
-  //   device:log             → raw stdout/stderr from the underlying tool
-  //
-  // Each entry is tagged so the console reads like a terminal transcript and a
-  // [ERROR] line can be styled distinctly. Overwrites are avoided by appending
-  // only when the text actually differs from the last line, because the engine
-  // emits both a stage event AND a matching log entry for the same step.
+  // ─── NEW: iCloud Lock bypass UI state ──────────────────────────────────────
+  const [icloudImei, setIcloudImei] = useState("");
+  const [icloudModel, setIcloudModel] = useState("");
+  const [icloudAppleId, setIcloudAppleId] = useState("");
+  const [icloudRunning, setIcloudRunning] = useState(false);
+  const [icloudProgress, setIcloudProgress] = useState<ActionProgress | null>(null);
+  const [icloudResult, setIcloudResult] = useState<IcloudBypassResult | null>(null);
+  const [icloudLog, setIcloudLog] = useState<LogEntry[]>([]);
+
+  // ─── NEW: Samsung Account bypass UI state ──────────────────────────────────
+  const [samsungMethod, setSamsungMethod] = useState<"find-my-mobile" | "oem-service" | "adb">("find-my-mobile");
+  const [samsungRunning, setSamsungRunning] = useState(false);
+  const [samsungProgress, setSamsungProgress] = useState<ActionProgress | null>(null);
+  const [samsungResult, setSamsungResult] = useState<SamsungAccountResult | null>(null);
+  const [samsungLog, setSamsungLog] = useState<LogEntry[]>([]);
+
+  // ─── NEW: Bootloop Recovery UI state ────────────────────────────────────────
+  const [bootloopChipset, setBootloopChipset] = useState("");
+  const [bootloopFirmware, setBootloopFirmware] = useState<FirmwarePackage | null>(null);
+  const [firmwareCatalog, setFirmwareCatalog] = useState<FirmwarePackage[]>([]);
+  const [bootloopRunning, setBootloopRunning] = useState(false);
+  const [bootloopProgress, setBootloopProgress] = useState<ActionProgress | null>(null);
+  const [bootloopResult, setBootloopResult] = useState<BootloopResult | null>(null);
+  const [bootloopLog, setBootloopLog] = useState<LogEntry[]>([]);
+  const [bootloopLoadingCatalog, setBootloopLoadingCatalog] = useState(false);
+
+  // ─── NEW: Data Recovery UI state ────────────────────────────────────────────
+  const [dataRecoveryRunning, setDataRecoveryRunning] = useState(false);
+  const [dataRecoveryProgress, setDataRecoveryProgress] = useState<ActionProgress | null>(null);
+  const [dataRecoveryResult, setDataRecoveryResult] = useState<DataRecoveryScanResult | null>(null);
+  const [dataRecoveryLog, setDataRecoveryLog] = useState<LogEntry[]>([]);
+  const [dataRecoveryItems, setDataRecoveryItems] = useState<DataRecoveryItem[]>([]);
+  const [dataRecoverySelected, setDataRecoverySelected] = useState<string[]>([]);
+  const [dataRecoveryDestPath, setDataRecoveryDestPath] = useState("");
+  const [dataRecoveryExtractResult, setDataRecoveryExtractResult] = useState<DataRecoveryExtractResult | null>(null);
+  const [dataRecoveryScanning, setDataRecoveryScanning] = useState(false);
+
+  // ─── NEW: Hardware wizard streaming (extended) ────────────────────────────
   useEffect(() => {
     if (!wizard) return;
 
@@ -336,6 +368,38 @@ export default function FRPToolsScreen({
 
   const appendLog = useCallback((message: string) => {
     setOpLog((prev) => {
+      const entry: LogEntry = { time: new Date().toLocaleTimeString(), message };
+      const next = [...prev, entry];
+      return next.length > MAX_LOG_ENTRIES ? next.slice(next.length - MAX_LOG_ENTRIES) : next;
+    });
+  }, []);
+
+  const appendIcloudLog = useCallback((message: string) => {
+    setIcloudLog((prev) => {
+      const entry: LogEntry = { time: new Date().toLocaleTimeString(), message };
+      const next = [...prev, entry];
+      return next.length > MAX_LOG_ENTRIES ? next.slice(next.length - MAX_LOG_ENTRIES) : next;
+    });
+  }, []);
+
+  const appendSamsungLog = useCallback((message: string) => {
+    setSamsungLog((prev) => {
+      const entry: LogEntry = { time: new Date().toLocaleTimeString(), message };
+      const next = [...prev, entry];
+      return next.length > MAX_LOG_ENTRIES ? next.slice(next.length - MAX_LOG_ENTRIES) : next;
+    });
+  }, []);
+
+  const appendBootloopLog = useCallback((message: string) => {
+    setBootloopLog((prev) => {
+      const entry: LogEntry = { time: new Date().toLocaleTimeString(), message };
+      const next = [...prev, entry];
+      return next.length > MAX_LOG_ENTRIES ? next.slice(next.length - MAX_LOG_ENTRIES) : next;
+    });
+  }, []);
+
+  const appendDataRecoveryLog = useCallback((message: string) => {
+    setDataRecoveryLog((prev) => {
       const entry: LogEntry = { time: new Date().toLocaleTimeString(), message };
       const next = [...prev, entry];
       return next.length > MAX_LOG_ENTRIES ? next.slice(next.length - MAX_LOG_ENTRIES) : next;
@@ -411,6 +475,74 @@ export default function FRPToolsScreen({
     });
     return unsubscribe;
   }, [appendLog]);
+
+  // ─── NEW: iCloud Lock operation events → progress + log
+  useEffect(() => {
+    const unsubscribe = window.frpb.device.onOperationEvent((event: OperationEvent) => {
+      if (event.op !== "icloud-bypass") return;
+      const pct = Math.max(0, Math.min(100, event.pct));
+      const done = event.stage.toUpperCase() === "COMPLETE" || event.stage.toUpperCase() === "FAILED" || pct >= 100;
+      setIcloudProgress({
+        stage: event.stage,
+        pct,
+        overall: done ? 100 : pct,
+        current: pct,
+      });
+      appendIcloudLog(event.message);
+    });
+    return unsubscribe;
+  }, []);
+
+  // ─── NEW: Samsung Account operation events → progress + log
+  useEffect(() => {
+    const unsubscribe = window.frpb.device.onOperationEvent((event: OperationEvent) => {
+      if (event.op !== "samsung-account") return;
+      const pct = Math.max(0, Math.min(100, event.pct));
+      const done = event.stage.toUpperCase() === "COMPLETE" || event.stage.toUpperCase() === "FAILED" || pct >= 100;
+      setSamsungProgress({
+        stage: event.stage,
+        pct,
+        overall: done ? 100 : pct,
+        current: pct,
+      });
+      appendSamsungLog(event.message);
+    });
+    return unsubscribe;
+  }, []);
+
+  // E4. Bootloop Recovery operation events → progress + log
+  useEffect(() => {
+    const unsubscribe = window.frpb.device.onOperationEvent((event: OperationEvent) => {
+      if (event.op !== "bootloop-recovery") return;
+      const pct = Math.max(0, Math.min(100, event.pct));
+      const done = event.stage.toUpperCase() === "COMPLETE" || event.stage.toUpperCase() === "FAILED" || pct >= 100;
+      setBootloopProgress({
+        stage: event.stage,
+        pct,
+        overall: done ? 100 : pct,
+        current: pct,
+      });
+      appendBootloopLog(event.message);
+    });
+    return unsubscribe;
+  }, []);
+
+  // E5. Data Recovery operation events → progress + log
+  useEffect(() => {
+    const unsubscribe = window.frpb.device.onOperationEvent((event: OperationEvent) => {
+      if (event.op !== "data-recovery-scan" && event.op !== "data-recovery-extract") return;
+      const pct = Math.max(0, Math.min(100, event.pct));
+      const done = event.stage.toUpperCase() === "SCAN_COMPLETE" || event.stage.toUpperCase() === "EXTRACT_COMPLETE" || event.stage.toUpperCase() === "FAILED" || pct >= 100;
+      setDataRecoveryProgress({
+        stage: event.stage,
+        pct,
+        overall: done ? 100 : pct,
+        current: pct,
+      });
+      appendDataRecoveryLog(event.message);
+    });
+    return unsubscribe;
+  }, []);
 
   // E. Raw `device:log` stream from the real adb/fastboot child processes. Every
   // stdout/stderr chunk is appended to the operation log panel as it arrives, so
@@ -592,6 +724,14 @@ export default function FRPToolsScreen({
           flashReset: op === "flash-reset" ? true : prev?.flashReset ?? false,
           frpBypass: op === "frp-bypass" ? true : prev?.frpBypass ?? false,
           unlockScreen: op === "unlock-screen" ? true : prev?.unlockScreen ?? false,
+          rebootMode: prev?.rebootMode ?? false,
+          icloudBypass: op === "icloud-bypass" ? true : prev?.icloudBypass ?? false,
+          samsungAccount: op === "samsung-account" ? true : prev?.samsungAccount ?? false,
+          bootloopRecovery: op === "bootloop-recovery" ? true : prev?.bootloopRecovery ?? false,
+          dataRecovery:
+            op === "data-recovery" || op === "data-recovery-scan" || op === "data-recovery-extract"
+              ? true
+              : prev?.dataRecovery ?? false,
         }));
         setDisclaimerOp(null);
         setChecked(false);
@@ -671,27 +811,197 @@ export default function FRPToolsScreen({
     setWizard(null);
   }
 
-  // Step 3 — the two primary actions. The wizard (key combo + live hardware
-  // listen) is always the entry point; consent gates only the destructive run.
+  // ─── D-new. iCloud Lock handler ────────────────────────────────────────
+  async function handleIcloudBypass() {
+    if (busy) return;
+    if (!icloudConsented) {
+      openDisclaimer("icloud-bypass");
+    } else {
+      setRunningOp("icloud-bypass");
+      setIcloudRunning(true);
+      setIcloudResult(null);
+      setIcloudProgress(null);
+      setIcloudLog([]);
+      try {
+        const res = await window.frpb.device.icloudBypass({
+          imei: icloudImei || undefined,
+          appleId: icloudAppleId || undefined,
+          model: icloudModel || undefined,
+        });
+        setIcloudResult(res);
+        appendIcloudLog(res.message);
+        if (!res.success) showToast(res.message);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "iCloud bypass failed.";
+        setIcloudResult({ success: false, message: msg } as IcloudBypassResult);
+        appendIcloudLog(msg);
+        showToast(msg);
+      } finally {
+        setIcloudRunning(false);
+        setRunningOp(null);
+      }
+    }
+  }
+
+  // ─── D-new. Samsung Account handler ────────────────────────────────────
+  async function handleSamsungAccountBypass() {
+    if (busy) return;
+    if (!samsungAccountConsented) {
+      openDisclaimer("samsung-account");
+    } else {
+      setRunningOp("samsung-account");
+      setSamsungRunning(true);
+      setSamsungResult(null);
+      setSamsungProgress(null);
+      setSamsungLog([]);
+      try {
+        const res = await window.frpb.device.samsungAccountBypass({
+          brand: "Samsung",
+          model: (selectedModel || modelInput).trim() || undefined,
+          method: samsungMethod,
+          androidVersion: androidVersion ?? undefined,
+        });
+        setSamsungResult(res);
+        appendSamsungLog(res.message);
+        if (!res.success) showToast(res.message);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Samsung account bypass failed.";
+        setSamsungResult({ success: false, message: msg, accountRemoved: false } as SamsungAccountResult);
+        appendSamsungLog(msg);
+        showToast(msg);
+      } finally {
+        setSamsungRunning(false);
+        setRunningOp(null);
+      }
+    }
+  }
+
+  // ─── D-new. Bootloop Recovery handler ──────────────────────────────────
+  async function handleBootloopRecovery() {
+    if (busy || !isConnected) return;
+    if (!bootloopConsented) {
+      openDisclaimer("bootloop-recovery");
+    } else {
+      setRunningOp("bootloop-recovery");
+      setBootloopRunning(true);
+      setBootloopResult(null);
+      setBootloopProgress(null);
+      setBootloopLog([]);
+      try {
+        const res = await window.frpb.device.bootloopRecovery({
+          chipset: bootloopChipset || undefined,
+          brand: selectedBrand || undefined,
+          model: (selectedModel || modelInput).trim() || undefined,
+          androidVersion: androidVersion ?? undefined,
+        });
+        setBootloopResult(res);
+        appendBootloopLog(res.message);
+        if (!res.success) showToast(res.message);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Bootloop recovery failed.";
+        setBootloopResult({ success: false, message: msg, rebooted: false } as BootloopResult);
+        appendBootloopLog(msg);
+        showToast(msg);
+      } finally {
+        setBootloopRunning(false);
+        setRunningOp(null);
+      }
+    }
+  }
+
+  // ─── D-new. Data Recovery handler ──────────────────────────────────────
+  async function handleDataRecovery() {
+    if (busy || !isConnected) return;
+    setRunningOp("data-recovery-scan");
+    setDataRecoveryScanning(true);
+    setDataRecoveryResult(null);
+    setDataRecoveryProgress(null);
+    setDataRecoveryLog([]);
+    setDataRecoveryItems([]);
+    try {
+      const res = await window.frpb.device.dataRecoveryScan({});
+      setDataRecoveryResult(res);
+      setDataRecoveryItems(res.items ?? []);
+      appendDataRecoveryLog(res.message);
+      if (!res.success) showToast(res.message);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Data recovery scan failed.";
+      setDataRecoveryResult({ success: false, items: [], totalSizeBytes: 0, message: msg } as DataRecoveryScanResult);
+      appendDataRecoveryLog(msg);
+      showToast(msg);
+    } finally {
+      setDataRecoveryScanning(false);
+      setRunningOp(null);
+    }
+  }
+
+  // ─── NEW: Load the firmware catalog for Bootloop Recovery ───────────────
+  async function handleLoadFirmwareCatalog() {
+    if (bootloopLoadingCatalog) return;
+    setBootloopLoadingCatalog(true);
+    try {
+      const pkgs = await window.frpb.device.listFirmwarePackages();
+      setFirmwareCatalog(pkgs);
+      if (pkgs.length > 0 && !bootloopFirmware) setBootloopFirmware(pkgs[0] ?? null);
+      appendBootloopLog(`Loaded ${pkgs.length} firmware package(s).`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not load firmware catalog.";
+      appendBootloopLog(msg);
+      showToast(msg);
+    } finally {
+      setBootloopLoadingCatalog(false);
+    }
+  }
+
+  // ─── NEW: Extract the selected Data Recovery items to disk ──────────────
+  async function handleDataRecoveryExtract() {
+    if (busy || dataRecoverySelected.length === 0) return;
+    const dest = dataRecoveryDestPath.trim();
+    if (!dest) {
+      showToast("Choose a destination folder for the recovered files.");
+      return;
+    }
+    setRunningOp("data-recovery-extract");
+    setDataRecoveryExtractResult(null);
+    try {
+      const res = await window.frpb.device.dataRecoveryExtract(dataRecoverySelected, dest);
+      setDataRecoveryExtractResult(res);
+      appendDataRecoveryLog(res.message);
+      if (!res.success) showToast(res.message);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Data extraction failed.";
+      setDataRecoveryExtractResult({
+        success: false,
+        message: msg,
+        extractedCount: 0,
+        extractedBytes: 0,
+      } as DataRecoveryExtractResult);
+      appendDataRecoveryLog(msg);
+      showToast(msg);
+    } finally {
+      setRunningOp(null);
+    }
+  }
+
+  // ─── FRP / Flash Reset entry points used by ActionScreen ────────────────
+  // Both are consent-gated: the disclaimer is shown first, then the guided
+  // Connection Wizard drives the actual run. Neither requires ADB.
   function handleFlashReset() {
     if (busy) return;
     if (!flashConsented) {
       openDisclaimer("flash-reset");
-    } else {
-      beginWizard("flash-reset");
+      return;
     }
+    beginWizard("flash-reset");
   }
 
   function handleFrpBypass() {
     if (busy) return;
     if (!frpConsented) {
       openDisclaimer("frp-bypass");
-    } else if (brand === "Samsung") {
-      // Samsung ke liye separate wizard (manual-guided, multi-step)
-      setSamsungWizardOpen(true);
-    } else {
-      beginWizard("frp-bypass");
+      return;
     }
+    beginWizard("frp-bypass");
   }
 
   // One-click boot-mode switcher. Non-destructive (no wipe) so no legal disclaimer
@@ -732,6 +1042,9 @@ export default function FRPToolsScreen({
   const needsAuth = Boolean(status?.connected) && status?.authorized === false;
   const flashConsented = Boolean(consent?.flashReset);
   const frpConsented = Boolean(consent?.frpBypass);
+  const icloudConsented = Boolean(consent?.icloudBypass);
+  const samsungAccountConsented = Boolean(consent?.samsungAccount);
+  const bootloopConsented = Boolean(consent?.bootloopRecovery);
   const busy = runningOp !== null || operationRunning;
 
   // Step 1/2 context: prefer the auto-detected telemetry, fall back to the
@@ -804,6 +1117,439 @@ export default function FRPToolsScreen({
             <AlertTriangle className="h-3.5 w-3.5" />
             Connect a device to enable the quick boot switcher.
           </p>
+        )}
+      </section>
+
+      {/* iCloud Lock bypass — Apple activation-lock recovery for owned devices. */}
+      <section className="frpb-card p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+              <Apple className="h-4 w-4 text-slate-700" />
+              iCloud Lock Bypass
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Remove the activation lock on an Apple device you own. Legal consent is required.
+            </p>
+          </div>
+          {icloudResult && (
+            <span
+              className={
+                icloudResult.success
+                  ? "rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700"
+                  : "rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-700"
+              }
+            >
+              {icloudResult.success ? "Success" : "Failed"}
+            </span>
+          )}
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <label className="block text-xs font-semibold text-slate-700">
+            IMEI / Serial
+            <input
+              value={icloudImei}
+              onChange={(e) => setIcloudImei(e.target.value)}
+              placeholder="352…"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-brand-400"
+            />
+          </label>
+          <label className="block text-xs font-semibold text-slate-700">
+            Apple ID (optional)
+            <input
+              value={icloudAppleId}
+              onChange={(e) => setIcloudAppleId(e.target.value)}
+              placeholder="user@icloud.com"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-brand-400"
+            />
+          </label>
+          <label className="block text-xs font-semibold text-slate-700">
+            Model (optional)
+            <input
+              value={icloudModel}
+              onChange={(e) => setIcloudModel(e.target.value)}
+              placeholder="iPhone 12"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-brand-400"
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void handleIcloudBypass()}
+            disabled={busy || icloudRunning}
+            className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {icloudRunning ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            ) : (
+              <Apple className="h-4 w-4" />
+            )}
+            {icloudConsented ? "Start iCloud Bypass" : "Review & Consent"}
+          </button>
+          {icloudProgress && (
+            <span className="text-xs font-medium text-slate-500">
+              {icloudProgress.stage} · {icloudProgress.pct}%
+            </span>
+          )}
+        </div>
+
+        {icloudProgress && (
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-brand-500 transition-all"
+              style={{ width: `${icloudProgress.pct}%` }}
+            />
+          </div>
+        )}
+
+        {icloudLog.length > 0 && (
+          <div className="mt-3 max-h-40 overflow-y-auto rounded-lg bg-slate-950 p-3 font-mono text-xs text-slate-200">
+            {icloudLog.map((entry, index) => (
+              <div key={index} className="whitespace-pre-wrap break-words">
+                <span className="text-slate-500">{entry.time} </span>
+                {entry.message}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Samsung Account bypass — account lock removal on owned Samsung devices. */}
+      <section className="frpb-card p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+              <Lock className="h-4 w-4 text-slate-700" />
+              Samsung Account Bypass
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Remove the Samsung account lock from a device you own.
+            </p>
+          </div>
+          {samsungResult && (
+            <span
+              className={
+                samsungResult.success
+                  ? "rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700"
+                  : "rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-700"
+              }
+            >
+              {samsungResult.success ? "Success" : "Failed"}
+            </span>
+          )}
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block text-xs font-semibold text-slate-700">
+            Removal method
+            <select
+              value={samsungMethod}
+              onChange={(e) =>
+                setSamsungMethod(e.target.value as "find-my-mobile" | "oem-service" | "adb")
+              }
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-brand-400"
+            >
+              <option value="find-my-mobile">Find My Mobile</option>
+              <option value="oem-service">OEM Service</option>
+              <option value="adb">ADB</option>
+            </select>
+          </label>
+          <label className="block text-xs font-semibold text-slate-700">
+            Android version
+            <input
+              value={androidVersion ?? ""}
+              readOnly
+              placeholder="Auto-detected"
+              className="mt-1 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-normal text-slate-500 outline-none"
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void handleSamsungAccountBypass()}
+            disabled={busy || samsungRunning}
+            className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {samsungRunning ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            ) : (
+              <Lock className="h-4 w-4" />
+            )}
+            {samsungAccountConsented ? "Start Account Bypass" : "Review & Consent"}
+          </button>
+          {samsungProgress && (
+            <span className="text-xs font-medium text-slate-500">
+              {samsungProgress.stage} · {samsungProgress.pct}%
+            </span>
+          )}
+        </div>
+
+        {samsungProgress && (
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-brand-500 transition-all"
+              style={{ width: `${samsungProgress.pct}%` }}
+            />
+          </div>
+        )}
+
+        {samsungLog.length > 0 && (
+          <div className="mt-3 max-h-40 overflow-y-auto rounded-lg bg-slate-950 p-3 font-mono text-xs text-slate-200">
+            {samsungLog.map((entry, index) => (
+              <div key={index} className="whitespace-pre-wrap break-words">
+                <span className="text-slate-500">{entry.time} </span>
+                {entry.message}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Bootloop Recovery — flash stock firmware to rescue a bootlooping device. */}
+      <section className="frpb-card p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+              <HardDrive className="h-4 w-4 text-slate-700" />
+              Bootloop Recovery
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Recover a device stuck in a bootloop by flashing known-good stock firmware.
+            </p>
+          </div>
+          {bootloopResult && (
+            <span
+              className={
+                bootloopResult.success
+                  ? "rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700"
+                  : "rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-700"
+              }
+            >
+              {bootloopResult.success ? "Recovered" : "Failed"}
+            </span>
+          )}
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label className="block text-xs font-semibold text-slate-700">
+            Chipset (optional)
+            <input
+              value={bootloopChipset}
+              onChange={(e) => setBootloopChipset(e.target.value)}
+              placeholder="e.g. Snapdragon 888"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-brand-400"
+            />
+          </label>
+          <label className="block text-xs font-semibold text-slate-700">
+            Firmware package
+            <select
+              value={bootloopFirmware?.id ?? ""}
+              onChange={(e) => {
+                const picked = firmwareCatalog.find((pkg) => pkg.id === e.target.value) ?? null;
+                setBootloopFirmware(picked);
+              }}
+              className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-brand-400"
+            >
+              <option value="">Select firmware…</option>
+              {firmwareCatalog.map((pkg) => (
+                <option key={pkg.id} value={pkg.id}>
+                  {pkg.brand} {pkg.model} · Android {pkg.androidVersion}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void handleLoadFirmwareCatalog()}
+            disabled={bootloopLoadingCatalog}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-brand-300 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {bootloopLoadingCatalog ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-500 border-t-transparent" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+            Load catalog
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleBootloopRecovery()}
+            disabled={busy || !isConnected || bootloopRunning}
+            className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {bootloopRunning ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            ) : (
+              <HardDrive className="h-4 w-4" />
+            )}
+            {bootloopConsented ? "Start Recovery" : "Review & Consent"}
+          </button>
+          {bootloopProgress && (
+            <span className="text-xs font-medium text-slate-500">
+              {bootloopProgress.stage} · {bootloopProgress.pct}%
+            </span>
+          )}
+        </div>
+
+        {bootloopProgress && (
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-brand-500 transition-all"
+              style={{ width: `${bootloopProgress.pct}%` }}
+            />
+          </div>
+        )}
+
+        {bootloopLog.length > 0 && (
+          <div className="mt-3 max-h-40 overflow-y-auto rounded-lg bg-slate-950 p-3 font-mono text-xs text-slate-200">
+            {bootloopLog.map((entry, index) => (
+              <div key={index} className="whitespace-pre-wrap break-words">
+                <span className="text-slate-500">{entry.time} </span>
+                {entry.message}
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Data Recovery — scan for recoverable files and extract the selection. */}
+      <section className="frpb-card p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+              <Database className="h-4 w-4 text-slate-700" />
+              Data Recovery
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Scan an owned device for recoverable files, then extract the selection to disk.
+            </p>
+          </div>
+          {dataRecoveryResult && (
+            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">
+              {dataRecoveryItems.length} item(s)
+            </span>
+          )}
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void handleDataRecovery()}
+            disabled={busy || !isConnected || dataRecoveryScanning}
+            className="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {dataRecoveryScanning ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+            Scan for files
+          </button>
+          {dataRecoveryProgress && (
+            <span className="text-xs font-medium text-slate-500">
+              {dataRecoveryProgress.stage} · {dataRecoveryProgress.pct}%
+            </span>
+          )}
+        </div>
+
+        {dataRecoveryProgress && (
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-brand-500 transition-all"
+              style={{ width: `${dataRecoveryProgress.pct}%` }}
+            />
+          </div>
+        )}
+
+        {dataRecoveryItems.length > 0 && (
+          <ul className="mt-4 max-h-56 space-y-1 overflow-y-auto">
+            {dataRecoveryItems.map((item) => (
+              <li
+                key={item.id}
+                className="flex items-center gap-3 rounded-lg border border-slate-100 px-3 py-2"
+              >
+                <input
+                  type="checkbox"
+                  checked={dataRecoverySelected.includes(item.id)}
+                  onChange={(e) =>
+                    setDataRecoverySelected((prev) =>
+                      e.target.checked ? [...prev, item.id] : prev.filter((id) => id !== item.id)
+                    )
+                  }
+                  className="h-4 w-4"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-slate-800">{item.name}</p>
+                  <p className="truncate text-xs text-slate-500">
+                    {item.category} · {(item.sizeBytes / (1024 * 1024)).toFixed(1)} MB
+                  </p>
+                </div>
+                <span
+                  className={
+                    item.recoverable
+                      ? "shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700"
+                      : "shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700"
+                  }
+                >
+                  {item.recoverable ? "Recoverable" : "Locked"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {dataRecoveryItems.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            <label className="block min-w-[14rem] flex-1 text-xs font-semibold text-slate-700">
+              Destination folder
+              <input
+                value={dataRecoveryDestPath}
+                onChange={(e) => setDataRecoveryDestPath(e.target.value)}
+                placeholder="C:\\Recovered"
+                className="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-normal text-slate-800 outline-none focus:border-brand-400"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void handleDataRecoveryExtract()}
+              disabled={busy || dataRecoverySelected.length === 0}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-brand-300 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <FolderOpen className="h-4 w-4" />
+              Extract {dataRecoverySelected.length > 0 ? `(${dataRecoverySelected.length})` : ""}
+            </button>
+            {dataRecoveryExtractResult && (
+              <span
+                className={
+                  dataRecoveryExtractResult.success
+                    ? "inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700"
+                    : "inline-flex items-center gap-1.5 text-xs font-medium text-rose-700"
+                }
+              >
+                <Download className="h-3.5 w-3.5" />
+                {dataRecoveryExtractResult.message}
+              </span>
+            )}
+          </div>
+        )}
+
+        {dataRecoveryLog.length > 0 && (
+          <div className="mt-3 max-h-40 overflow-y-auto rounded-lg bg-slate-950 p-3 font-mono text-xs text-slate-200">
+            {dataRecoveryLog.map((entry, index) => (
+              <div key={index} className="whitespace-pre-wrap break-words">
+                <span className="text-slate-500">{entry.time} </span>
+                {entry.message}
+              </div>
+            ))}
+          </div>
         )}
       </section>
 

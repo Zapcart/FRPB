@@ -11,6 +11,7 @@
 
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -20,6 +21,7 @@ import {
   Copy,
   Gift,
   Loader2,
+  LogIn,
   Share2,
   Sparkles,
   Trophy,
@@ -93,20 +95,44 @@ function formatUsd(cents: number): string {
   return `$${(value / 100).toFixed(2)}`;
 }
 
-/** Collapse leading slash-tolerant JSON send with a single retry-free fetch. */
-async function fetchJson<T>(input: string, init?: RequestInit): Promise<T | null> {
+/** Result of a referral API call: parsed data plus the raw HTTP status code. */
+interface FetchResult<T> {
+  data: T | null;
+  status: number;
+}
+
+/**
+ * Single retry-free JSON fetch that NEVER throws and NEVER blocks the UI:
+ * transport, parse and non-2xx failures collapse to `{ data: null, status }`.
+ * A 401 is treated as an expected "signed out" state (not logged as an error)
+ * so it cannot spam the console or surface as a hard error card.
+ */
+async function fetchJson<T>(input: string, init?: RequestInit): Promise<FetchResult<T>> {
   try {
     const response = await fetch(input, init);
     const payload = (await response.json().catch(() => null)) as ApiEnvelope<T> | null;
     if (!response.ok || !payload?.success) {
-      console.error("[referral/modal] request rejected:", response.status, payload);
-      return null;
+      if (response.status !== 401) {
+        console.error("[referral/modal] request rejected:", response.status, payload);
+      }
+      return { data: null, status: response.status };
     }
-    return (payload.data ?? null) as T | null;
+    return { data: (payload.data ?? null) as T | null, status: response.status };
   } catch (err) {
     console.error("[referral/modal] request threw:", input, err);
-    return null;
+    return { data: null, status: 0 };
   }
+}
+
+/** Build the sign-in URL, preserving the current page as the post-auth target. */
+function loginHref(): string {
+  const fallback = "/pricing";
+  if (typeof window === "undefined") {
+    return `/auth/login?redirect=${encodeURIComponent(fallback)}`;
+  }
+  const current = `${window.location.pathname}${window.location.search}`;
+  const target = current && current !== "/" ? current : fallback;
+  return `/auth/login?redirect=${encodeURIComponent(target)}`;
 }
 
 /** Render the Dr.Fone-style battery string: [ ▓▓▓▓▓░░░░░ ] 50% Unlocked. */
@@ -162,6 +188,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
   const [summary, setSummary] = useState<ReferralSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [unauthenticated, setUnauthenticated] = useState(false);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
@@ -175,7 +202,17 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
   const loadSummary = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    const data = await fetchJson<{ summary: ReferralSummary }>("/api/v1/referral/me");
+    setUnauthenticated(false);
+    const { data, status } = await fetchJson<{ summary: ReferralSummary }>(
+      "/api/v1/referral/me"
+    );
+    // 401 → the visitor is simply signed out: surface a sign-in CTA, not an error.
+    if (status === 401) {
+      setSummary(null);
+      setUnauthenticated(true);
+      setLoading(false);
+      return;
+    }
     if (!data?.summary) {
       setLoadError("We couldn't load your referral progress. Please try again.");
       setLoading(false);
@@ -261,7 +298,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
     const amountCents = Math.floor(dollars * 100);
 
     setBusy(true);
-    const data = await fetchJson<{ payoutId: string; balanceCents: number }>(
+    const { data, status } = await fetchJson<{ payoutId: string; balanceCents: number }>(
       "/api/v1/referral/payout",
       {
         method: "POST",
@@ -274,6 +311,12 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
       }
     );
     setBusy(false);
+
+    if (status === 401) {
+      setUnauthenticated(true);
+      setPayoutFeedback({ kind: "error", text: "Please sign in again to request a payout." });
+      return;
+    }
 
     if (!data) {
       setPayoutFeedback({
@@ -332,9 +375,29 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
         </div>
 
         <div className="space-y-5 px-5 py-5">
-          {loading && !summary ? (
+          {loading && !summary && !unauthenticated ? (
             <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
               <Loader2 className="h-4 w-4 animate-spin" /> Loading your progress…
+            </div>
+          ) : unauthenticated ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center">
+              <span className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-brand-50 text-brand-600">
+                <Share2 className="h-5 w-5" />
+              </span>
+              <p className="mt-3 text-sm font-semibold text-slate-900">
+                Sign in to get your referral link
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Your referral link, unlock progress and VIP cash balance are tied to
+                your account.
+              </p>
+              <Link
+                href={loginHref()}
+                onClick={onClose}
+                className="mt-4 inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-brand-600 px-5 text-sm font-semibold text-white transition hover:bg-brand-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+              >
+                <LogIn className="h-4 w-4" /> Sign in to continue
+              </Link>
             </div>
           ) : loadError ? (
             <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">

@@ -40,9 +40,12 @@ async function handleMe(): Promise<Response> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user?.email) {
+    // Expected unauthenticated state: a benign 401 the client treats as
+    // "signed out" (surfacing a sign-in CTA) rather than an error. Marked
+    // no-store so no edge/CDN layer can cache a stale auth rejection.
     return NextResponse.json<ReferralMeResponse>(
       { success: false, message: "Unauthorized" },
-      { status: 401 }
+      { status: 401, headers: { "Cache-Control": "private, no-store, max-age=0" } }
     );
   }
 
