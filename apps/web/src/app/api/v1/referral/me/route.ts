@@ -15,9 +15,9 @@
 //   - responses are never cached
 
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
-import { resolvePrismaUser } from "@/lib/auth/user-identity";
+import { upsertPrismaUser } from "@/lib/auth/user-identity";
 import { preflight, withCorsResponse } from "@/lib/cors";
 import type { ApiEnvelope } from "@frpb/shared";
 import { getReferralSummary, type ReferralSummary } from "@/lib/referral/service";
@@ -35,10 +35,36 @@ export async function GET() {
 }
 
 async function handleMe(): Promise<Response> {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Guarded BEFORE instantiation: `createClient()` throws synchronously when the
+  // Supabase env vars are absent (a misconfigured deployment / missing secret).
+  // Without this check that throw escaped the try/catch and surfaced as an
+  // uncaught 500; we now return a structured 503 the client renders as a
+  // transient "try again" state instead.
+  if (!isSupabaseConfigured()) {
+    console.error("[referral/me] Supabase is not configured; NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY are missing.");
+    return NextResponse.json<ReferralMeResponse>(
+      { success: false, message: "Referral service is temporarily unavailable. Please try again shortly." },
+      { status: 503, headers: { "Cache-Control": "private, no-store, max-age=0" } }
+    );
+  }
+
+  let user: { id: string; email?: string | null } | null = null;
+  try {
+    const supabase = createClient();
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
+    user = authUser;
+  } catch (err) {
+    // Auth-provider/network failure is not an unauthorized state — surface it as
+    // a transient 503 so the client retries rather than forcing a sign-in CTA.
+    console.error("[referral/me] failed to resolve Supabase session:", err);
+    return NextResponse.json<ReferralMeResponse>(
+      { success: false, message: "We couldn't verify your session right now. Please try again." },
+      { status: 503, headers: { "Cache-Control": "private, no-store, max-age=0" } }
+    );
+  }
+
   if (!user?.email) {
     // Expected unauthenticated state: a benign 401 the client treats as
     // "signed out" (surfacing a sign-in CTA) rather than an error. Marked
@@ -50,13 +76,11 @@ async function handleMe(): Promise<Response> {
   }
 
   try {
-    const appUser = await resolvePrismaUser(prisma, { id: user.id, email: user.email });
-    if (!appUser) {
-      return NextResponse.json<ReferralMeResponse>(
-        { success: false, message: "Account not found" },
-        { status: 404 }
-      );
-    }
+    // Auto-onboard: a signed-in user who has never purchased has no Prisma row
+    // yet. Upsert it on demand so referral onboarding never 404s for
+    // non-purchasing visitors (the identity module keeps exactly one row per
+    // Supabase account via the stable supabaseId key).
+    const appUser = await upsertPrismaUser(prisma, { id: user.id, email: user.email });
 
     const summary = await getReferralSummary(appUser.id);
     if (!summary) {

@@ -30,6 +30,7 @@ import {
   Zap,
 } from "lucide-react";
 import { startRazorpayCheckout } from "@/lib/razorpay/checkout-flow";
+import { createClient } from "@/lib/supabase/client";
 
 /* ------------------------------------------------------------------ types */
 
@@ -109,7 +110,10 @@ interface FetchResult<T> {
  */
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<FetchResult<T>> {
   try {
-    const response = await fetch(input, init);
+    const response = await fetch(input, {
+      credentials: "include",
+      ...init,
+    });
     const payload = (await response.json().catch(() => null)) as ApiEnvelope<T> | null;
     if (!response.ok || !payload?.success) {
       if (response.status !== 401) {
@@ -121,6 +125,24 @@ async function fetchJson<T>(input: string, init?: RequestInit): Promise<FetchRes
   } catch (err) {
     console.error("[referral/modal] request threw:", input, err);
     return { data: null, status: 0 };
+  }
+}
+
+/**
+ * Best-effort browser-side session refresh, mirroring dashboard/page.tsx.
+ * Returns true when a live session is confirmed (existing or refreshed).
+ */
+async function refreshSession(): Promise<boolean> {
+  try {
+    const client = createClient();
+    const { data } = await client.auth.getSession();
+    if (data.session) return true;
+    const { data: refreshed, error } = await client.auth.refreshSession();
+    if (error) return false;
+    return Boolean(refreshed.session);
+  } catch (err) {
+    console.error("[referral/modal] session refresh failed:", err);
+    return false;
   }
 }
 
@@ -203,22 +225,34 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
     setLoading(true);
     setLoadError(null);
     setUnauthenticated(false);
-    const { data, status } = await fetchJson<{ summary: ReferralSummary }>(
-      "/api/v1/referral/me"
-    );
-    // 401 → the visitor is simply signed out: surface a sign-in CTA, not an error.
-    if (status === 401) {
+    let result = await fetchJson<{ summary: ReferralSummary }>("/api/v1/referral/me");
+
+    // 401 → try a client-side session refresh once, then retry (aligns with dashboard/page.tsx).
+    if (result.status === 401 && (await refreshSession())) {
+      result = await fetchJson<{ summary: ReferralSummary }>("/api/v1/referral/me");
+    }
+
+    // Still 401 → the visitor is simply signed out: surface a sign-in CTA, not an error.
+    if (result.status === 401) {
       setSummary(null);
       setUnauthenticated(true);
       setLoading(false);
       return;
     }
-    if (!data?.summary) {
+    // 503 → transient backend/config issue: show a retryable message.
+    if (result.status === 503) {
+      setLoadError(
+        "The referral service is temporarily unavailable. Please try again in a moment."
+      );
+      setLoading(false);
+      return;
+    }
+    if (!result.data?.summary) {
       setLoadError("We couldn't load your referral progress. Please try again.");
       setLoading(false);
       return;
     }
-    setSummary(data.summary);
+    setSummary(result.data.summary);
     setLoading(false);
   }, []);
 
@@ -298,27 +332,43 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
     const amountCents = Math.floor(dollars * 100);
 
     setBusy(true);
-    const { data, status } = await fetchJson<{ payoutId: string; balanceCents: number }>(
+    const init: RequestInit = {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amountCents,
+        method,
+        destination: destination.trim() || undefined,
+      }),
+    };
+
+    let result = await fetchJson<{ payoutId: string; balanceCents: number }>(
       "/api/v1/referral/payout",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amountCents,
-          method,
-          destination: destination.trim() || undefined,
-        }),
-      }
+      init
     );
+
+    // Refresh-and-retry once on an expired session.
+    if (result.status === 401 && (await refreshSession())) {
+      result = await fetchJson<{ payoutId: string; balanceCents: number }>(
+        "/api/v1/referral/payout",
+        init
+      );
+    }
     setBusy(false);
 
-    if (status === 401) {
+    if (result.status === 401) {
       setUnauthenticated(true);
       setPayoutFeedback({ kind: "error", text: "Please sign in again to request a payout." });
       return;
     }
-
-    if (!data) {
+    if (result.status === 503) {
+      setPayoutFeedback({
+        kind: "error",
+        text: "The referral service is temporarily unavailable. Please try again shortly.",
+      });
+      return;
+    }
+    if (!result.data) {
       setPayoutFeedback({
         kind: "error",
         text: "Payout request could not be processed. Check your balance and try again.",
@@ -329,7 +379,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
     setDestination("");
     setPayoutFeedback({
       kind: "success",
-      text: `Payout requested. Remaining balance: ${formatUsd(data.balanceCents)}.`,
+      text: `Payout requested. Remaining balance: ${formatUsd(result.data.balanceCents)}.`,
     });
     await loadSummary();
   }

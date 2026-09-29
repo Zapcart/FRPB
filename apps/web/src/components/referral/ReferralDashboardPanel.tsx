@@ -18,6 +18,7 @@ import {
   Copy,
   Gift,
   Loader2,
+  LogIn,
   Share2,
   Sparkles,
   Trophy,
@@ -25,6 +26,7 @@ import {
   Zap,
 } from "lucide-react";
 import { startRazorpayCheckout } from "@/lib/razorpay/checkout-flow";
+import { createClient } from "@/lib/supabase/client";
 
 /* ------------------------------------------------------------------ types */
 
@@ -88,19 +90,52 @@ function formatUsd(cents: number): string {
   return `$${(value / 100).toFixed(2)}`;
 }
 
-/** Fetch a JSON envelope, returning `data` only on a successful response. */
-async function fetchJson<T>(input: string, init?: RequestInit): Promise<T | null> {
+/** Result of a referral API call, preserving the HTTP status for UI branching. */
+interface FetchResult<T> {
+  data: T | null;
+  status: number;
+}
+
+/**
+ * Fetch a JSON envelope, returning `data` only on a successful response.
+ * Always sends credentials so the Supabase auth cookie accompanies the request.
+ */
+async function fetchJson<T>(input: string, init?: RequestInit): Promise<FetchResult<T>> {
   try {
-    const response = await fetch(input, init);
+    const response = await fetch(input, {
+      credentials: "include",
+      ...init,
+    });
     const payload = (await response.json().catch(() => null)) as ApiEnvelope<T> | null;
     if (!response.ok || !payload?.success) {
-      console.error("[referral/panel] request rejected:", response.status, payload);
-      return null;
+      // 401 is an expected, user-recoverable state — don't spam the console.
+      if (response.status !== 401) {
+        console.error("[referral/panel] request rejected:", response.status, payload);
+      }
+      return { data: null, status: response.status };
     }
-    return (payload.data ?? null) as T | null;
+    return { data: (payload.data ?? null) as T | null, status: response.status };
   } catch (err) {
     console.error("[referral/panel] request threw:", input, err);
-    return null;
+    return { data: null, status: 0 };
+  }
+}
+
+/**
+ * Best-effort browser-side session refresh, mirroring dashboard/page.tsx.
+ * Returns true when a live session is confirmed (existing or refreshed).
+ */
+async function refreshSession(): Promise<boolean> {
+  try {
+    const client = createClient();
+    const { data } = await client.auth.getSession();
+    if (data.session) return true;
+    const { data: refreshed, error } = await client.auth.refreshSession();
+    if (error) return false;
+    return Boolean(refreshed.session);
+  } catch (err) {
+    console.error("[referral/panel] session refresh failed:", err);
+    return false;
   }
 }
 
@@ -155,6 +190,7 @@ export default function ReferralDashboardPanel({ email }: ReferralDashboardPanel
   const [summary, setSummary] = useState<ReferralSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [unauthenticated, setUnauthenticated] = useState(false);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
@@ -168,13 +204,36 @@ export default function ReferralDashboardPanel({ email }: ReferralDashboardPanel
   const loadSummary = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
-    const data = await fetchJson<{ summary: ReferralSummary }>("/api/v1/referral/me");
-    if (!data?.summary) {
+    setUnauthenticated(false);
+
+    let result = await fetchJson<{ summary: ReferralSummary }>("/api/v1/referral/me");
+
+    // On 401, try a client-side session refresh once, then retry (aligns with dashboard/page.tsx).
+    if (result.status === 401 && (await refreshSession())) {
+      result = await fetchJson<{ summary: ReferralSummary }>("/api/v1/referral/me");
+    }
+
+    if (result.status === 401) {
+      setUnauthenticated(true);
+      setLoading(false);
+      return;
+    }
+
+    if (result.status === 503) {
+      setLoadError(
+        "The referral service is temporarily unavailable. Please try again in a moment."
+      );
+      setLoading(false);
+      return;
+    }
+
+    if (!result.data?.summary) {
       setLoadError("We couldn't load your referral progress. Please try again later.");
       setLoading(false);
       return;
     }
-    setSummary(data.summary);
+
+    setSummary(result.data.summary);
     setLoading(false);
   }, []);
 
@@ -228,21 +287,43 @@ export default function ReferralDashboardPanel({ email }: ReferralDashboardPanel
     const amountCents = Math.floor(dollars * 100);
 
     setBusy(true);
-    const data = await fetchJson<{ payoutId: string; balanceCents: number }>(
+    const init: RequestInit = {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amountCents,
+        method,
+        destination: destination.trim() || undefined,
+      }),
+    };
+
+    let result = await fetchJson<{ payoutId: string; balanceCents: number }>(
       "/api/v1/referral/payout",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amountCents,
-          method,
-          destination: destination.trim() || undefined,
-        }),
-      }
+      init
     );
+
+    // Refresh-and-retry once on an expired session.
+    if (result.status === 401 && (await refreshSession())) {
+      result = await fetchJson<{ payoutId: string; balanceCents: number }>(
+        "/api/v1/referral/payout",
+        init
+      );
+    }
     setBusy(false);
 
-    if (!data) {
+    if (result.status === 401) {
+      setUnauthenticated(true);
+      setPayoutFeedback({ kind: "error", text: "Your session expired. Please sign in again." });
+      return;
+    }
+    if (result.status === 503) {
+      setPayoutFeedback({
+        kind: "error",
+        text: "The referral service is temporarily unavailable. Please try again shortly.",
+      });
+      return;
+    }
+    if (!result.data) {
       setPayoutFeedback({
         kind: "error",
         text: "Payout request could not be processed. Check your balance and try again.",
@@ -253,7 +334,7 @@ export default function ReferralDashboardPanel({ email }: ReferralDashboardPanel
     setDestination("");
     setPayoutFeedback({
       kind: "success",
-      text: `Payout requested. Remaining balance: ${formatUsd(data.balanceCents)}.`,
+      text: `Payout requested. Remaining balance: ${formatUsd(result.data.balanceCents)}.`,
     });
     await loadSummary();
   }
@@ -289,6 +370,22 @@ export default function ReferralDashboardPanel({ email }: ReferralDashboardPanel
         {loading && !summary ? (
           <div className="flex items-center justify-center gap-2 py-10 text-sm text-slate-500">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading your progress…
+          </div>
+        ) : unauthenticated ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center">
+            <LogIn className="mx-auto h-6 w-6 text-brand-600" />
+            <p className="mt-2 text-sm font-semibold text-slate-800">
+              Please sign in to view your referrals
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Your referral progress and earnings are tied to your account.
+            </p>
+            <a
+              href="/auth/login?redirect=/dashboard"
+              className="mt-4 inline-flex min-h-[40px] items-center gap-2 rounded-lg bg-brand-600 px-4 text-sm font-semibold text-white transition hover:bg-brand-700"
+            >
+              <LogIn className="h-4 w-4" /> Sign in
+            </a>
           </div>
         ) : loadError ? (
           <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
