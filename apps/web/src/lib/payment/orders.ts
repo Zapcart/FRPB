@@ -12,6 +12,10 @@
 //                       to the order so a re-verify is idempotent.
 //   4. SIGNATURE GATE — the gateway HMAC signature is verified server-side
 //                       before any license is granted (see lib/razorpay/server).
+//   5. REFERRAL SETTLE— a PAID order is attributed to the referral code it
+//                       carried and (for a $75 Lifetime order) unlocks the
+//                       buyer. Best-effort + idempotent: it can NEVER block or
+//                       roll back the license grant.
 
 import type { PrismaClient } from "@prisma/client";
 import { randomBytes } from "node:crypto";
@@ -21,7 +25,13 @@ import { sha256 } from "@/lib/crypto/sha256";
 import { generateLicenseKey } from "@/lib/license/generate";
 import { normalizeEmail } from "@/lib/auth/user-identity";
 import { hasSentLicenseEmail, sendLicenseEmail } from "@/lib/email/resend";
-import { dualAmount, getDualPlan, type DualCurrency } from "@/config/plans";
+import {
+  dualAmount,
+  getDualPlan,
+  isAllowedInrAmount,
+  isSanctionedUsdAmount,
+  type DualCurrency,
+} from "@/config/plans";
 
 /** Razorpay orders expire 10 minutes after creation. */
 export const ORDER_TTL_MS = 10 * 60 * 1000;
@@ -63,7 +73,7 @@ export async function expireStaleOrders(client: PrismaClient = prisma): Promise<
  * pointing at a valid Plan row whose stored prices match the tiers actually
  * charged (₹1,900 / ₹13,999).
  */
-async function ensurePlanRow(planSlug: PlanSlug, client: PrismaClient = prisma) {
+export async function ensurePlanRow(planSlug: PlanSlug, client: PrismaClient = prisma) {
   const existing = await client.plan.findUnique({ where: { slug: planSlug } });
   if (existing) return existing;
 
@@ -270,6 +280,15 @@ export async function grantLicenseForOrder(
  * never set the price. `amount` is stored in WHOLE major units (₹1,900 / $20),
  * the convention `admin-analytics` assumes when it buckets the live ledger.
  */
+/**
+ * Defense-in-depth sanction check for a supplied override amount. The checkout
+ * route already validates against the sanctioned set, but the lib re-checks so
+ * a buggy/compromised caller can never persist an arbitrary charge amount.
+ */
+function isSanctionedChargeAmount(amount: number, currency: DualCurrency): boolean {
+  return currency === "INR" ? isAllowedInrAmount(amount) : isSanctionedUsdAmount(amount);
+}
+
 export async function createRazorpayOrder(input: {
   planSlug: PlanSlug;
   email: string;
@@ -277,12 +296,32 @@ export async function createRazorpayOrder(input: {
   providerTxnId: string;
   /** Charge currency resolved + validated by the caller (defaults to INR). */
   currency?: DualCurrency;
+  /**
+   * Optional server-validated charge amount in whole major units. When present
+   * the caller (checkout) has already resolved a sanctioned amount — e.g. a
+   * referral-discounted $120 Lifetime price. It is re-sanctioned here as a
+   * defense-in-depth guard before persistence.
+   */
+  amount?: number;
+  /** Referral code redeemed at checkout (persisted for settlement accrual). */
+  referralCode?: string | null;
 }): Promise<{ orderId: string; amount: number; currency: DualCurrency; expiresAt: Date }> {
   const plan = getDualPlan(input.planSlug);
   if (!plan) throw new Error(`Unknown plan slug: ${input.planSlug}`);
 
   const currency: DualCurrency = input.currency ?? "INR";
-  const amount = dualAmount(plan, currency);
+  const tierAmount = dualAmount(plan, currency);
+  const amount =
+    typeof input.amount === "number" &&
+    Number.isFinite(input.amount) &&
+    isSanctionedChargeAmount(input.amount, currency)
+      ? input.amount
+      : tierAmount;
+
+  const referralCode =
+    typeof input.referralCode === "string" && input.referralCode.trim()
+      ? input.referralCode.trim().toUpperCase()
+      : null;
 
   const orderId = generateOrderId();
   const expiresAt = orderExpiry();
@@ -293,12 +332,16 @@ export async function createRazorpayOrder(input: {
       userId: input.userId ?? null,
       email: normalizeEmail(input.email),
       planId: plan.slug,
-      // Server-resolved tier rate for the requested currency — never from the
-      // client, and stored in whole major units.
+      // Server-resolved tier rate (or a sanctioned referral-discounted amount)
+      // for the requested currency — never from the client, stored in whole
+      // major units.
       amount,
       currency,
       provider: "RAZORPAY",
       status: "PENDING",
+      // Referral code redeemed at checkout, carried onto the order so the
+      // settlement seam can accrue the referral after payment is confirmed.
+      referralCode,
       // NOT confirmed at creation. A freshly created order is provably unpaid:
       // `paymentConfirmed` is flipped to true ONLY after a server-verified
       // Razorpay signal (the signed verify callback or the signed
@@ -314,9 +357,70 @@ export async function createRazorpayOrder(input: {
 }
 
 /**
+ * Best-effort referral settlement for an order that has just been marked PAID.
+ *
+ * Runs BOTH referral side effects this settlement seam owns:
+ *   • `recordReferralFromOrder` — attributes the order to its referral code,
+ *     creating the refund-locked PENDING Referral (and a PENDING Commission for
+ *     an already-unlocked VIP referrer);
+ *   • `handleDownsellUnlock` — unlocks the buyer immediately for a paid $75
+ *     Lifetime downsell, which carries no referral code.
+ *
+ * Both operations are individually idempotent (unique `referredUserId` +
+ * conditional unlock claim), so a duplicate verify callback or a retried
+ * webhook can never double-count.
+ *
+ * The referral service imports `ensurePlanRow` from THIS module, so a static
+ * import here would form a circular dependency. The dynamic `import()` defers
+ * loading until settlement time (after both modules are fully initialised),
+ * breaking the cycle. The whole block is wrapped so a referral failure is
+ * logged but can NEVER break license delivery.
+ */
+async function settleReferralForOrder(orderId: string): Promise<void> {
+  try {
+    const { recordReferralFromOrder, handleDownsellUnlock } = await import(
+      "@/lib/referral/service"
+    );
+
+    const result = await recordReferralFromOrder(orderId);
+    if (result.outcome === "recorded") {
+      console.info("[payment] referral recorded", {
+        orderId,
+        referralId: result.referralId,
+      });
+    } else if (result.outcome === "rejected_self_referral") {
+      console.warn("[payment] referral rejected (self-referral)", {
+        orderId,
+        referralId: result.referralId,
+        reasons: result.selfReferralReasons,
+      });
+    }
+
+    // Independent of code attribution: a full-price $75 Lifetime order has no
+    // referral code but still unlocks the buyer (no-op for every other plan).
+    const downsell = await handleDownsellUnlock(orderId);
+    if (downsell.unlocked) {
+      console.info("[payment] downsell unlock granted", {
+        orderId,
+        licenseId: downsell.licenseId,
+      });
+    }
+  } catch (err) {
+    console.error(
+      "[payment] referral settlement failed (license unaffected):",
+      (err as Error)?.message ?? err
+    );
+  }
+}
+
+/**
  * Mark a Razorpay order PAID after its signature-verified callback confirms
  * success, then grant the license. Idempotent: an already-PAID order is
  * returned untouched by the update guard.
+ *
+ * After the PAID transition it also runs best-effort referral settlement so
+ * BOTH confirmation paths (the signed verify callback and the signed
+ * `payment.captured` webhook) accrue referrals and downsell unlocks identically.
  */
 export async function markRazorpayOrderPaid(ref: {
   orderId?: string | null;
@@ -338,6 +442,10 @@ export async function markRazorpayOrderPaid(ref: {
       data: { status: "PAID", paidAt: new Date(), paymentConfirmed: true },
     });
   }
+
+  // Referral attribution + downsell unlock. Fully guarded and idempotent, so it
+  // is safe to run on every settlement (including an idempotent re-verify).
+  await settleReferralForOrder(order.orderId);
 
   return grantLicenseForOrder(order.orderId);
 }

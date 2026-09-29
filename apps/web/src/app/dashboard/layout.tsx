@@ -6,7 +6,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { ArrowRight, Download, LayoutDashboard } from "lucide-react";
+import { ArrowRight, Download, LayoutDashboard, Share2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import SignOutButton from "@/components/dashboard/sign-out-button";
@@ -117,6 +117,13 @@ export default async function DashboardLayout({
             className="flex min-h-[44px] touch-manipulation select-none items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition active:bg-slate-100 hover:bg-slate-100 hover:text-slate-900"
           >
             <ArrowRight className="h-4 w-4" /> Buy a new plan
+          </Link>
+          {/* In-page jump to the referral engine card (progress + VIP hub). */}
+          <Link
+            href="/dashboard#referral"
+            className="flex min-h-[44px] touch-manipulation select-none items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition active:bg-slate-100 hover:bg-slate-100 hover:text-slate-900"
+          >
+            <Share2 className="h-4 w-4" /> Refer & Earn
           </Link>
         </nav>
 

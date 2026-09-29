@@ -28,6 +28,7 @@ import type {
 import { resolveInstallerUrl } from "@/config/download";
 import { DUAL_PLANS, formatDualUsd } from "@/config/plans";
 import { createClient } from "@/lib/supabase/client";
+import ReferralDashboardPanel from "@/components/referral/ReferralDashboardPanel";
 
 interface LicenseWithDevices extends ListLicensesItem {
   devices: DashboardDeviceItem[];
@@ -310,6 +311,9 @@ export default function DashboardPage() {
           </p>
         </div>
 
+        {/* Referral engine: gamified unlock progress + VIP cash affiliate hub. */}
+        <ReferralDashboardPanel />
+
         <PlanChooser open={chooserOpen} onClose={() => setChooserOpen(false)} />
       </div>
     );
@@ -494,6 +498,9 @@ export default function DashboardPage() {
         Need another activation? Unbind a device above to free a slot — the same machine can
         re-activate anytime.
       </p>
+
+      {/* Referral engine: gamified unlock progress + VIP cash affiliate hub. */}
+      <ReferralDashboardPanel />
 
       <PlanChooser open={chooserOpen} onClose={() => setChooserOpen(false)} />
     </div>

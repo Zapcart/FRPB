@@ -1,0 +1,80 @@
+// FRPB — GET /api/v1/referral/me
+//
+// Authenticated. Returns the caller's full gamified-referral dashboard payload:
+// referral code + share link, the live unlock progress (Route A / Route B),
+// pending vs qualified counts, VIP cash balance and payout history.
+//
+// This is the single read model the Referral Modal / Battery Progress Bar /
+// VIP Cash Affiliate Hub render from. It NEVER mutates referral state — all
+// writes flow through the dedicated POST routes (or payment settlement).
+//
+// Security mirrors license/reveal:
+//   - requires a validated Supabase session (getUser, server-side JWT check)
+//   - the subject is the canonical Prisma user (supabaseId → normalized email),
+//     never a client-supplied id
+//   - responses are never cached
+
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { prisma } from "@/lib/prisma";
+import { resolvePrismaUser } from "@/lib/auth/user-identity";
+import { preflight, withCorsResponse } from "@/lib/cors";
+import type { ApiEnvelope } from "@frpb/shared";
+import { getReferralSummary, type ReferralSummary } from "@/lib/referral/service";
+
+export const dynamic = "force-dynamic";
+
+export const OPTIONS = preflight;
+
+export interface ReferralMeResponse extends ApiEnvelope {
+  data?: { summary: ReferralSummary };
+}
+
+export async function GET() {
+  return withCorsResponse(await handleMe());
+}
+
+async function handleMe(): Promise<Response> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user?.email) {
+    return NextResponse.json<ReferralMeResponse>(
+      { success: false, message: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
+  try {
+    const appUser = await resolvePrismaUser(prisma, { id: user.id, email: user.email });
+    if (!appUser) {
+      return NextResponse.json<ReferralMeResponse>(
+        { success: false, message: "Account not found" },
+        { status: 404 }
+      );
+    }
+
+    const summary = await getReferralSummary(appUser.id);
+    if (!summary) {
+      return NextResponse.json<ReferralMeResponse>(
+        { success: false, message: "Account not found" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json<ReferralMeResponse>(
+      { success: true, data: { summary } },
+      {
+        status: 200,
+        headers: { "Cache-Control": "private, no-store, max-age=0" },
+      }
+    );
+  } catch (err) {
+    console.error("[referral/me] failed to load summary:", err);
+    return NextResponse.json<ReferralMeResponse>(
+      { success: false, message: "We couldn't load your referral data right now. Please try again." },
+      { status: 503 }
+    );
+  }
+}

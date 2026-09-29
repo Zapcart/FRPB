@@ -35,7 +35,7 @@ export const metadata = {
 const PLAN_SLUGS = new Set<string>(PLANS.map((plan) => plan.slug));
 
 interface CheckoutPageProps {
-  searchParams?: { plan?: string; currency?: string };
+  searchParams?: { plan?: string; currency?: string; ref?: string };
 }
 
 export default async function CheckoutPage({ searchParams }: CheckoutPageProps) {
@@ -48,12 +48,20 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
     redirect("/pricing");
   }
 
+  // Referral code from a share link. Passed through untouched — the server
+  // sanitizes + resolves it, so untrusted input never affects pricing directly.
+  const referralCode = searchParams?.ref?.trim() || null;
+
   // Never throws: null simply means "guest checkout", which Razorpay supports.
   const user = await getOptionalUser();
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6 py-16">
-      <CheckoutPanel planSlug={planSlug} email={user?.email ?? null} />
+      <CheckoutPanel
+        planSlug={planSlug}
+        email={user?.email ?? null}
+        referralCode={referralCode}
+      />
     </main>
   );
 }

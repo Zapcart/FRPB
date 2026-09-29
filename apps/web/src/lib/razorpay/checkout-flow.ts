@@ -26,6 +26,19 @@ export interface StartCheckoutParams {
   planSlug: string;
   /** Buyer email — bound to the license server-side. */
   email?: string | null;
+  /**
+   * Referral code redeemed from a share link (`?ref=CODE`). Sent to the server
+   * so the invited-friend discount (20% off Lifetime) is applied server-side and
+   * the referral is attributed to its owner. Never trusted client-side.
+   */
+  referralCode?: string | null;
+  /**
+   * Partial-credit downsell intent. When true, the server charges the
+   * sanctioned 50% Lifetime price ($75) — but ONLY after it independently
+   * re-validates `isDownsellEligible(userId)` (exactly 1/2 Lifetime referrals
+   * and not yet unlocked). The client hint is never trusted on its own.
+   */
+  downsell?: boolean;
   /** Called when the customer closes the Razorpay modal without paying. */
   onDismiss?: () => void;
 }
@@ -63,7 +76,9 @@ function errorMessage(payload: unknown, fallback: string): string {
 /** Create the Razorpay order server-side. Returns a failure result on error. */
 async function createOrder(
   planSlug: string,
-  email: string | null
+  email: string | null,
+  referralCode: string | null,
+  downsell: boolean
 ): Promise<
   | { ok: true; orderId: string; amount: number; currency: string }
   | { ok: false; message: string }
@@ -77,6 +92,8 @@ async function createOrder(
         planId: planSlug,
         userEmail: email ?? undefined,
         currency: CHECKOUT_CURRENCY,
+        referralCode: referralCode ?? undefined,
+        downsell: downsell || undefined,
       }),
     });
   } catch (err) {
@@ -181,7 +198,12 @@ export async function startRazorpayCheckout(
     };
   }
 
-  const order = await createOrder(plan.slug, params.email ?? null);
+  const order = await createOrder(
+    plan.slug,
+    params.email ?? null,
+    params.referralCode ?? null,
+    params.downsell === true
+  );
   if (!order.ok) return { status: "failed", message: order.message };
 
   let RazorpayCtor;

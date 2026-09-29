@@ -19,6 +19,18 @@ const SocialUpdatesWidget = dynamic(
   { ssr: false }
 );
 
+// Referral promo card + modal, code-split the same way. It self-gates on
+// sessionStorage dismissal and resolves the buyer session server-side.
+const FloatingPromoWidget = dynamic(
+  () => import("@/components/referral/FloatingPromoWidget"),
+  { ssr: false }
+);
+
 export default function FloatingWidgets() {
-  return <SocialUpdatesWidget />;
+  return (
+    <>
+      <SocialUpdatesWidget />
+      <FloatingPromoWidget />
+    </>
+  );
 }

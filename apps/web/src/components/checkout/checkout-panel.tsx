@@ -19,11 +19,14 @@ interface CheckoutPanelProps {
   planSlug: PlanSlug;
   /** Signed-in buyer email (optional — Razorpay collects it when absent). */
   email?: string | null;
+  /** Referral code from a share link (`?ref=`) — applied server-side. */
+  referralCode?: string | null;
 }
 
 export default function CheckoutPanel({
   planSlug,
   email = null,
+  referralCode = null,
 }: CheckoutPanelProps) {
   const router = useRouter();
   const [processing, setProcessing] = useState(false);
@@ -56,6 +59,7 @@ export default function CheckoutPanel({
     const result = await startRazorpayCheckout({
       planSlug: plan!.slug,
       email,
+      referralCode,
       onDismiss: () => setNotice("Checkout closed — no payment was taken."),
     });
 

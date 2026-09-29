@@ -194,6 +194,30 @@ export function isAllowedAmount(amount: number, currency: DualCurrency): boolean
   return currency === "INR" ? isAllowedInrAmount(amount) : isAllowedUsdAmount(amount);
 }
 
+// ─── Referral-discounted amount locks (Task J) ───────────────────────────────
+//
+// The referral engine lets invited friends buy the Lifetime plan at 20% OFF
+// ($150 → $120) and grants a 50% partial-credit downsell ($75). These are the
+// ONLY additional USD price points the storefront may ever charge, and they are
+// enforced server-side here — a client can never invent its own discounted amount.
+
+/** Sanctioned referral-discounted USD price points ($120 lifetime / $75 downsell). */
+export const REFERRAL_USD_AMOUNTS: ReadonlySet<number> = new Set([120, 75]);
+
+/** True when `amount` is a sanctioned referral-discounted USD price point. */
+export function isReferralUsdAmount(amount: number): boolean {
+  return REFERRAL_USD_AMOUNTS.has(amount);
+}
+
+/**
+ * True when `amount` is any USD price the storefront may charge — either a
+ * standard tier rate ($20 / $150) or a sanctioned referral-discounted point
+ * ($120 / $75).
+ */
+export function isSanctionedUsdAmount(amount: number): boolean {
+  return isAllowedUsdAmount(amount) || isReferralUsdAmount(amount);
+}
+
 // ─── Formatting ──────────────────────────────────────────────────────────────
 
 /** "₹1,900" — Indian digit grouping, no decimals. */

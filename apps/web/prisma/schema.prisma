@@ -57,11 +57,23 @@ model User {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
+  // ─── Referral / affiliate state (Task J) ───
+  isLifetimeUnlocked Boolean      @default(false) // gamified FREE $150 unlock reached
+  unlockRoute        UnlockRoute? // which route (or downsell) unlocked it
+  unlockedAt         DateTime?
+  cashBalanceCents   Int          @default(0) // released affiliate cash available for payout
+
   licenses   License[]
   payments   Payment[]
   frpRequests FrpUnlockRequest[]
   paymentOrders PaymentOrder[]
   pageViews   PageView[]
+
+  referralCode      ReferralCode?  @relation("UserReferralCode")
+  referralsMade     Referral[]     @relation("ReferralReferrer")
+  referredBy        Referral?      @relation("ReferralReferred")
+  commissions       Commission[]
+  payoutRequests    PayoutRequest[]
 }
 
 // ─── Plans ────────────────────────────────────────────────
@@ -147,11 +159,17 @@ model PaymentOrder {
   paymentConfirmed Boolean @default(false)
   utrSuspicious    Boolean @default(false)
 
+  // ─── Referral capture (Task J) ───
+  // The referral code entered at checkout, persisted BEFORE payment so it can be
+  // attributed to the referrer at settlement (markRazorpayOrderPaid / webhook).
+  referralCode String?
+
   @@index([status, expiresAt])
   @@index([email])
   @@index([provider, status])
   @@index([paymentConfirmed, status])
   @@index([utrSuspicious])
+  @@index([referralCode])
 }
 
 // ─── Hardware-bound devices ───────────────────────────────
@@ -295,4 +313,128 @@ model PageView {
   @@index([createdAt])
   @@index([visitorHash, createdAt])
   @@index([userId])
+}
+
+// ─── Referral / Gamified Unlock / VIP Cash Affiliate (Task J) ───
+//
+// WHY THIS EXISTS: the growth engine rewards users for referring friends with a
+// FREE $150 Lifetime unlock (gamified battery bar) and, once unlocked, a VIP cash
+// affiliate program. Money is always stored as INTEGER CENTS to avoid float drift.
+// Referral credits/commissions stay PENDING for a 14-day refund-lock window before
+// they can be released or cashed out — this defends against chargeback/refund
+// exploits. Self-referral is blocked via IP-hash + visitorHash + email signals.
+
+enum UnlockRoute {
+  ROUTE_A // 2 × Lifetime referrals ($240 upfront)
+  ROUTE_B // 4 × Monthly + 1 × Lifetime referral ($200 upfront)
+  DOWNSELL // partial credit: 50% ($75) discount accepted before full unlock
+}
+
+enum ReferralStatus {
+  PENDING // recorded, pending 14-day refund lock
+  QUALIFIED // verified paid + past refund window
+  REJECTED // refunded / fraudulent / self-referral
+}
+
+enum CommissionKind {
+  MONTHLY_RECURRING // 30% of a referred $20/mo sale
+  LIFETIME_UPFRONT // 50% of a referred $150 lifetime sale
+}
+
+enum CommissionStatus {
+  PENDING // within 14-day refund lock
+  RELEASED // credited to referrer cash balance
+  REJECTED // reversed (refund / fraud)
+}
+
+enum PayoutStatus {
+  REQUESTED
+  PROCESSING
+  PAID
+  REJECTED
+}
+
+/// One shareable code per user. `code` is unique so a race cannot mint dupes.
+model ReferralCode {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  userId    String   @unique
+  user      User     @relation("UserReferralCode", fields: [userId], references: [id], onDelete: Cascade)
+  active    Boolean  @default(true)
+  uses      Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  referrals Referral[]
+
+  @@index([userId])
+}
+
+/// A single referral event: referrer invited (and referred user purchased with)
+/// `code`. `referredUserId` is unique — a buyer can only ever be referred once.
+model Referral {
+  id             String         @id @default(cuid())
+  codeId         String
+  code           ReferralCode   @relation(fields: [codeId], references: [id], onDelete: Cascade)
+  referrerId     String
+  referrer       User           @relation("ReferralReferrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  referredUserId String         @unique
+  referredUser   User           @relation("ReferralReferred", fields: [referredUserId], references: [id], onDelete: Cascade)
+  planId         PlanType
+  amountPaidCents Int           @default(0) // actual charged (post-discount) cents
+  discountCents  Int            @default(0) // discount applied to referred buyer
+  selfReferral   Boolean        @default(false) // fraud flag
+  ipHash         String? // salted SHA-256 of referrer/referred IP (fraud signal)
+  visitorHash    String? // salted device/UA fingerprint (fraud signal)
+  qualifiesUnlock Boolean       @default(false) // counts toward Route A/B unlock
+  status         ReferralStatus @default(PENDING)
+  releaseAt      DateTime // paidAt + 14-day refund lock
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  commissions Commission[]
+
+  @@index([referrerId, status])
+  @@index([codeId])
+  @@index([status, releaseAt])
+}
+
+/// Immutable cash-commission ledger. `@@unique([referralId, kind])` guarantees a
+/// given referral can never accrue the same kind of commission twice (idempotency).
+model Commission {
+  id         String           @id @default(cuid())
+  userId     String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referralId String
+  referral   Referral         @relation(fields: [referralId], references: [id], onDelete: Cascade)
+  kind       CommissionKind
+  baseCents  Int // the referred sale amount the rate applies to
+  rateBps    Int // rate in basis points (3000 = 30%, 5000 = 50%)
+  amountCents Int // computed payout (base * rate / 10000)
+  status     CommissionStatus @default(PENDING)
+  releaseAt  DateTime // paidAt + 14-day refund lock
+  releasedAt DateTime?
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@unique([referralId, kind])
+  @@index([userId, status])
+  @@index([status, releaseAt])
+}
+
+/// A cash-out request against a user's released balance.
+model PayoutRequest {
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountCents Int
+  method      String       @default("UPI")
+  destination String? // payout handle/account reference
+  status      PayoutStatus @default(REQUESTED)
+  note        String?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([userId, status])
+  @@index([status, createdAt])
 }
