@@ -139,6 +139,29 @@ async function refreshSession(): Promise<boolean> {
   }
 }
 
+/**
+ * Resolve a usable referral share link from the API payload.
+ *
+ * The server returns `link` (absolute) whenever the site URL env is configured,
+ * but a freshly-onboarded user can briefly race code issuance. We therefore
+ * fall back to building an equivalent `/checkout?ref=` link from `code` alone,
+ * and finally to the current origin — so the field never sticks on "Generating…".
+ */
+function resolveReferralLink(summary: {
+  link: string | null;
+  code: string | null;
+}): string | null {
+  const direct = summary.link?.trim();
+  if (direct) return direct;
+  const code = summary.code?.trim();
+  if (!code) return null;
+  const origin =
+    typeof window !== "undefined" && window.location.origin
+      ? window.location.origin
+      : "";
+  return `${origin}/checkout?ref=${encodeURIComponent(code)}`;
+}
+
 /** Render the Dr.Fone-style battery string: [ ▓▓▓▓▓░░░░░ ] 50% Unlocked. */
 function batteryBar(percent: number, segments = 10): string {
   const cells = Math.max(1, Math.floor(segments));
@@ -227,13 +250,26 @@ export default function ReferralDashboardPanel({ email }: ReferralDashboardPanel
       return;
     }
 
-    if (!result.data?.summary) {
+    let summary = result.data?.summary;
+    if (!summary) {
       setLoadError("We couldn't load your referral progress. Please try again later.");
       setLoading(false);
       return;
     }
 
-    setSummary(result.data.summary);
+    // Defensive: a brand-new account can momentarily race the server-side code
+    // issuance. If the code is missing, retry exactly once after a short delay so
+    // the share-link field resolves instead of sticking on "Generating…". The
+    // loading flag is always cleared below regardless of the retry outcome.
+    if (!summary.code) {
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      const retry = await fetchJson<{ summary: ReferralSummary }>("/api/v1/referral/me");
+      if (retry.data?.summary) {
+        summary = retry.data.summary;
+      }
+    }
+
+    setSummary(summary);
     setLoading(false);
   }, []);
 
@@ -242,11 +278,12 @@ export default function ReferralDashboardPanel({ email }: ReferralDashboardPanel
   }, [loadSummary]);
 
   const progress = summary?.progress;
+  const referralLink = summary ? resolveReferralLink(summary) : null;
 
   async function handleCopyLink() {
-    if (!summary?.link) return;
+    if (!referralLink) return;
     try {
-      await navigator.clipboard.writeText(summary.link);
+      await navigator.clipboard.writeText(referralLink);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -402,7 +439,7 @@ export default function ReferralDashboardPanel({ email }: ReferralDashboardPanel
               <div className="flex items-center gap-2">
                 <input
                   readOnly
-                  value={summary.link ?? "Generating…"}
+                  value={referralLink ?? "Generating…"}
                   onFocus={(e) => e.currentTarget.select()}
                   aria-label="Your referral link"
                   className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
@@ -410,7 +447,7 @@ export default function ReferralDashboardPanel({ email }: ReferralDashboardPanel
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  disabled={!summary.link}
+                  disabled={!referralLink}
                   className="inline-flex min-h-[40px] shrink-0 items-center gap-1.5 rounded-lg bg-brand-600 px-3 text-xs font-semibold text-white transition hover:bg-brand-700 disabled:opacity-50"
                 >
                   {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}

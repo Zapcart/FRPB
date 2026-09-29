@@ -236,7 +236,24 @@ export async function getReferralSummary(
   });
   if (!user) return null;
 
-  const codeRow = await prisma.referralCode.findUnique({ where: { userId } });
+  // Lazily issue the caller's referral code so a freshly-onboarded user (upserted
+  // by /api/v1/referral/me) always has a code + share link on the very first read.
+  // `getOrCreateReferralCode` is idempotent by `ReferralCode.userId @unique`, so
+  // this never mints a duplicate — it either returns the existing row or creates
+  // exactly one. A transient failure degrades to `code: null` rather than
+  // throwing the whole summary away.
+  let codeRow: { code: string } | null = null;
+  try {
+    codeRow = await getOrCreateReferralCode(userId);
+  } catch (err) {
+    console.error(
+      "[referral] failed to ensure referral code for summary",
+      (err as Error)?.message ?? err
+    );
+    codeRow = await prisma.referralCode
+      .findUnique({ where: { userId } })
+      .catch(() => null);
+  }
 
   const referrals = await prisma.referral.findMany({
     where: { referrerId: userId },

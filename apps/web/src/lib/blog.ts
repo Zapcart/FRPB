@@ -91,11 +91,15 @@ export interface BlogPost {
 import { MODEL_GUIDES } from "./blog-guides";
 import { ANDROID_MODEL_GUIDES } from "./blog-android-guides";
 import { IPHONE_GUIDES } from "./blog-iphone-guides";
+// Tool + system-mode corpus, generated from FREE_TOOLS / UNLOCK_TOOLS in
+// @frpb/shared so each blog guide can never drift from its landing page.
+import { TOOL_AND_MODE_GUIDES } from "./blog-tool-guides";
 
 export const BLOG_POSTS: readonly BlogPost[] = [
   ...MODEL_GUIDES,
   ...ANDROID_MODEL_GUIDES,
   ...IPHONE_GUIDES,
+  ...TOOL_AND_MODE_GUIDES,
   {
     slug: "how-to-bypass-samsung-frp-2026",
     title: "How to Bypass Samsung FRP in 2026: Step-by-Step Guide",
