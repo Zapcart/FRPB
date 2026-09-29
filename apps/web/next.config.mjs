@@ -103,6 +103,16 @@ const nextConfig = {
       },
     ];
   },
+  // Cloudflare Pages enforces a 25MB cap on the persisted build cache; the
+  // default production webpack cache (webpack 5 filesystem cache) exceeds it
+  // and fails the deploy. Disabling the cache in production keeps the build
+  // output compact. Development keeps its in-memory cache for fast HMR.
+  webpack: (config, { dev }) => {
+    if (!dev) {
+      config.cache = false;
+    }
+    return config;
+  },
 };
 
 export default nextConfig;
