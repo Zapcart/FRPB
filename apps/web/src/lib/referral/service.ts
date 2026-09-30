@@ -317,10 +317,13 @@ export async function getReferralSummary(
   return {
     userId,
     code,
+    // Share links land on the public marketing home (`https://frpb.in/?ref=CODE`)
+    // so a referred visitor can browse and sign up first; the ?ref= is captured
+    // site-wide (ReferralCapture → cookie + localStorage) and re-applied at
+    // checkout. Deep-linking straight to /checkout would bounce a signed-out
+    // visitor and drop the attribution.
     link:
-      base && code
-        ? `${base}/checkout?ref=${encodeURIComponent(code)}`
-        : null,
+      base && code ? `${base}/?ref=${encodeURIComponent(code)}` : null,
     isLifetimeUnlocked: user.isLifetimeUnlocked,
     unlockRoute: user.unlockRoute ?? null,
     unlockedAt: user.unlockedAt ? user.unlockedAt.toISOString() : null,

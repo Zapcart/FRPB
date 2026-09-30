@@ -11,6 +11,8 @@ import { createClient } from "@/lib/supabase/client";
 import { PLANS, formatMoney, priceFor } from "@frpb/shared";
 import posthog from "posthog-js";
 import { isPostHogEnabled } from "@/app/providers";
+import { readPendingPlan } from "@/lib/checkout/pending-plan";
+import { normalizeRefCode } from "@/lib/referral/ref-capture";
 
 interface AuthViewProps {
   initialMode: "signin" | "signup";
@@ -22,6 +24,25 @@ interface AuthViewProps {
    * Validated against the canonical plan list before display.
    */
   selectedPlan?: string | null;
+  /**
+   * Referral code captured from `?ref=` on a share link (already normalized
+   * server-side). When present, a freshly-authenticated referred visitor is
+   * forwarded to checkout with the code attached so attribution is preserved.
+   */
+  referralCode?: string | null;
+}
+
+/**
+ * Append a `ref` query parameter to an internal path, preserving any existing
+ * query string and hash fragment. Used to re-attach referral attribution when
+ * honouring a caller-supplied `returnTo`.
+ */
+function appendRef(path: string, ref: string): string {
+  const hashIndex = path.indexOf("#");
+  const base = hashIndex === -1 ? path : path.slice(0, hashIndex);
+  const hash = hashIndex === -1 ? "" : path.slice(hashIndex);
+  const separator = base.includes("?") ? "&" : "?";
+  return `${base}${separator}ref=${encodeURIComponent(ref)}${hash}`;
 }
 
 /** Where to send the user after a successful authentication. */
@@ -31,6 +52,7 @@ export default function AuthView({
   initialMode,
   returnTo,
   selectedPlan = null,
+  referralCode = null,
 }: AuthViewProps) {
   // Only render a badge for a real plan slug — never echo arbitrary query input.
   const badgePlan = PLANS.find((p) => p.slug === selectedPlan) ?? null;
@@ -85,26 +107,44 @@ export default function AuthView({
       posthog.capture("user_logged_in", { method: "email_password", mode });
     }
 
-    // Session is set — always land on the dashboard.
-    //
-    // We deliberately DO NOT auto-resume checkout here. Even if a pending plan
-    // exists in storage (the visitor clicked a pricing card before signing in),
-    // a freshly-authenticated user must land on `/dashboard`, never straight on
-    // the $20 payment page. The dashboard surfaces a plan chooser for users
-    // without an active license, so purchase intent is preserved without
-    // hijacking the redirect.
-    //
+    // Re-validate the referral code on the client (defense in depth) so a
+    // malformed value can never be reflected into the destination URL.
+    const ref = normalizeRefCode(referralCode);
+
     // A caller-supplied `returnTo` is honoured only when it is an in-app path
     // that is not itself a checkout route (the server already sanitizes it and
-    // defaults it to `/dashboard`).
-    const destination =
-      returnTo && !returnTo.startsWith("/checkout")
-        ? returnTo
-        : DASHBOARD_PATH;
+    // defaults it to `/dashboard`). When a referral code is present we re-attach
+    // it so attribution survives the round trip.
+    if (returnTo && !returnTo.startsWith("/checkout")) {
+      // Use router.push (not window.location.href) so Next.js handles the
+      // transition without a full reload that could drop session cookies.
+      router.push(ref ? appendRef(returnTo, ref) : returnTo);
+      return;
+    }
 
-    // Use router.push (not window.location.href) so Next.js handles the
-    // transition without a full reload that could drop session cookies.
-    router.push(destination);
+    // Referred visitor arriving through a share link: forward them to the
+    // checkout step for the plan they had picked, with the referral code
+    // attached. This is an intentional forward for a referral-driven signup —
+    // NOT a silent auto-resume of the $20 payment page — so both the chosen
+    // plan and the attribution are preserved.
+    const pending = readPendingPlan();
+    if (ref && pending) {
+      router.push(
+        `/checkout?plan=${encodeURIComponent(
+          pending.planSlug
+        )}&currency=${encodeURIComponent(pending.currency)}&ref=${encodeURIComponent(
+          ref
+        )}`
+      );
+      return;
+    }
+
+    // Everyone else lands on the dashboard. We deliberately DO NOT auto-resume
+    // checkout here: a freshly-authenticated user must land on `/dashboard`,
+    // never straight on the payment page. The dashboard surfaces a plan chooser
+    // for users without an active license, so purchase intent is preserved
+    // without hijacking the redirect.
+    router.push(DASHBOARD_PATH);
   }
 
   return (

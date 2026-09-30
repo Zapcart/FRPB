@@ -5,6 +5,7 @@
 import AuthShell from "@/components/auth/auth-shell";
 import AuthView from "@/components/auth/auth-view";
 import { safeReturnTo } from "@/lib/auth/return-to";
+import { normalizeRefCode } from "@/lib/referral/ref-capture";
 import { pageMetadata } from "@/lib/seo";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export const metadata = {
 };
 
 interface RegisterPageProps {
-  searchParams?: { returnTo?: string; callbackUrl?: string };
+  searchParams?: { returnTo?: string; callbackUrl?: string; ref?: string };
 }
 
 export default async function RegisterPage({ searchParams }: RegisterPageProps) {
@@ -29,9 +30,13 @@ export default async function RegisterPage({ searchParams }: RegisterPageProps) 
     searchParams?.returnTo ?? searchParams?.callbackUrl
   );
 
+  // Normalize the referral code so untrusted query input is never echoed
+  // verbatim; the capture island on this route persists it for checkout.
+  const ref = normalizeRefCode(searchParams?.ref);
+
   return (
     <AuthShell>
-      <AuthView initialMode="signup" returnTo={returnTo} />
+      <AuthView initialMode="signup" returnTo={returnTo} referralCode={ref} />
     </AuthShell>
   );
 }

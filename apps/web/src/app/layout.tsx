@@ -11,6 +11,7 @@ import { Inter } from "next/font/google";
 import { SessionProvider } from "@/components/session-provider";
 import FloatingWidgets from "@/components/floating-widgets";
 import PageViewTracker from "@/components/analytics/page-view-tracker";
+import ReferralCapture from "@/components/referral/ReferralCapture";
 import { PostHogProvider } from "./providers";
 import {
   SITE_URL,
@@ -97,6 +98,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen bg-white font-sans text-slate-900 antialiased">
         <PostHogProvider>
           <SessionProvider>{children}</SessionProvider>
+          {/* Captures a ?ref= referral code from ANY landing route and persists
+              it (cookie + localStorage) for the later checkout. Renders null. */}
+          <ReferralCapture />
           {/* First-party page-view beacon → admin "VISITORS (30D)" metric. */}
           <PageViewTracker />
           {/* Site-wide floating widgets (bottom-right), both code-split with

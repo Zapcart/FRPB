@@ -160,10 +160,11 @@ function loginHref(): string {
 /**
  * Resolve a usable referral share link from the API payload.
  *
- * The server returns `link` (absolute) whenever the site URL env is configured,
+ * The server returns `link` (absolute, pointing at the public marketing home,
+ * e.g. `https://frpb.in/?ref=CODE`) whenever the site URL env is configured,
  * but a freshly-onboarded user can briefly race code issuance. We therefore
- * fall back to building an equivalent `/checkout?ref=` link from `code` alone
- * so the field never sticks on "Generating…".
+ * fall back to building an equivalent `/?ref=` home link from `code` alone so
+ * the field never sticks on "Generating…".
  */
 function resolveReferralLink(summary: {
   link: string | null;
@@ -177,7 +178,7 @@ function resolveReferralLink(summary: {
     typeof window !== "undefined" && window.location.origin
       ? window.location.origin
       : "";
-  return `${origin}/checkout?ref=${encodeURIComponent(code)}`;
+  return `${origin}/?ref=${encodeURIComponent(code)}`;
 }
 
 /** Render the Dr.Fone-style battery string: [ ▓▓▓▓▓░░░░░ ] 50% Unlocked. */
