@@ -88,7 +88,7 @@ export default function SocialUpdatesWidget() {
         role="dialog"
         aria-label="FRPB community links"
         aria-hidden={!open}
-        className={`w-80 max-w-[calc(100vw-2.5rem)] origin-bottom-right overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5 transition-all duration-200 ease-out ${
+        className={`glass-panel-strong w-80 max-w-[calc(100vw-2.5rem)] origin-bottom-right overflow-hidden rounded-2xl transition-all duration-200 ease-out ${
           open
             ? "pointer-events-auto translate-y-0 scale-100 opacity-100"
             : "pointer-events-none translate-y-2 scale-95 opacity-0"
@@ -116,7 +116,7 @@ export default function SocialUpdatesWidget() {
         </div>
 
         {/* White action section */}
-        <div className="space-y-2.5 bg-white p-4">
+        <div className="space-y-2.5 p-4">
           {SOCIAL_LINKS.map(({ label, href, icon: Icon, className }) => {
             const isDisabled = !href;
             return (

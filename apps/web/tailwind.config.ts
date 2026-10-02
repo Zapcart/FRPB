@@ -57,6 +57,21 @@ const config: Config = {
           700: "#1d1d23",
           600: "#26262e",
         },
+        // 2026 glass system: light translucent tints painted OVER the white
+        // canvas. Alpha-tuned so text still clears WCAG AA on the composite.
+        glass: {
+          DEFAULT: "rgba(255, 255, 255, 0.62)",
+          soft: "rgba(255, 255, 255, 0.44)",
+          strong: "rgba(255, 255, 255, 0.80)",
+          tint: "rgba(240, 246, 255, 0.55)",
+          border: "rgba(255, 255, 255, 0.70)",
+          edge: "rgba(15, 23, 42, 0.08)",
+        },
+      },
+      borderRadius: {
+        // Extra-large glass radii (rounded-3xl also works, this is the named step).
+        "4xl": "2rem",
+        "5xl": "2.5rem",
       },
       fontFamily: {
         sans: [
@@ -85,6 +100,13 @@ const config: Config = {
         "glow-sm": "0 0 0 1px rgba(0,102,255,0.28), 0 0 24px -4px rgba(0,102,255,0.55)",
         "glow-lg": "0 0 0 1px rgba(0,163,255,0.35), 0 0 70px -12px rgba(0,102,255,0.75)",
         "cyan-glow": "0 20px 60px -18px rgba(0,163,255,0.6)",
+        // Light-canvas glass elevation: soft cool-tinted drop + inner top highlight.
+        "glass-light":
+          "0 1px 2px rgba(15,23,42,0.04), 0 12px 32px -12px rgba(15,23,42,0.16), inset 0 1px 0 0 rgba(255,255,255,0.70)",
+        "glass-light-hover":
+          "0 2px 6px rgba(15,23,42,0.06), 0 24px 56px -18px rgba(15,23,42,0.22), inset 0 1px 0 0 rgba(255,255,255,0.85)",
+        "glass-light-float":
+          "0 24px 70px -20px rgba(15,23,42,0.30), 0 2px 8px rgba(15,23,42,0.06), inset 0 1px 0 0 rgba(255,255,255,0.90)",
       },
       backgroundImage: {
         // Light surfaces (kept for pricing/dashboard parity).
@@ -106,6 +128,14 @@ const config: Config = {
         // Hero: soft radial ripple core (centre-anchored, fades to transparent).
         "hero-ripple":
           "radial-gradient(circle at 50% 38%, rgba(0,102,255,0.16) 0%, rgba(0,163,255,0.08) 34%, transparent 68%)",
+        // 2026 light canvas: soft, airy aurora mesh painted behind frosted panels.
+        "aurora-mesh":
+          "radial-gradient(42% 38% at 12% 8%, rgba(0,102,255,0.16) 0%, transparent 62%), radial-gradient(46% 42% at 88% 4%, rgba(0,163,255,0.14) 0%, transparent 64%), radial-gradient(50% 46% at 72% 88%, rgba(139,92,246,0.12) 0%, transparent 66%), radial-gradient(40% 36% at 18% 92%, rgba(0,163,255,0.10) 0%, transparent 60%)",
+        "canvas-mesh":
+          "radial-gradient(60% 50% at 50% 0%, rgba(0,102,255,0.08) 0%, transparent 70%), radial-gradient(45% 40% at 80% 20%, rgba(0,163,255,0.07) 0%, transparent 65%)",
+        // Light sheen sweep painted onto frosted panels / buttons.
+        "glass-sheen-light":
+          "linear-gradient(135deg, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0.15) 42%, transparent 100%)",
       },
       backgroundSize: {
         "grid-60": "60px 60px",
@@ -172,6 +202,12 @@ const config: Config = {
           "0%": { transform: "rotate(0deg)" },
           "100%": { transform: "rotate(360deg)" },
         },
+        // Diagonal light sheen sweeping across glass panels (subtle, long loop).
+        sheen: {
+          "0%": { transform: "translateX(-140%) skewX(-16deg)", opacity: "0" },
+          "18%": { opacity: "0.85" },
+          "100%": { transform: "translateX(220%) skewX(-16deg)", opacity: "0" },
+        },
       },
       animation: {
         float: "float 7s ease-in-out infinite",
@@ -188,6 +224,7 @@ const config: Config = {
         "bounce-slow": "bounce-slow 4.5s ease-in-out infinite",
         marquee: "marquee 34s linear infinite",
         "spin-slow": "spin-slow 28s linear infinite",
+        sheen: "sheen 6s ease-in-out infinite",
       },
     },
   },

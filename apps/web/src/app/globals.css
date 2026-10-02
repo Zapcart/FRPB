@@ -5,6 +5,19 @@
 @layer base {
   :root {
     color-scheme: light;
+    /* Glass system: blur strength lives in a variable so the mobile budget
+       below can dial it down without touching every primitive. */
+    --glass-blur: 20px;
+    --glass-blur-strong: 28px;
+  }
+
+  /* Mobile blur budget: lighter radii keep the compositor within a sane GPU
+     fill-rate on low-power devices while preserving the frosted look. */
+  @media (max-width: 640px) {
+    :root {
+      --glass-blur: 12px;
+      --glass-blur-strong: 16px;
+    }
   }
 
   html {
@@ -60,6 +73,21 @@
 
   ::selection {
     @apply bg-brand-500/20 text-brand-800;
+  }
+
+  /* Keyboard-accessibility fallback: guarantee a visible focus ring on any
+     interactive element that doesn't already declare its own. Explicit utility
+     rings (e.g. `focus-visible:ring-2`) win on specificity, so existing
+     component focus styles are preserved untouched. */
+  a:focus-visible,
+  button:focus-visible,
+  [role="button"]:focus-visible,
+  summary:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid #0066ff; /* brand-500 */
+    outline-offset: 2px;
   }
 }
 
@@ -212,6 +240,175 @@
   .hero-tag {
     @apply pointer-events-none absolute hidden select-none items-center gap-2 rounded-2xl border border-white/70 bg-white/80 px-3.5 py-2.5 shadow-card backdrop-blur-xl sm:flex;
   }
+
+  /* ---------- Light-canvas glass system (2026) ---------- */
+
+  /* Sticky frosted navigation bar floating over the light canvas. */
+  .glass-nav {
+    @apply border-b border-glass-edge bg-glass-strong;
+    backdrop-filter: saturate(180%) blur(var(--glass-blur));
+    -webkit-backdrop-filter: saturate(180%) blur(var(--glass-blur));
+  }
+
+  /* Primary frosted panel (cards, auth, pricing, dashboard tiles). */
+  .glass-panel {
+    @apply rounded-3xl border border-glass-edge bg-glass shadow-glass-light;
+    backdrop-filter: saturate(150%) blur(var(--glass-blur));
+    -webkit-backdrop-filter: saturate(150%) blur(var(--glass-blur));
+  }
+
+  /* Denser panel for content that needs stronger contrast behind it. */
+  .glass-panel-strong {
+    @apply rounded-3xl border border-glass-edge bg-glass-strong shadow-glass-light;
+    backdrop-filter: saturate(160%) blur(var(--glass-blur-strong));
+    -webkit-backdrop-filter: saturate(160%) blur(var(--glass-blur-strong));
+  }
+
+  /* Low-key frosted surface for nested/inset blocks. */
+  .glass-surface {
+    @apply rounded-2xl border border-glass-edge/70 bg-glass-soft shadow-glass-light;
+    backdrop-filter: saturate(140%) blur(var(--glass-blur));
+    -webkit-backdrop-filter: saturate(140%) blur(var(--glass-blur));
+  }
+
+  /* Elevated floating glass (widgets, popovers, toasts). */
+  .glass-float {
+    @apply rounded-2xl border border-white/60 bg-glass-strong shadow-glass-light-float;
+    backdrop-filter: saturate(160%) blur(var(--glass-blur-strong));
+    -webkit-backdrop-filter: saturate(160%) blur(var(--glass-blur-strong));
+  }
+
+  /* Frosted form control that lifts to solid white on focus. */
+  .glass-input {
+    @apply w-full rounded-xl border border-glass-edge bg-glass-soft px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-brand-400 focus:bg-white/90 focus:ring-4 focus:ring-brand-500/15;
+    box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  /* Hairline gradient rule used between glass sections. */
+  .glass-divider {
+    @apply h-px w-full border-0 bg-gradient-to-r from-transparent via-slate-300/70 to-transparent;
+  }
+
+  /* Animated light sweep for frosted panels/CTAs (fades on hover). */
+  .glass-sheen {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .glass-sheen::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 42%;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.55) 50%,
+      transparent 100%
+    );
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .glass-sheen:hover::after {
+    animation: frpb-sheen 1.1s ease-in-out;
+  }
+
+  /* ---------- Accessibility: glass contrast safeguards ---------- */
+
+  /* Muted text on a frosted (near-white) surface is raised one step so it still
+     clears WCAG AA (>= 4.5:1) regardless of what the blur samples behind it.
+     Scoped to the glass primitives so solid-canvas typography is untouched. */
+  .glass-nav :is(.text-slate-300, .text-slate-400, .text-gray-300, .text-gray-400),
+  .glass-panel :is(.text-slate-300, .text-slate-400, .text-gray-300, .text-gray-400),
+  .glass-panel-strong :is(.text-slate-300, .text-slate-400, .text-gray-300, .text-gray-400),
+  .glass-surface :is(.text-slate-300, .text-slate-400, .text-gray-300, .text-gray-400),
+  .glass-float :is(.text-slate-300, .text-slate-400, .text-gray-300, .text-gray-400) {
+    color: #64748b; /* slate-500 — AA on the glass fill */
+  }
+
+  /* Placeholders likewise step up to an accessible tone on frosted inputs. */
+  .glass-input::placeholder {
+    color: #64748b; /* slate-500 */
+    opacity: 1;
+  }
+
+  /* ---------- Performance: backdrop-filter budget ---------- */
+
+  /* A frosted surface nested inside an already-blurred parent incurs a second
+     (redundant) blur pass — the most GPU-costly pattern. Drop the inner pass;
+     the parent's blur already frosts the child. */
+  .glass-nav .glass-surface,
+  .glass-panel .glass-surface,
+  .glass-panel-strong .glass-surface,
+  .glass-surface .glass-surface {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  @media (max-width: 640px) {
+    /* On low-power devices also trim nested floating surfaces and any inline
+       Tailwind blur layered inside a frosted panel. */
+    .glass-nav .glass-float,
+    .glass-panel .glass-float,
+    .glass-panel-strong .glass-float,
+    .glass-surface .glass-float,
+    .glass-panel .backdrop-blur,
+    .glass-panel-strong .backdrop-blur {
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+  }
+
+  /* Respect the OS-level "reduce transparency" preference: replace blur with a
+     near-opaque fill (also a fill-rate win on constrained devices). */
+  @media (prefers-reduced-transparency: reduce) {
+    .glass-nav,
+    .glass-panel,
+    .glass-panel-strong,
+    .glass-surface,
+    .glass-float,
+    .glass-input {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
+    .glass-nav,
+    .glass-panel,
+    .glass-panel-strong,
+    .glass-surface,
+    .glass-float {
+      background-color: rgba(255, 255, 255, 0.96);
+    }
+  }
+}
+
+/* Progressive enhancement: where backdrop-filter is unavailable, fall back to
+   near-opaque fills so text contrast never depends on a blur that won't render. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-nav {
+    background-color: rgba(255, 255, 255, 0.96);
+  }
+  .glass-panel {
+    background-color: rgba(255, 255, 255, 0.94);
+  }
+  .glass-panel-strong {
+    background-color: rgba(255, 255, 255, 0.97);
+  }
+  .glass-surface {
+    background-color: rgba(255, 255, 255, 0.92);
+  }
+  .glass-float {
+    background-color: rgba(255, 255, 255, 0.97);
+  }
+  .glass-input {
+    background-color: rgba(255, 255, 255, 0.95);
+  }
 }
 
 @keyframes frpb-shine {
@@ -224,6 +421,20 @@
   }
   100% {
     transform: translateX(240%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
+@keyframes frpb-sheen {
+  0% {
+    transform: translateX(-140%) skewX(-16deg);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.85;
+  }
+  100% {
+    transform: translateX(220%) skewX(-16deg);
     opacity: 0;
   }
 }

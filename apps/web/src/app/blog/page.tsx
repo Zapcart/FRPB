@@ -76,7 +76,7 @@ export default function BlogIndexPage() {
         )}
       />
 
-      <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/85 backdrop-blur-xl">
+      <header className="glass-nav sticky top-0 z-50">
         <nav className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2.5">
             <span className="text-lg font-extrabold tracking-tight text-ink">FRPB</span>

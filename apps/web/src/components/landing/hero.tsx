@@ -132,7 +132,7 @@ export default function Hero({ downloadUrl, metrics }: HeroProps) {
           {/* ---- Left column: copy + CTAs + trust (7/12) ---- */}
           <div className="lg:col-span-7 lg:pr-6">
             {/* Hero pill badge */}
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-semibold text-slate-600 shadow-sm animate-fade-up">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-glass-edge bg-glass-strong px-4 py-1.5 text-xs font-semibold text-slate-600 shadow-glass-light backdrop-blur animate-fade-up">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-400 opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-accent-500" />
@@ -169,7 +169,7 @@ export default function Hero({ downloadUrl, metrics }: HeroProps) {
               {HERO_CHIPS.map((chip) => (
                 <span
                   key={chip}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-[11px] font-semibold text-slate-600 shadow-sm backdrop-blur"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-glass-edge/70 bg-glass-soft px-3 py-1 text-[11px] font-semibold text-slate-600 shadow-glass-light backdrop-blur"
                 >
                   <Check className="h-3 w-3 text-brand-500" />
                   {chip}
@@ -224,9 +224,9 @@ export default function Hero({ downloadUrl, metrics }: HeroProps) {
             </div>
 
             <div className="glass-hero relative">
-              <div className="overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white/70 shadow-card backdrop-blur-xl">
+              <div className="overflow-hidden rounded-[2rem] border border-glass-edge bg-glass shadow-glass-light backdrop-blur-2xl">
                 {/* Card header */}
-                <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 bg-white/60 px-5 py-4">
+                <div className="flex items-center justify-between gap-3 border-b border-glass-edge/70 bg-glass-soft px-5 py-4">
                   <div className="flex items-center gap-2.5">
                     <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-accent-500 text-white shadow-blue-glow">
                       <Smartphone className="h-4 w-4" />
@@ -249,7 +249,7 @@ export default function Hero({ downloadUrl, metrics }: HeroProps) {
                   {MODE_CHIPS.map((chip) => (
                     <div
                       key={chip.label}
-                      className="rounded-2xl border border-slate-200/80 bg-white/80 p-3 text-center shadow-sm"
+                      className="glass-surface p-3 text-center"
                     >
                       <chip.icon className={`mx-auto h-4 w-4 ${chip.tint}`} />
                       <p className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
@@ -262,7 +262,7 @@ export default function Hero({ downloadUrl, metrics }: HeroProps) {
 
                 {/* Stylized device preview */}
                 <div className="p-5">
-                  <div className="rounded-2xl border border-slate-200/80 bg-gradient-to-b from-slate-50 to-white p-4 shadow-sm">
+                  <div className="glass-surface bg-gradient-to-b from-slate-50/80 to-white/70 p-4">
                     <div className="flex items-center gap-3">
                       <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-emerald-200 bg-emerald-50">
                         <Smartphone className="h-5 w-5 text-emerald-600" />
@@ -336,7 +336,7 @@ export default function Hero({ downloadUrl, metrics }: HeroProps) {
           {stats.map((stat) => (
             <div
               key={stat.label}
-              className="flex items-center gap-3 rounded-2xl border border-slate-200/80 bg-white/80 px-5 py-4 shadow-sm transition-all hover:shadow-md"
+              className="glass-surface flex items-center gap-3 px-5 py-4 transition duration-300 hover:-translate-y-0.5 hover:border-white/80 hover:shadow-glass-light-hover"
             >
               <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border ${stat.tint}`}>
                 <stat.icon className="h-5 w-5" />
@@ -363,7 +363,7 @@ export default function Hero({ downloadUrl, metrics }: HeroProps) {
                 {MARQUEE_BADGES.map((badge) => (
                   <span
                     key={`${copy}-${badge}`}
-                    className="inline-flex shrink-0 items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-4 py-2 text-xs font-semibold text-slate-500 shadow-sm backdrop-blur"
+                    className="inline-flex shrink-0 items-center gap-2 rounded-full border border-glass-edge/70 bg-glass-soft px-4 py-2 text-xs font-semibold text-slate-500 shadow-glass-light backdrop-blur"
                   >
                     <Check className="h-3.5 w-3.5 text-brand-500" />
                     {badge}

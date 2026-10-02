@@ -348,10 +348,7 @@ export default function DashboardPage() {
       </h2>
 
       {licenses.map((lic) => (
-        <section
-          key={lic.id}
-          className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card"
-        >
+        <section key={lic.id} className="glass-panel-strong p-6">
           {/* License header */}
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
@@ -383,7 +380,7 @@ export default function DashboardPage() {
                     type="button"
                     onClick={() => void handleReveal(lic.id)}
                     disabled={revealing === lic.id}
-                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:border-brand-300 hover:text-brand-600 disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-lg border border-glass-edge bg-glass-soft px-2.5 py-1 text-xs font-semibold text-slate-600 backdrop-blur transition hover:border-brand-300 hover:text-brand-600 disabled:opacity-50"
                   >
                     {revealing === lic.id ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -401,10 +398,10 @@ export default function DashboardPage() {
               )}
               <div className="mt-3 flex flex-wrap gap-2 text-xs">
                 <StatusPill status={lic.status} />
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-500">
+                <span className="rounded-full border border-glass-edge bg-glass-soft px-3 py-1 text-slate-500 backdrop-blur">
                   Expires: {lic.expiresAt ? new Date(lic.expiresAt).toLocaleDateString() : "Never"}
                 </span>
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-500">
+                <span className="rounded-full border border-glass-edge bg-glass-soft px-3 py-1 text-slate-500 backdrop-blur">
                   {lic.devicesUsed}/{lic.deviceLimit} devices in use
                 </span>
               </div>
@@ -444,18 +441,18 @@ export default function DashboardPage() {
               <Smartphone className="h-4 w-4 text-slate-400" /> Bound devices
             </h3>
             {lic.devices.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500">
+              <p className="rounded-xl border border-dashed border-glass-edge bg-glass-soft px-4 py-6 text-center text-sm text-slate-500 backdrop-blur">
                 No devices bound yet. Launch FRPB and activate your license to bind this machine.
               </p>
             ) : (
-              <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <ul className="glass-surface divide-y divide-glass-edge overflow-hidden rounded-xl">
                 {lic.devices.map((d) => (
                   <li
                     key={d.id}
-                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 transition hover:bg-slate-50"
+                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 transition hover:bg-white/70"
                   >
                     <div className="flex items-center gap-3">
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-slate-200 bg-slate-50">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-glass-edge bg-glass-soft">
                         <Monitor className="h-4 w-4 text-slate-500" />
                       </span>
                       <div>
@@ -493,7 +490,7 @@ export default function DashboardPage() {
         </section>
       ))}
 
-      <p className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-500">
+      <p className="glass-surface flex items-start gap-2 rounded-xl px-4 py-3 text-xs text-slate-500">
         <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
         Need another activation? Unbind a device above to free a slot — the same machine can
         re-activate anytime.
@@ -528,7 +525,7 @@ function PlanChooser({ open, onClose }: { open: boolean; onClose: () => void }) 
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-xl"
+        className="glass-panel-strong w-full max-w-2xl rounded-2xl p-6 shadow-xl"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -541,7 +538,7 @@ function PlanChooser({ open, onClose }: { open: boolean; onClose: () => void }) 
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/70 hover:text-slate-600"
           >
             <X className="h-5 w-5" />
           </button>
@@ -554,7 +551,9 @@ function PlanChooser({ open, onClose }: { open: boolean; onClose: () => void }) 
               <div
                 key={plan.slug}
                 className={`flex flex-col rounded-2xl border p-5 ${
-                  highlighted ? "border-brand-300 bg-brand-50/50" : "border-slate-200 bg-white"
+                  highlighted
+                    ? "border-brand-300 bg-glass-soft ring-1 ring-brand-500/20 backdrop-blur"
+                    : "border-glass-edge bg-glass-soft backdrop-blur"
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
@@ -628,7 +627,7 @@ function LicensesSkeleton() {
   return (
     <div className="space-y-6" aria-busy="true" aria-label="Loading your licenses">
       <div className="h-6 w-52 animate-pulse rounded-lg bg-slate-200" />
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
+      <div className="glass-panel rounded-2xl p-6">
         <div className="space-y-3">
           <div className="h-3 w-24 animate-pulse rounded bg-slate-200" />
           <div className="h-6 w-64 animate-pulse rounded bg-slate-200" />
@@ -654,7 +653,7 @@ function EmptyState({
 }) {
   const ctaClass = "btn-accent mt-6 px-6 py-2.5 text-sm font-bold text-white";
   return (
-    <div className="flex flex-col items-center rounded-2xl border border-dashed border-slate-300 bg-white py-20 text-center">
+    <div className="glass-panel flex flex-col items-center rounded-2xl border-dashed py-20 text-center">
       {icon}
       <h2 className="mt-4 text-xl font-bold text-slate-900">{title}</h2>
       <p className="mt-2 max-w-md text-sm text-slate-500">{body}</p>

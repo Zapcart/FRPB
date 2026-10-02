@@ -26,11 +26,20 @@ const FloatingPromoWidget = dynamic(
   { ssr: false }
 );
 
+// Scroll-triggered signup nudge (10s dwell + 200px scroll). It self-gates to
+// the landing route, skips authenticated visitors, and honours a persisted
+// localStorage dismissal, so mounting it here is inert everywhere else.
+const ScrollSignupModal = dynamic(
+  () => import("@/components/ScrollSignupModal"),
+  { ssr: false }
+);
+
 export default function FloatingWidgets() {
   return (
     <>
       <SocialUpdatesWidget />
       <FloatingPromoWidget />
+      <ScrollSignupModal />
     </>
   );
 }

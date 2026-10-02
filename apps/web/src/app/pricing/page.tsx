@@ -209,8 +209,13 @@ export default function PricingPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-white text-slate-900">
-      <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
+    <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-white text-slate-900">
+      {/* Soft aurora canvas so the frosted pricing panels read as glass. */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10 bg-canvas-mesh"
+      />
+      <header className="glass-nav sticky top-0 z-50">
         <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2.5">
             {/* next/image with explicit intrinsic dimensions — fixes the CLS
@@ -263,10 +268,10 @@ export default function PricingPage() {
             return (
               <div
                 key={card.slug}
-                className={`relative flex flex-col rounded-2xl border bg-white p-8 transition duration-300 ${
+                className={`glass-panel-strong relative flex flex-col p-8 transition duration-300 hover:-translate-y-1 ${
                   popular
-                    ? "border-brand-200 shadow-xl shadow-brand-500/10 ring-1 ring-brand-500/40"
-                    : "border-slate-200 shadow-card hover:shadow-card-hover"
+                    ? "border-brand-300 ring-1 ring-brand-500/20 hover:shadow-glass-light-hover"
+                    : "hover:border-white/80 hover:shadow-glass-light-hover"
                 }`}
               >
                 {popular && (
@@ -352,7 +357,7 @@ export default function PricingPage() {
           {TRUST_BADGES.map((badge) => (
             <div
               key={badge.title}
-              className="rounded-2xl border border-slate-200 bg-white p-5 shadow-card transition hover:shadow-card-hover"
+              className="glass-surface p-5 transition duration-300 hover:-translate-y-0.5 hover:border-white/80 hover:shadow-glass-light-hover"
             >
               <span className="mb-3 grid h-10 w-10 place-items-center rounded-xl bg-brand-50 text-brand-600">
                 <badge.icon className="h-5 w-5" />
@@ -377,8 +382,8 @@ export default function PricingPage() {
               return (
                 <div
                   key={faq.q}
-                  className={`overflow-hidden rounded-2xl border bg-white transition ${
-                    open ? "border-brand-200 shadow-card" : "border-slate-200"
+                  className={`glass-surface overflow-hidden transition ${
+                    open ? "border-brand-300 ring-1 ring-brand-500/20" : ""
                   }`}
                 >
                   <button
@@ -427,7 +432,7 @@ export default function PricingPage() {
         />
       </main>
 
-      <footer className="border-t border-slate-200 bg-slate-50/70 px-6 py-8 text-center text-sm text-slate-500">
+      <footer className="border-t border-glass-edge bg-glass-soft px-6 py-8 text-center text-sm text-slate-500 backdrop-blur">
         {/* DPDP / legal disclaimer — site-wide small print. */}
         <p className="mx-auto max-w-4xl text-xs leading-relaxed text-slate-400">
           {LEGAL_DISCLAIMER}

@@ -82,7 +82,7 @@ export default function Footer() {
   ];
 
   return (
-    <footer id="eula" className="relative border-t border-white/10 bg-black text-slate-400">
+    <footer id="eula" className="relative border-t border-glass-edge bg-glass-soft text-slate-500 backdrop-blur">
       <div className="mx-auto max-w-7xl px-6 py-16">
         <div className="grid gap-12 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
           {/* Brand column */}
@@ -94,12 +94,12 @@ export default function Footer() {
                 width={72}
                 height={72}
                 loading="lazy"
-                className="h-9 w-9 shrink-0 rounded-xl object-cover ring-1 ring-white/10"
+                className="h-9 w-9 shrink-0 rounded-xl object-cover ring-1 ring-glass-edge"
               />
-              <span className="text-lg font-extrabold tracking-tight text-white">FRPB</span>
+              <span className="text-lg font-extrabold tracking-tight text-slate-900">FRPB</span>
             </Link>
 
-            <p className="mt-4 max-w-xs text-sm font-semibold leading-relaxed text-slate-200">
+            <p className="mt-4 max-w-xs text-sm font-semibold leading-relaxed text-slate-700">
               Creativity & Unlocking Simplified!
             </p>
             <p className="mt-3 max-w-xs text-xs leading-relaxed text-slate-500">
@@ -116,7 +116,7 @@ export default function Footer() {
                   aria-label={label}
                   target={href.startsWith("http") ? "_blank" : undefined}
                   rel={href.startsWith("http") ? "noopener noreferrer" : undefined}
-                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300 transition hover:-translate-y-0.5 hover:border-white/20 hover:bg-white/10 hover:text-white"
+                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-glass-edge bg-glass-soft text-slate-600 shadow-glass-light transition hover:-translate-y-0.5 hover:border-white/80 hover:bg-white/70 hover:text-slate-900"
                 >
                   <Icon className="h-4 w-4" />
                 </a>
@@ -127,13 +127,13 @@ export default function Footer() {
           {/* Content columns */}
           {columns.map((column) => (
             <div key={column.heading}>
-              <h4 className="text-sm font-bold text-white">{column.heading}</h4>
+              <h4 className="text-sm font-bold text-slate-900">{column.heading}</h4>
               <ul className="mt-4 space-y-2.5 text-sm">
                 {column.links.map((item) => (
                   <li key={item.label}>
                     <Link
                       href={item.href}
-                      className="text-slate-400 transition hover:text-white"
+                      className="text-slate-500 transition hover:text-slate-900"
                     >
                       {item.label}
                     </Link>
@@ -145,17 +145,17 @@ export default function Footer() {
         </div>
 
         {/* Legal / DPDP disclaimer — site-wide small print. */}
-        <p className="mt-12 max-w-4xl text-xs leading-relaxed text-slate-600">
+        <p className="mt-12 max-w-4xl text-xs leading-relaxed text-slate-500">
           {LEGAL_DISCLAIMER}
         </p>
 
         {/* Bottom bar */}
-        <div className="mt-8 flex flex-col items-center justify-between gap-5 border-t border-white/10 pt-8 lg:flex-row">
+        <div className="mt-8 flex flex-col items-center justify-between gap-5 border-t border-glass-edge pt-8 lg:flex-row">
           <div className="text-center lg:text-left">
             <p className="text-xs text-slate-500">
               Copyright © {year} FRPB. All rights reserved.
             </p>
-            <p className="mt-1 text-xs text-slate-600">
+            <p className="mt-1 text-xs text-slate-500">
               Operated by {COMPANY_ENTITY} · {COMPANY_ADDRESS}
             </p>
           </div>
@@ -164,13 +164,13 @@ export default function Footer() {
             aria-label="Legal policies"
             className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-slate-400"
           >
-            <Link href="/terms" className="transition hover:text-white">
+            <Link href="/terms" className="transition hover:text-slate-900">
               Terms & Conditions
             </Link>
-            <Link href="/privacy" className="transition hover:text-white">
+            <Link href="/privacy" className="transition hover:text-slate-900">
               Privacy Policy
             </Link>
-            <Link href="/refund" className="transition hover:text-white">
+            <Link href="/refund" className="transition hover:text-slate-900">
               Refund Policy
             </Link>
           </nav>
@@ -178,7 +178,7 @@ export default function Footer() {
           <div className="flex flex-wrap items-center justify-center gap-4">
             <a
               href={mailtoHref(LEGAL_EMAIL)}
-              className="flex items-center gap-1.5 text-xs text-slate-500 transition hover:text-white"
+              className="flex items-center gap-1.5 text-xs text-slate-500 transition hover:text-slate-900"
             >
               <ShieldCheck className="h-3.5 w-3.5" />
               {LEGAL_EMAIL}
@@ -190,10 +190,10 @@ export default function Footer() {
               <select
                 aria-label="Select language"
                 defaultValue="en"
-                className="appearance-none rounded-lg border border-white/10 bg-white/[0.04] py-1.5 pl-8 pr-8 text-xs text-slate-300 outline-none transition hover:border-white/20 focus:border-white/30"
+                className="appearance-none rounded-lg border border-glass-edge bg-glass-soft py-1.5 pl-8 pr-8 text-xs text-slate-600 outline-none backdrop-blur transition hover:border-white/80 focus:border-brand-300"
               >
                 {LANGUAGES.map((language) => (
-                  <option key={language.value} value={language.value} className="bg-neutral-900">
+                  <option key={language.value} value={language.value} className="bg-white">
                     {language.label}
                   </option>
                 ))}

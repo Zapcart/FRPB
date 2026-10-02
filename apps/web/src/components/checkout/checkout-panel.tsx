@@ -37,7 +37,7 @@ export default function CheckoutPanel({
 
   if (!plan) {
     return (
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-card">
+      <div className="glass-panel-strong w-full max-w-md rounded-2xl p-8 text-center">
         <h1 className="text-lg font-bold text-slate-900">Plan unavailable</h1>
         <p className="mt-2 text-sm text-slate-500">
           We could not find the plan you selected.
@@ -83,8 +83,8 @@ export default function CheckoutPanel({
   }
 
   return (
-    <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-card">
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-100 bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700">
+    <div className="glass-panel-strong w-full max-w-md rounded-2xl p-8">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-glass-edge/70 bg-glass-soft px-3 py-1 text-xs font-medium text-brand-700 shadow-glass-light backdrop-blur">
         <Lock className="h-3.5 w-3.5" />
         Secure checkout
       </span>
@@ -127,7 +127,7 @@ export default function CheckoutPanel({
       {notice && !error && (
         <div
           role="status"
-          className="mt-6 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600"
+          className="mt-6 rounded-xl border border-glass-edge bg-glass-soft px-4 py-3 text-sm text-slate-600 backdrop-blur"
         >
           {notice}
         </div>

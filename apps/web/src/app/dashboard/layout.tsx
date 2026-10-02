@@ -86,9 +86,10 @@ export default async function DashboardLayout({
   const email = authUser.email ?? "";
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="relative flex min-h-screen overflow-x-hidden bg-white">
+      <span aria-hidden className="pointer-events-none fixed inset-0 -z-10 bg-canvas-mesh" />
       {/* Sidebar */}
-      <aside className="w-64 shrink-0 flex-col border-r border-slate-200 bg-white p-5 md:w-64">
+      <aside className="glass-panel w-64 shrink-0 flex-col rounded-none border-y-0 border-l-0 p-5 md:w-64">
         <Link href="/" className="mb-8 flex items-center gap-2">
           <Image
             src="/logo.png"
@@ -101,12 +102,12 @@ export default async function DashboardLayout({
         </Link>
 
         <nav className="flex flex-col gap-1">
-          <span className="flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-700">
+          <span className="flex items-center gap-2 rounded-lg border border-glass-edge/70 bg-glass-soft px-3 py-2 text-sm font-semibold text-brand-700 shadow-glass-light">
             <LayoutDashboard className="h-4 w-4" /> Dashboard
           </span>
           <Link
             href="/downloads"
-            className="flex min-h-[44px] touch-manipulation select-none items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition active:bg-slate-100 hover:bg-slate-100 hover:text-slate-900"
+            className="flex min-h-[44px] touch-manipulation select-none items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition hover:bg-white/70 hover:text-slate-900 active:bg-white/70"
           >
             <Download className="h-4 w-4" /> Downloads
           </Link>
@@ -114,20 +115,20 @@ export default async function DashboardLayout({
               full page reload that would re-run auth bootstrapping. */}
           <Link
             href="/#pricing"
-            className="flex min-h-[44px] touch-manipulation select-none items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition active:bg-slate-100 hover:bg-slate-100 hover:text-slate-900"
+            className="flex min-h-[44px] touch-manipulation select-none items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition hover:bg-white/70 hover:text-slate-900 active:bg-white/70"
           >
             <ArrowRight className="h-4 w-4" /> Buy a new plan
           </Link>
           {/* In-page jump to the referral engine card (progress + VIP hub). */}
           <Link
             href="/dashboard#referral"
-            className="flex min-h-[44px] touch-manipulation select-none items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition active:bg-slate-100 hover:bg-slate-100 hover:text-slate-900"
+            className="flex min-h-[44px] touch-manipulation select-none items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition hover:bg-white/70 hover:text-slate-900 active:bg-white/70"
           >
             <Share2 className="h-4 w-4" /> Refer & Earn
           </Link>
         </nav>
 
-        <div className="mt-auto space-y-3 border-t border-slate-200 pt-4">
+        <div className="mt-auto space-y-3 border-t border-glass-edge pt-4">
           <div className="px-1 text-xs text-slate-500">
             <p className="truncate font-medium text-slate-700">{email}</p>
             {user?.licenses.length ? (
@@ -139,7 +140,7 @@ export default async function DashboardLayout({
             )}
           </div>
           <SignOutButton
-            className="flex min-h-[44px] w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition active:bg-slate-100 hover:bg-slate-100 hover:text-rose-600 disabled:opacity-50"
+            className="flex min-h-[44px] w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition hover:bg-white/70 hover:text-rose-600 active:bg-white/70 disabled:opacity-50"
             label="Sign out"
             open
           />
@@ -148,18 +149,18 @@ export default async function DashboardLayout({
 
       {/* Main */}
       <div className="flex-1">
-        <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/80 backdrop-blur">
+        <header className="glass-nav sticky top-0 z-10">
           <div className="flex h-16 items-center justify-between px-4 sm:px-6">
             <h1 className="text-lg font-bold text-slate-900">Dashboard</h1>
             <div className="flex items-center gap-2">
               <Link
                 href="/pricing"
-                className="inline-flex min-h-[44px] touch-manipulation select-none items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-slate-500 transition active:bg-slate-100 hover:bg-slate-100 hover:text-slate-900"
+                className="inline-flex min-h-[44px] touch-manipulation select-none items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-slate-500 transition hover:bg-white/70 hover:text-slate-900 active:bg-white/70"
               >
                 <ArrowRight className="h-3.5 w-3.5" /> Choose Plan
               </Link>
               <SignOutButton
-                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-slate-500 transition active:bg-slate-100 hover:bg-slate-100 hover:text-rose-600 disabled:opacity-50"
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-slate-500 transition hover:bg-white/70 hover:text-rose-600 active:bg-white/70 disabled:opacity-50"
                 label="Logout"
               />
             </div>

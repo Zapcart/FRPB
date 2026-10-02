@@ -149,12 +149,12 @@ export default function AuthView({
 
   return (
     <div className="mx-auto w-full max-w-md">
-      <div className="card p-8">
+      <div className="glass-panel-strong p-8">
         {/* Plan confirmation badge — shows a visitor arriving mid-purchase
             exactly what they are signing up for, so they do not have to trust
             that the selection survived the redirect. */}
         {badgePlan && (
-          <div className="mb-5 flex items-center gap-2.5 rounded-xl border border-brand-200 bg-brand-50 px-3.5 py-2.5">
+          <div className="mb-5 flex items-center gap-2.5 rounded-xl border border-brand-200/70 bg-brand-50/70 px-3.5 py-2.5 backdrop-blur">
             <ShieldCheck className="h-4 w-4 shrink-0 text-brand-600" />
             <p className="text-xs text-brand-800">
               Continuing with the{" "}
@@ -187,7 +187,7 @@ export default function AuthView({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Ada Lovelace"
-                className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
+                className="glass-input"
               />
             </label>
           )}
@@ -202,7 +202,7 @@ export default function AuthView({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
-              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
+              className="glass-input"
             />
           </label>
 
@@ -217,7 +217,7 @@ export default function AuthView({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-4 focus:ring-brand-500/10"
+              className="glass-input"
             />
           </label>
 

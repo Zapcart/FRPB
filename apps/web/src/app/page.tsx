@@ -194,7 +194,12 @@ export default function HomePage() {
   const downloadUrl = resolveInstallerUrl();
 
   return (
-    <div className="flex min-h-screen flex-col overflow-x-hidden bg-white text-slate-600 antialiased">
+    <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-white text-slate-600 antialiased">
+      {/* Soft aurora canvas — gives the frosted panels something to refract. */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10 bg-canvas-mesh"
+      />
       {/* Structured data: SoftwareApplication rich result + site/brand + FAQ graph. */}
       <JsonLd id="ld-software-application" data={softwareApplicationSchema()} />
       <JsonLd id="ld-website" data={websiteSchema()} />
@@ -203,7 +208,7 @@ export default function HomePage() {
       <JsonLd id="ld-faq" data={faqPageSchema(HOME_FAQ)} />
 
       {/* ================= NAVBAR ================= */}
-      <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/80 backdrop-blur-xl">
+      <header className="glass-nav sticky top-0 z-50">
         <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:h-[72px]">
           {/* Crisp logo lockup */}
           <Link href="/" className="group flex items-center gap-2.5">
@@ -342,7 +347,7 @@ export default function HomePage() {
           {BENTO.map((feature) => (
             <div
               key={feature.title}
-              className={`group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-slate-300 hover:shadow-md sm:p-6 ${feature.span}`}
+              className={`glass-surface group relative overflow-hidden p-5 transition duration-300 hover:-translate-y-1 hover:border-white/80 hover:shadow-glass-light-hover sm:p-6 ${feature.span}`}
             >
               {/* hover gradient bloom */}
               <div
@@ -454,7 +459,7 @@ export default function HomePage() {
                 <Link
                   key={tool.id}
                   href={tool.path}
-                  className="group relative flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm transition-all duration-300 hover:-translate-y-1.5 hover:border-emerald-300 hover:shadow-card-hover"
+                  className="glass-surface group relative flex flex-col overflow-hidden p-6 transition duration-300 hover:-translate-y-1.5 hover:border-emerald-300/80 hover:shadow-glass-light-hover"
                 >
                   <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 opacity-0 blur-3xl transition-opacity duration-500 group-hover:opacity-10" />
                   <div className="relative flex h-full flex-col">
@@ -513,10 +518,10 @@ export default function HomePage() {
               return (
                 <div
                   key={plan.slug}
-                  className={`group relative flex flex-col rounded-2xl border p-8 transition-all duration-300 hover:-translate-y-1.5 ${
+                  className={`glass-panel-strong group relative flex flex-col p-8 transition duration-300 hover:-translate-y-1.5 ${
                     popular
-                      ? "border-brand-300 bg-white shadow-card-hover ring-1 ring-brand-500/20"
-                      : "border-slate-200/80 bg-white shadow-sm hover:border-slate-300 hover:shadow-card-hover"
+                      ? "border-brand-300 ring-1 ring-brand-500/20 hover:shadow-glass-light-hover"
+                      : "hover:border-white/80 hover:shadow-glass-light-hover"
                   }`}
                 >
                   {/* hover glow bloom */}
@@ -594,7 +599,7 @@ export default function HomePage() {
 
       {/* ================= GUIDES / CTA ================= */}
       <section id="guides" className="mx-auto max-w-7xl px-6 py-20 sm:py-24">
-        <div className="relative overflow-hidden rounded-3xl border border-brand-100 bg-gradient-to-br from-brand-50 via-white to-accent-50 p-10 shadow-card sm:p-14">
+        <div className="glass-panel glass-sheen relative overflow-hidden p-10 sm:p-14">
           <div className="pointer-events-none absolute inset-0 bg-grid-slate bg-grid-32 opacity-60 [mask-image:radial-gradient(80%_80%_at_50%_0%,black,transparent)]" />
           <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-accent-500/10 blur-[100px] animate-pulse-glow" />
           <div className="relative mx-auto max-w-3xl text-center">

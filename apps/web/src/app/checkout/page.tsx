@@ -91,7 +91,8 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
   const user = await getOptionalUser();
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6 py-16">
+    <main className="relative flex min-h-screen items-center justify-center overflow-x-hidden bg-white px-6 py-16">
+      <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-canvas-mesh" />
       <CheckoutPanel
         planSlug={planSlug}
         email={user?.email ?? null}

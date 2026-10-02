@@ -73,9 +73,10 @@ export default function BrandLandingPage({ content }: { content: BrandPageConten
   const relatedGuides = BRAND_MONEY_LINKS.filter((guide) => guide.path !== content.path);
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 text-slate-900">
+    <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-white text-slate-900">
+      <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-canvas-mesh" />
       {/* ================= NAVBAR ================= */}
-      <header className="sticky top-0 z-50 border-b border-slate-200/70 bg-white/80 backdrop-blur-xl">
+      <header className="glass-nav sticky top-0 z-50">
         <nav className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-4 px-6">
           <Link href="/" className="flex items-center gap-2.5">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-accent-500 text-sm font-black text-white shadow-lg shadow-brand-500/30">
@@ -110,12 +111,12 @@ export default function BrandLandingPage({ content }: { content: BrandPageConten
           </ol>
         </nav>
 
-        <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-card">
+        <div className="glass-panel-strong relative overflow-hidden rounded-3xl">
           <div className="pointer-events-none absolute inset-0 -z-10 bg-hero-glow" />
           <div className="pointer-events-none absolute inset-0 -z-10 bg-grid-slate [mask-image:radial-gradient(70%_60%_at_50%_0%,black,transparent)]" />
 
           <div className="flex flex-col items-center px-6 py-14 text-center sm:px-12 sm:py-16">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-brand-100 bg-brand-50/80 px-4 py-1.5 text-xs font-semibold text-brand-700">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-glass-edge/70 bg-glass-soft px-4 py-1.5 text-xs font-semibold text-brand-700 shadow-glass-light backdrop-blur">
               <LockOpen className="h-3.5 w-3.5" />
               {content.eyebrow}
             </div>
@@ -164,7 +165,10 @@ export default function BrandLandingPage({ content }: { content: BrandPageConten
             {content.features.map((feature) => {
               const Icon = ICONS[feature.icon];
               return (
-                <div key={feature.title} className="card p-6">
+                <div
+                  key={feature.title}
+                  className="glass-surface p-6 transition duration-300 hover:-translate-y-0.5 hover:border-white/80 hover:shadow-glass-light-hover"
+                >
                   <span className="mb-4 grid h-11 w-11 place-items-center rounded-xl bg-brand-50 text-brand-600">
                     <Icon className="h-5 w-5" />
                   </span>
@@ -189,7 +193,7 @@ export default function BrandLandingPage({ content }: { content: BrandPageConten
               <li
                 key={step.title}
                 id={`step-${index + 1}`}
-                className="card flex items-start gap-4 p-5"
+                className="glass-surface flex items-start gap-4 p-5"
               >
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-accent-500 text-sm font-black text-white">
                   {index + 1}
@@ -205,15 +209,17 @@ export default function BrandLandingPage({ content }: { content: BrandPageConten
 
         {/* ================= TRUST STRIP ================= */}
         <section className="mt-12 flex flex-wrap items-center justify-center gap-2.5">
-          <span className="badge">
+          <span className="badge border-glass-edge/70 bg-glass-soft shadow-glass-light backdrop-blur">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
             Version {RELEASE_VERSION}
           </span>
-          <span className="badge">
+          <span className="badge border-glass-edge/70 bg-glass-soft shadow-glass-light backdrop-blur">
             <ShieldCheck className="h-3.5 w-3.5 text-brand-500" />
             Signed installer
           </span>
-          <span className="badge">Windows 10 / 11 · x64</span>
+          <span className="badge border-glass-edge/70 bg-glass-soft shadow-glass-light backdrop-blur">
+            Windows 10 / 11 · x64
+          </span>
         </section>
 
         {/* ================= RELATED DEVICE GUIDES (internal linking) ================= */}
@@ -229,7 +235,7 @@ export default function BrandLandingPage({ content }: { content: BrandPageConten
               <Link
                 key={guide.path}
                 href={guide.path}
-                className="card group flex flex-col p-6 transition hover:border-brand-200 hover:shadow-lg"
+                className="glass-surface group flex flex-col p-6 transition duration-300 hover:-translate-y-0.5 hover:border-white/80 hover:shadow-glass-light-hover"
               >
                 <h3 className="text-sm font-bold text-ink">{guide.anchor}</h3>
                 <p className="mt-1.5 flex-1 text-xs leading-relaxed text-slate-500">
@@ -254,7 +260,7 @@ export default function BrandLandingPage({ content }: { content: BrandPageConten
       />
 
       {/* ================= FOOTER ================= */}
-      <footer className="border-t border-slate-200 bg-white">
+      <footer className="border-t border-glass-edge bg-glass-soft backdrop-blur">
         <div className="mx-auto max-w-5xl px-6 py-6">
           {/* DPDP / legal disclaimer — small print, kept visually subtle. */}
           <p className="text-xs leading-relaxed text-slate-400">

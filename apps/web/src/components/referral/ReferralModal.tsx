@@ -436,7 +436,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
         role="dialog"
         aria-modal="true"
         aria-label="Refer friends and unlock rewards"
-        className="relative w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5"
+        className="glass-panel-strong relative w-full max-w-lg overflow-hidden rounded-2xl"
       >
         {/* Header */}
         <div className="relative bg-gradient-to-br from-blue-900 via-indigo-900 to-indigo-950 px-5 py-5 text-white">
@@ -444,7 +444,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
             type="button"
             onClick={onClose}
             aria-label="Close referral panel"
-            className="absolute right-3 top-3 grid h-9 w-9 touch-manipulation place-items-center rounded-full text-white/80 transition hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            className="absolute right-3 top-3 grid h-9 w-9 touch-manipulation place-items-center rounded-full text-white/80 transition before:absolute before:-inset-1 before:content-[''] hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
             <X className="h-4 w-4" />
           </button>
@@ -469,7 +469,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
               <Loader2 className="h-4 w-4 animate-spin" /> Loading your progress…
             </div>
           ) : unauthenticated ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-5 text-center">
+            <div className="rounded-xl border border-glass-edge bg-glass-soft p-5 text-center backdrop-blur">
               <span className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-brand-50 text-brand-600">
                 <Share2 className="h-5 w-5" />
               </span>
@@ -496,7 +496,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
           ) : summary && progress ? (
             <>
               {/* Share link */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <div className="rounded-xl border border-glass-edge bg-glass-soft p-3 backdrop-blur">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
                   Your referral link
                 </p>
@@ -505,7 +505,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
                     readOnly
                     value={referralLink ?? "Generating…"}
                     onFocus={(e) => e.currentTarget.select()}
-                    className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
+                    className="min-w-0 flex-1 rounded-lg border border-glass-edge bg-glass px-3 py-2 text-xs text-slate-700 backdrop-blur"
                   />
                   <button
                     type="button"
@@ -533,7 +533,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
                     >
                       {batteryBar(percent)}
                     </p>
-                    <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200">
+                    <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-200/70">
                       <div
                         className="h-full rounded-full bg-gradient-to-r from-brand-500 to-accent-500 transition-all duration-500"
                         style={{ width: `${Math.max(0, Math.min(100, percent))}%` }}
@@ -544,10 +544,10 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
                   {/* Route checklists */}
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div
-                      className={`rounded-xl border p-3 ${
+                      className={`rounded-xl border p-3 backdrop-blur ${
                         progress.routeA.complete
                           ? "border-emerald-200 bg-emerald-50"
-                          : "border-slate-200"
+                          : "border-glass-edge bg-glass-soft"
                       }`}
                     >
                       <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -563,10 +563,10 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
                       </ul>
                     </div>
                     <div
-                      className={`rounded-xl border p-3 ${
+                      className={`rounded-xl border p-3 backdrop-blur ${
                         progress.routeB.complete
                           ? "border-emerald-200 bg-emerald-50"
-                          : "border-slate-200"
+                          : "border-glass-edge bg-glass-soft"
                       }`}
                     >
                       <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -656,7 +656,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="rounded-xl border border-glass-edge bg-glass-soft p-3 backdrop-blur">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Available cash
                       </p>
@@ -664,7 +664,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
                         {formatUsd(summary.cashBalanceCents)}
                       </p>
                     </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="rounded-xl border border-glass-edge bg-glass-soft p-3 backdrop-blur">
                       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                         Pending (14-day lock)
                       </p>
@@ -674,7 +674,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-slate-200 p-3 text-xs text-slate-600">
+                  <div className="rounded-xl border border-glass-edge bg-glass-soft p-3 text-xs text-slate-600 backdrop-blur">
                     <p className="flex items-center gap-1.5 font-semibold text-slate-700">
                       <Wallet className="h-3.5 w-3.5" /> Commission rates
                     </p>
@@ -702,7 +702,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
                           value={amount}
                           onChange={(e) => setAmount(e.target.value)}
                           placeholder="50.00"
-                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          className="w-full rounded-lg border border-glass-edge bg-glass px-3 py-2 text-sm backdrop-blur"
                         />
                       </label>
                       <label className="block">
@@ -710,7 +710,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
                         <select
                           value={method}
                           onChange={(e) => setMethod(e.target.value)}
-                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          className="w-full rounded-lg border border-glass-edge bg-glass px-3 py-2 text-sm backdrop-blur"
                         >
                           <option value="UPI">UPI</option>
                           <option value="PAYPAL">PayPal</option>
@@ -724,7 +724,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
                           value={destination}
                           onChange={(e) => setDestination(e.target.value)}
                           placeholder="you@upi / email"
-                          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                          className="w-full rounded-lg border border-glass-edge bg-glass px-3 py-2 text-sm backdrop-blur"
                         />
                       </label>
                     </div>

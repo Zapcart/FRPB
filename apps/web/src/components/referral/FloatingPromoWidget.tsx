@@ -59,12 +59,12 @@ export default function FloatingPromoWidget({ email }: FloatingPromoWidgetProps)
     <>
       {visible && (
         <div className="fixed bottom-20 right-6 z-50 print:hidden">
-          <div className="relative w-full max-w-sm rounded-xl border border-blue-500/30 bg-gradient-to-br from-blue-900 to-indigo-950 p-4 text-white shadow-2xl">
+          <div className="glass-float relative w-full max-w-sm rounded-xl p-4 text-slate-700">
             <button
               type="button"
               onClick={handleDismiss}
               aria-label="Dismiss referral promotion for this session"
-              className="absolute right-2 top-2 grid h-8 w-8 touch-manipulation place-items-center rounded-full text-blue-200/80 transition hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className="absolute right-2 top-2 grid h-8 w-8 touch-manipulation place-items-center rounded-full text-slate-500 transition before:absolute before:-inset-1.5 before:content-[''] hover:bg-white/70 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500"
             >
               <X className="h-4 w-4" />
             </button>
@@ -74,10 +74,10 @@ export default function FloatingPromoWidget({ email }: FloatingPromoWidgetProps)
                 <Gift className="h-5 w-5 text-white" />
               </span>
               <div>
-                <p className="text-sm font-bold leading-snug">
+                <p className="text-sm font-bold leading-snug text-slate-900">
                   Refer Friends & Unlock 100% FREE $150 Lifetime Plan!
                 </p>
-                <p className="mt-1 text-xs text-blue-100/90">
+                <p className="mt-1 text-xs text-slate-500">
                   Invited friends get 20% OFF Lifetime Plan.
                 </p>
               </div>

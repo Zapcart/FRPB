@@ -7,8 +7,13 @@ import Link from "next/link";
 
 export default function AuthShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col bg-white">
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/80 backdrop-blur">
+    <div className="relative flex min-h-screen flex-col bg-white">
+      {/* Soft aurora canvas so the frosted auth card reads as glass. */}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-10 bg-canvas-mesh"
+      />
+      <header className="glass-nav sticky top-0 z-20">
         <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2">
             <Image
@@ -38,11 +43,11 @@ export default function AuthShell({ children }: { children: React.ReactNode }) {
         </nav>
       </header>
 
-      <main className="flex flex-1 items-center justify-center bg-hero-glow px-6 py-16">
+      <main className="flex flex-1 items-center justify-center px-6 py-16">
         {children}
       </main>
 
-      <footer className="border-t border-slate-200 py-6">
+      <footer className="border-t border-glass-edge py-6">
         <p className="text-center text-xs text-slate-400">
           © {new Date().getFullYear()} FRPB — Intended for authorized device owners only.
         </p>
