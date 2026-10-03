@@ -6,6 +6,11 @@ import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/seo";
 import { BLOG_POSTS } from "@/lib/blog";
 import { BRAND_PAGE_ROUTES } from "@/config/brand-pages";
+import {
+  SEO_BRAND_PARAMS,
+  SEO_MODEL_PARAMS,
+  TOOLS_BASE_PATH,
+} from "@/data/seo-matrix";
 import { FREE_TOOL_ROUTES, UNLOCK_TOOL_ROUTES } from "@frpb/shared";
 
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -32,6 +37,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
     {
       url: `${SITE_URL}/blog`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.7,
+    },
+    {
+      url: `${SITE_URL}${TOOLS_BASE_PATH}`,
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.7,
@@ -93,6 +104,26 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: route.priority,
   }));
 
+  // Programmatic device-cluster hubs (`/tools/[brand]`). One per OEM brand,
+  // each linking every supported model spoke. They sit one tier below the
+  // /tools index, so they list weekly at 0.7.
+  const brandHubPages: MetadataRoute.Sitemap = SEO_BRAND_PARAMS.map((param) => ({
+    url: `${SITE_URL}${TOOLS_BASE_PATH}/${param.brand}`,
+    lastModified: now,
+    changeFrequency: "weekly",
+    priority: 0.7,
+  }));
+
+  // Programmatic model spokes (`/tools/[brand]/[model]`). The long-tail rank
+  // engine — one page per device-model × intent pair. Higher churn than the
+  // static pages, so they list monthly at 0.6 and avoid cannibalising hubs.
+  const modelSpokePages: MetadataRoute.Sitemap = SEO_MODEL_PARAMS.map((param) => ({
+    url: `${SITE_URL}${TOOLS_BASE_PATH}/${param.brand}/${param.model}`,
+    lastModified: now,
+    changeFrequency: "monthly",
+    priority: 0.6,
+  }));
+
   const posts: MetadataRoute.Sitemap = BLOG_POSTS.map((post) => ({
     url: `${SITE_URL}/blog/${post.slug}`,
     lastModified: new Date(post.dateModified),
@@ -106,5 +137,13 @@ export default function sitemap(): MetadataRoute.Sitemap {
   // of them canonicalises to `/blog` (see the blog index metadata), so listing
   // them would only submit duplicate, non-canonical URLs. Keeping the sitemap
   // canonical-only concentrates crawl budget on URLs Google can actually index.
-  return [...pages, ...brandPages, ...freeToolPages, ...unlockToolPages, ...posts];
+  return [
+    ...pages,
+    ...brandPages,
+    ...freeToolPages,
+    ...unlockToolPages,
+    ...brandHubPages,
+    ...modelSpokePages,
+    ...posts,
+  ];
 }

@@ -103,6 +103,23 @@ const nextConfig = {
       },
     ];
   },
+  async redirects() {
+    // Consolidate legacy / short-form utility aliases onto their canonical
+    // landing pages so inbound links, ads and old bookmarks all resolve to the
+    // indexable URL (preserves link equity and avoids duplicate-content 404s).
+    // 308 (permanent) so search engines transfer ranking signals.
+    const legacyUtilityAliases = [
+      { from: "/virtual-location", to: "/virtual-location-spoofer" },
+      { from: "/data-eraser", to: "/android-data-eraser" },
+      { from: "/phone-transfer", to: "/phone-to-phone-transfer" },
+      { from: "/whatsapp-transfer", to: "/whatsapp-transfer-tool" },
+    ];
+    return legacyUtilityAliases.map(({ from, to }) => ({
+      source: from,
+      destination: to,
+      permanent: true,
+    }));
+  },
   // Cloudflare Pages enforces a 25MB cap on the persisted build cache; the
   // default production webpack cache (webpack 5 filesystem cache) exceeds it
   // and fails the deploy. Disabling the cache in production keeps the build
