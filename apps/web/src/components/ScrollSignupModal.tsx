@@ -26,20 +26,44 @@ const SCROLL_THRESHOLD = 200;
 /** localStorage flag: set once the visitor dismisses (or signs in on) the modal. */
 const DISMISS_KEY = "frpb.signupModal.dismissed";
 
+/** Origins that must never be used as an OAuth redirect target in production. */
+const LOCAL_HOST_PATTERN =
+  /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i;
+
 /**
  * Resolve the public app origin used to build the OAuth `redirectTo`.
  *
- * Prefers the canonical `NEXT_PUBLIC_APP_URL` (inlined at build time) so
- * production always targets e.g. `https://frpb.in` regardless of the host the
- * browser loaded from. Only when that is unset do we fall back to the runtime
- * `window.location.origin`, which keeps local development working without a
- * hardcoded `localhost:3000`. A trailing slash is stripped so the joined path
+ * Resolution order:
+ *   1. `NEXT_PUBLIC_APP_URL`  — canonical public URL (inlined at build time).
+ *   2. `NEXT_PUBLIC_SITE_URL` — legacy alias used elsewhere in the codebase.
+ *   3. `window.location.origin` — local development / direct hits.
+ *
+ * PRODUCTION SAFETY: `window.location.origin` can resolve to a local/LAN host
+ * when the app is reached through a proxy with a rewritten Host header, or when
+ * a build is missing its public-origin env. Shipping `http://localhost:3000`
+ * as the OAuth `redirectTo` makes Supabase discard it and fall back to the
+ * dashboard "Site URL", stranding the browser on localhost. In production we
+ * therefore refuse a localhost origin, log loudly, and fall back to the
+ * canonical `https://frpb.in`. A trailing slash is stripped so the joined path
  * never doubles up.
  */
 function resolveAppOrigin(): string {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
+  const configured = (process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXT_PUBLIC_SITE_URL)
+    ?.trim()
+    .replace(/\/+$/, "");
   if (configured) return configured;
-  if (typeof window !== "undefined") return window.location.origin;
+
+  if (typeof window !== "undefined") {
+    const runtime = window.location.origin;
+    if (process.env.NODE_ENV === "production" && LOCAL_HOST_PATTERN.test(runtime)) {
+      console.error(
+        "[scroll-signup] refusing localhost OAuth origin in production; " +
+          "set NEXT_PUBLIC_APP_URL. Falling back to https://frpb.in"
+      );
+      return "https://frpb.in";
+    }
+    return runtime;
+  }
   return "";
 }
 
