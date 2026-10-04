@@ -24,7 +24,7 @@ import { prisma } from "@/lib/prisma";
 import { sha256 } from "@/lib/crypto/sha256";
 import { generateLicenseKey } from "@/lib/license/generate";
 import { normalizeEmail } from "@/lib/auth/user-identity";
-import { hasSentLicenseEmail, sendLicenseEmail } from "@/lib/email/resend";
+import { hasSentLicenseEmail, sendLicenseEmailDeferred } from "@/lib/email/resend";
 import {
   dualAmount,
   getDualPlan,
@@ -107,7 +107,12 @@ function addDays(date: Date, days: number): Date {
 export interface GrantResult {
   licenseId: string;
   licenseKey: string;
-  /** Whether the license-delivery email was successfully dispatched. */
+  /**
+   * Whether the license-delivery email was dispatched. With the deferred
+   * dispatcher this is `true` once the send has been scheduled (or a prior
+   * delivery is already recorded as SENT) and `false` when email is not
+   * configured — in which case the retry cron still drains the EmailLog row.
+   */
   emailSent: boolean;
 }
 
@@ -231,29 +236,20 @@ export async function grantLicenseForOrder(
   }
 
   // Deliver the license email AFTER the transaction commits, so a mail outage
-  // can never roll back a granted license. The dispatch is AWAITED (rather than
-  // fire-and-forget) and any failure is logged here with the order/email context
-  // the adapter does not have. The previous empty `.catch(() => {})` swallowed
-  // errors silently, which hid dropped keys. The adapter still records the
-  // failure in EmailLog for the retry cron — the license stays granted.
-  let emailSent = false;
-  try {
-    await sendLicenseEmail(
-      {
-        id: license.id,
-        key: license.key,
-        plan: { name: planRow.name },
-        expiresAt: license.expiresAt,
-      },
-      email
-    );
-    emailSent = true;
-  } catch (err) {
-    console.error(
-      `[payment] license ${license.id} granted (order ${order.orderId}) but the delivery email to ${email} failed:`,
-      (err as Error)?.message ?? err
-    );
-  }
+  // can never roll back a granted license. The dispatch is DEFERRED (fire-and-
+  // forget) so a slow or down Resend API never stalls the payment HTTP response
+  // — the adapter bounds the send with a timeout and records any failure in
+  // EmailLog for the retry cron. `sendLicenseEmailDeferred` returns `true` once
+  // the send is scheduled and `false` when email is not configured.
+  const emailSent = sendLicenseEmailDeferred(
+    {
+      id: license.id,
+      key: license.key,
+      plan: { name: planRow.name },
+      expiresAt: license.expiresAt,
+    },
+    email
+  );
 
   // Structured per-transaction audit line (provider ref → email → key → mail
   // status). Mirrors the webhook's log so BOTH settlement paths (signed verify
@@ -265,7 +261,7 @@ export async function grantLicenseForOrder(
     email,
     licenseId: license.id,
     licenseStatus: license.status,
-    emailStatus: emailSent ? "SENT" : "QUEUED_FOR_RETRY",
+    emailStatus: emailSent ? "SCHEDULED" : "QUEUED_FOR_RETRY",
   });
 
   return { licenseId: license.id, licenseKey, emailSent };

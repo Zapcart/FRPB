@@ -6,7 +6,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { UnbindRequestSchema } from "@frpb/shared";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
-import { resolvePrismaUser } from "@/lib/auth/user-identity";
+import { resolvePrismaUser, normalizeEmail } from "@/lib/auth/user-identity";
+import { licenseVerifyCacheKey } from "@/lib/license/verify";
+import { cacheDel } from "@/lib/cache";
 import { preflight, withCorsResponse } from "@/lib/cors";
 import type { UnbindResponse } from "@frpb/shared";
 
@@ -127,6 +129,12 @@ async function handleUnbind(req: NextRequest) {
       where: { id: device.id },
       data: { status: "UNBOUND", unboundAt: new Date(), unbindCount: { increment: 1 } },
     });
+
+    // 6. Invalidate the verification cache for this (license, machine) pair so
+    //    the freed slot is observed immediately instead of after the 45 s TTL.
+    await cacheDel(
+      licenseVerifyCacheKey(device.license.keySha256, device.hardwareId)
+    );
 
     return NextResponse.json<UnbindResponse>(
       { success: true, message: "Device unbound", data: { availableAt: new Date().toISOString() } },

@@ -32,11 +32,12 @@ const LOCKOUT_SECONDS = 60 * 60;
 // through the full activate → dashboard flow without live payment webhooks or
 // a DB-backed license row.
 //
-// The EXACT key `FRPB-TEST-1234-5678` is accepted in ALL environments,
-// INCLUDING production, by explicit operator decision — see the security
-// warning in @/lib/license/test-key.ts for the trade-off. Any OTHER
-// `FRPB-TEST-*` shaped key remains dev-gated (fail-closed), so the bypass is
-// one known string rather than an open-ended prefix backdoor.
+// FAIL-CLOSED IN PRODUCTION (Task 4 of plans/performance-optimization.md).
+// The shortcut is disabled in prod unless the operator explicitly opts in,
+// either by setting MASTER_TEST_LICENSE_KEY (an uncommitted secret) or
+// ALLOW_DEV_TEST_KEYS=true. See @/lib/license/test-key.ts for the exact
+// resolution order. Outside production the built-in published constant is
+// honored so local/CI flows keep working with zero setup.
 function masterTestProfile(key: string) {
   return {
     success: true,
@@ -105,10 +106,10 @@ async function verify(req: NextRequest) {
   //     curl probe) would get a 400 and never reach the bypass — the exact
   //     "can't activate locally" class of failure this exists to prevent.
   //
-  //     Acceptance tiers: the EXACT key FRPB-TEST-1234-5678 passes in every
-  //     environment including production (operator decision), while any other
-  //     FRPB-TEST-* shaped key stays fail-closed outside dev/test. See
-  //     @/lib/license/test-key.ts.
+  //     Acceptance tiers (FAIL-CLOSED in production): the configured master key
+  //     passes only when explicitly provisioned via MASTER_TEST_LICENSE_KEY or
+  //     ALLOW_DEV_TEST_KEYS=true, and any other FRPB-TEST-* shaped key stays
+  //     dev/test-only. See @/lib/license/test-key.ts for the resolution order.
   //
   //     On success it bypasses the DB and rate-limiter entirely and returns a
   //     synthetic ACTIVE LIFETIME profile, so activation works even when the

@@ -21,6 +21,17 @@ const nextConfig = {
   experimental: {
     // Keep server actions scoped; we rely on route handlers for licensing
     serverActions: { bodySizeLimit: "1mb" },
+    // Tree-shake barrel-file packages so only the symbols actually imported are
+    // bundled. `lucide-react` (icon barrels) and `posthog-js` (analytics) are
+    // the two heavyweight barrels here — trimming them reduces both the server
+    // and client bundle size, which lowers per-process memory and cold-start
+    // time on the small EC2 instance.
+    optimizePackageImports: ["lucide-react", "posthog-js"],
+    // Enable the Next.js instrumentation hook (src/instrumentation.ts) so the
+    // process runs one `register()` pass at boot. Used to emit the production
+    // startup warning when ALLOW_DEV_TEST_KEYS=true (see the security section
+    // of plans/performance-optimization.md).
+    instrumentationHook: true,
   },
   async headers() {
     return [

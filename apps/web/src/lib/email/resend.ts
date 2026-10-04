@@ -17,13 +17,52 @@ import { GITHUB_RELEASES_BASE } from "@/config/download";
 // The client is only created on first send (webhook time).
 let resend: Resend | null = null;
 
-/** Whether the Resend API key is present. Lets callers fail loudly, not silently. */
+/**
+ * How long a single Resend API call may hang before we give up on it.
+ *
+ * The license-grant path previously awaited `emails.send()` with no ceiling, so
+ * a slow or wedged provider could stall the payment webhook / verify response
+ * indefinitely. Every send is now raced against this deadline; a timeout is
+ * recorded as a normal EmailLog failure and retried by the cron drain.
+ */
+const EMAIL_SEND_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.RESEND_SEND_TIMEOUT_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : 8000;
+})();
+
+/**
+ * Validate the Resend API key shape.
+ *
+ * Resend keys are `re_`-prefixed. Checking the format here turns a stale or
+ * placeholder key into an immediate, actionable failure (recorded in EmailLog)
+ * instead of a mid-flow "Invalid API key" from the provider.
+ */
 export function isEmailConfigured(): boolean {
-  return Boolean(process.env.RESEND_API_KEY);
+  const key = process.env.RESEND_API_KEY?.trim();
+  return Boolean(key && key.startsWith("re_") && key.length >= 12);
+}
+
+/** Reject after `ms`, with a descriptive error the EmailLog can store. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`[email] ${label} timed out after ${ms}ms`));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
 }
 
 function getResend(): Resend {
-  const key = process.env.RESEND_API_KEY;
+  const key = process.env.RESEND_API_KEY?.trim();
   if (!key) {
     // Previously this constructed Resend with "" and let the send reject; that
     // rejection was swallowed by the caller's empty catch. Throw a clear,
@@ -101,19 +140,24 @@ async function dispatch(input: {
   licenseId: string;
 }): Promise<void> {
   if (!isEmailConfigured()) {
-    const message = "RESEND_API_KEY is not configured — license email was not sent";
+    const message =
+      "RESEND_API_KEY is missing or malformed (expected an `re_` key) — license email was not sent";
     console.error(`[email] ${message} (to=${input.to}, license=${input.licenseId})`);
     await recordFailure(input.logId, message);
     throw new Error(message);
   }
 
   try {
-    const { data, error } = await getResend().emails.send({
-      from: fromAddress(),
-      to: input.to,
-      subject: input.subject,
-      html: input.html,
-    });
+    const { data, error } = await withTimeout(
+      getResend().emails.send({
+        from: fromAddress(),
+        to: input.to,
+        subject: input.subject,
+        html: input.html,
+      }),
+      EMAIL_SEND_TIMEOUT_MS,
+      `send to ${input.to}`
+    );
     if (error) throw new Error(error.message ?? String(error));
 
     await prisma.emailLog.update({
@@ -124,6 +168,9 @@ async function dispatch(input: {
   } catch (err) {
     const message = (err as Error)?.message ?? String(err);
     console.error(`[email] license email FAILED to ${input.to}: ${message}`);
+    // Drop the cached client so the next attempt builds a fresh connection;
+    // otherwise a wedged socket could keep failing until the process restarts.
+    resend = null;
     await recordFailure(input.logId, message);
     throw err instanceof Error ? err : new Error(message);
   }
@@ -153,6 +200,45 @@ export async function sendLicenseEmail(license: LicenseEmailLicense, to: string)
   }
 
   await dispatch({ to, subject, html, logId, licenseId: license.id });
+}
+
+/**
+ * Non-blocking variant for latency-sensitive paths (payment verify / webhook).
+ *
+ * Creates the EmailLog row and kicks off the send WITHOUT awaiting it, so a
+ * Resend outage can never stall the HTTP response (the license is already
+ * committed by the caller). This is safe on an always-on EC2/PM2 process — the
+ * Node process keeps running after the response is flushed.
+ *
+ * Returns `false` when email is not configured (the caller must NOT claim a
+ * send happened) and `true` once the dispatch has been scheduled. Delivery is
+ * reconciled asynchronously through EmailLog + the email-retry cron drain.
+ */
+export function sendLicenseEmailDeferred(
+  license: LicenseEmailLicense,
+  to: string
+): boolean {
+  if (!isEmailConfigured()) {
+    console.error(
+      `[email] RESEND_API_KEY missing or malformed — deferred license email to ${to} skipped (license ${license.id})`
+    );
+    return false;
+  }
+
+  // Fire-and-forget. `dispatch` records any failure in EmailLog, which the cron
+  // re-sends from, so nothing needs to bubble back to the caller.
+  void (async () => {
+    try {
+      await sendLicenseEmail(license, to);
+    } catch (err) {
+      console.error(
+        `[email] deferred license email to ${to} (license ${license.id}) failed:`,
+        (err as Error)?.message ?? err
+      );
+    }
+  })();
+
+  return true;
 }
 
 /** Attempts allowed per email before it is left alone. */

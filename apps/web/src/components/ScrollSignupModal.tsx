@@ -26,6 +26,23 @@ const SCROLL_THRESHOLD = 200;
 /** localStorage flag: set once the visitor dismisses (or signs in on) the modal. */
 const DISMISS_KEY = "frpb.signupModal.dismissed";
 
+/**
+ * Resolve the public app origin used to build the OAuth `redirectTo`.
+ *
+ * Prefers the canonical `NEXT_PUBLIC_APP_URL` (inlined at build time) so
+ * production always targets e.g. `https://frpb.in` regardless of the host the
+ * browser loaded from. Only when that is unset do we fall back to the runtime
+ * `window.location.origin`, which keeps local development working without a
+ * hardcoded `localhost:3000`. A trailing slash is stripped so the joined path
+ * never doubles up.
+ */
+function resolveAppOrigin(): string {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "");
+  if (configured) return configured;
+  if (typeof window !== "undefined") return window.location.origin;
+  return "";
+}
+
 export default function ScrollSignupModal() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -155,10 +172,11 @@ export default function ScrollSignupModal() {
         });
       }
       const supabase = createClient();
+      const origin = resolveAppOrigin() || window.location.origin;
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
+          redirectTo: `${origin}/auth/callback`,
         },
       });
       if (oauthError) {
