@@ -10,6 +10,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { resolveRedirectOrigin } from "@/lib/url/origin";
 
 /** In-app destination used when no valid `next` target was supplied. */
 const DEFAULT_REDIRECT = "/dashboard";
@@ -30,7 +31,12 @@ function safeNextPath(raw: string | null): string | null {
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const { searchParams, origin } = request.nextUrl;
+  const { searchParams } = request.nextUrl;
+  // Proxy-aware public origin. Behind Nginx/CloudFront `request.nextUrl.origin`
+  // can be the internal upstream (e.g. http://localhost:3000), which is both
+  // unreachable for the browser and a different origin than the one the PKCE
+  // flow began on — the mismatch that produced the production `401`.
+  const origin = resolveRedirectOrigin(request);
   const code = searchParams.get("code");
   const next = safeNextPath(searchParams.get("next")) ?? DEFAULT_REDIRECT;
 

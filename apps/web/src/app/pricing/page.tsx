@@ -37,6 +37,7 @@ import {
 import { DUAL_PLANS, formatDualUsd } from "@/config/plans";
 import { startRazorpayCheckout } from "@/lib/razorpay/checkout-flow";
 import ErrorBoundary from "@/components/error-boundary";
+import RazorpaySdkScript from "@/components/checkout/razorpay-sdk-script";
 
 /**
  * Trust / conversion badges rendered under the pricing grid. Addresses the four
@@ -186,30 +187,46 @@ export default function PricingPage() {
       return;
     }
 
-    const result = await startRazorpayCheckout({
-      planSlug,
-      email,
-      onDismiss: () =>
-        setCheckoutNotice("Checkout closed — no payment was taken."),
-    });
+    // startRazorpayCheckout() is contractually non-throwing, but wrap it so an
+    // unexpected error (loader rejection, provider SDK edge case) can never
+    // leave the button stuck on its spinner or bubble into the React tree. Every
+    // click resolves to a visible state via the finally block below.
+    try {
+      const result = await startRazorpayCheckout({
+        planSlug,
+        email,
+        onDismiss: () =>
+          setCheckoutNotice("Checkout closed — no payment was taken."),
+      });
 
-    if (result.status === "paid") {
-      setCheckoutNotice(
-        "Payment successful — taking you to your dashboard…"
+      if (result.status === "paid") {
+        setCheckoutNotice(
+          "Payment successful — taking you to your dashboard…"
+        );
+        router.push("/dashboard");
+        return;
+      }
+
+      if (result.status === "failed") {
+        setCheckoutError(result.message);
+      }
+    } catch (error) {
+      console.error("[pricing] checkout failed unexpectedly:", error);
+      setCheckoutError(
+        "We couldn't start checkout. Please try again in a moment."
       );
-      router.push("/dashboard");
-      return;
-    }
-
-    setProcessingPlan(null);
-
-    if (result.status === "failed") {
-      setCheckoutError(result.message);
+    } finally {
+      // Always release the spinner, including on the paid path before navigating.
+      setProcessingPlan(null);
     }
   }
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-white text-slate-900">
+      {/* Preload checkout.js on this purchase surface only (idle-time). Never in
+          the root layout — third-party payment JS must not load on guide or
+          marketing routes. loadRazorpayCheckout() adopts this tag if present. */}
+      <RazorpaySdkScript />
       {/* Soft aurora canvas so the frosted pricing panels read as glass. */}
       <span
         aria-hidden="true"

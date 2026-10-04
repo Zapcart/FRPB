@@ -19,6 +19,7 @@ import { redirect } from "next/navigation";
 import { PLANS, type PlanSlug } from "@frpb/shared";
 import { getOptionalUser } from "@/lib/supabase/server";
 import CheckoutPanel from "@/components/checkout/checkout-panel";
+import RazorpaySdkScript from "@/components/checkout/razorpay-sdk-script";
 import { pageMetadata } from "@/lib/seo";
 import {
   REFERRAL_COOKIE_KEY,
@@ -92,6 +93,8 @@ export default async function CheckoutPage({ searchParams }: CheckoutPageProps) 
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-x-hidden bg-white px-6 py-16">
+      {/* Preload checkout.js on this purchase surface only (idle-time). */}
+      <RazorpaySdkScript />
       <span aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-canvas-mesh" />
       <CheckoutPanel
         planSlug={planSlug}

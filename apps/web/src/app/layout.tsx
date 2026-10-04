@@ -6,7 +6,6 @@
 // directives; per-route copy lives in each page's `metadata` export.
 
 import type { Metadata } from "next";
-import Script from "next/script";
 import { Inter } from "next/font/google";
 import { SessionProvider } from "@/components/session-provider";
 import FloatingWidgets from "@/components/floating-widgets";
@@ -111,21 +110,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               never overlap. */}
           <FloatingWidgets />
         </PostHogProvider>
-        {/* Razorpay Standard Checkout SDK — deferred with `lazyOnload` so it is
-            fetched only after the browser goes idle (post-hydration), never on
-            the critical first-interaction path. Using `afterInteractive` here
-            injected ~190KB of third-party JS immediately after hydration on
-            EVERY route, saturating the main thread and freezing all clicks
-            (including the plain <Link> "See Now" buttons) for ~1 minute on slow
-            clients. loadRazorpayCheckout() adopts this exact tag (id + src
-            match) rather than injecting a duplicate <script>, and falls back to
-            on-demand injection with a 5s deadline if this tag has not loaded
-            yet by the time the user clicks purchase. */}
-        <Script
-          src="https://checkout.razorpay.com/v1/checkout.js"
-          strategy="lazyOnload"
-          id="razorpay-checkout-sdk"
-        />
       </body>
     </html>
   );

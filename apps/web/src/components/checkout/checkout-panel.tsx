@@ -56,29 +56,40 @@ export default function CheckoutPanel({
     setNotice(null);
     setProcessing(true);
 
-    const result = await startRazorpayCheckout({
-      planSlug: plan!.slug,
-      email,
-      referralCode,
-      onDismiss: () => setNotice("Checkout closed — no payment was taken."),
-    });
+    // startRazorpayCheckout() is contractually non-throwing, but guard the call
+    // so an unexpected error can never leave the button stuck on its spinner or
+    // throw into the React tree; the finally block always restores the UI.
+    try {
+      const result = await startRazorpayCheckout({
+        planSlug: plan!.slug,
+        email,
+        referralCode,
+        onDismiss: () => setNotice("Checkout closed — no payment was taken."),
+      });
 
-    if (result.status === "paid") {
-      setNotice("Payment successful — your license key is on the way.");
-      // Hand back to the dashboard with the success flag so the confirmation
-      // banner renders and the freshly-granted key is shown immediately.
-      router.push("/dashboard?status=success");
-      // The dashboard is a client component whose data load runs on mount; a
-      // soft nav to the same route can be cached, so refresh to guarantee the
-      // new license is fetched rather than a stale empty list.
-      router.refresh();
-      return;
-    }
+      if (result.status === "paid") {
+        setNotice("Payment successful — your license key is on the way.");
+        // Hand back to the dashboard with the success flag so the confirmation
+        // banner renders and the freshly-granted key is shown immediately.
+        router.push("/dashboard?status=success");
+        // The dashboard is a client component whose data load runs on mount; a
+        // soft nav to the same route can be cached, so refresh to guarantee the
+        // new license is fetched rather than a stale empty list.
+        router.refresh();
+        return;
+      }
 
-    setProcessing(false);
-
-    if (result.status === "failed") {
-      setError(result.message);
+      if (result.status === "failed") {
+        setError(result.message);
+      }
+    } catch (error) {
+      console.error("[checkout] payment failed unexpectedly:", error);
+      setError(
+        "We couldn't start checkout. Please try again in a moment."
+      );
+    } finally {
+      // Always release the button, including on the paid path before navigating.
+      setProcessing(false);
     }
   }
 
