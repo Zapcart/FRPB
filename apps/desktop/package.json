@@ -1,6 +1,6 @@
 {
   "name": "@frpb/desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "FRPB Desktop App — Electron + React (license activation, USB device monitor, driver center)",
   "main": "dist-electron/main.js",
@@ -13,15 +13,16 @@
     "dev:electron:main": "npm run build:electron && wait-on -t 60000 http-get://localhost:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 node scripts/dev-electron.js",
     "dev:reset": "cross-env FRPB_RESET_ON_START=1 npm run dev:electron",
     "setup:platform-tools": "node scripts/setup-platform-tools.js",
+    "generate:ico": "node scripts/generate-ico.js",
     "build:renderer": "vite build",
     "build:electron": "pnpm --filter @frpb/shared build && tsc -p tsconfig.electron.json",
     "build": "npm run build:electron && npm run build:renderer",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.electron.json --noEmit",
-    "dist": "npm run setup:platform-tools && npm run build && electron-builder",
-    "dist:win": "npm run setup:platform-tools && npm run build && electron-builder --win",
+    "dist": "npm run setup:platform-tools && npm run generate:ico && npm run build && electron-builder",
+    "dist:win": "npm run setup:platform-tools && npm run generate:ico && npm run build && electron-builder --win",
     "package": "npm run dist:win",
     "dist:mac": "npm run setup:platform-tools && npm run build && electron-builder --mac",
-    "pack": "npm run setup:platform-tools && npm run build && electron-builder --dir"
+    "pack": "npm run setup:platform-tools && npm run generate:ico && npm run build && electron-builder --dir"
   },
   "dependencies": {
     "@frpb/shared": "workspace:*",
@@ -87,7 +88,7 @@
     ],
     "win": {
       "icon": "build/frpb.ico",
-      "artifactName": "FRPB-Recovery-Setup-1.0.1.exe",
+      "artifactName": "FRPB-Recovery-Setup-${version}.exe",
       "target": [
         {
           "target": "nsis",
