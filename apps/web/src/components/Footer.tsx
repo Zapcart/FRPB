@@ -9,7 +9,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronDown, Globe, Instagram, Mail, Send, ShieldCheck } from "lucide-react";
-import { resolveInstallerUrl } from "@/config/download";
+import { GITHUB_RELEASES_TAG, RELEASE_VERSION, resolveInstallerUrl } from "@/config/download";
 import {
   COMPANY_ADDRESS,
   COMPANY_ENTITY,
@@ -60,6 +60,10 @@ export default function Footer() {
         { label: "Device Recovery Suite", href: "/#features" },
         { label: "Free Desktop Utilities", href: "/#free-tools" },
         { label: "Download for Windows & macOS", href: downloadUrl },
+        {
+          label: `Official Release (v${RELEASE_VERSION})`,
+          href: GITHUB_RELEASES_TAG,
+        },
       ],
     },
     {

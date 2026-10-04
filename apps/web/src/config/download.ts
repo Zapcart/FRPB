@@ -14,7 +14,7 @@
 export const GITHUB_REPO = "Zapcart/FRPB-Application";
 
 /** Current published release tag (without the leading `v`). */
-export const RELEASE_VERSION = "1.0.0";
+export const RELEASE_VERSION = "2.0.0";
 
 /** Canonical Windows installer asset name (matches electron-builder artifactName). */
 export const EXE_NAME = "FRPB-Recovery-Setup-1.0.1.exe";
@@ -23,14 +23,25 @@ export const EXE_NAME = "FRPB-Recovery-Setup-1.0.1.exe";
 export const DMG_NAME = "FRPB-Setup.dmg";
 
 /**
- * Versioned GitHub Releases download directory, e.g.
- * https://github.com/Zapcart/FRPB-Application/releases/download/v1.0.0
+ * Versioned GitHub Releases directory that hosts the raw installer assets, e.g.
+ * https://github.com/Zapcart/FRPB-Application/releases/download/v2.0.0
  */
 export const GITHUB_RELEASES_BASE = `https://github.com/${GITHUB_REPO}/releases/download/v${RELEASE_VERSION}`;
 
 /**
+ * Human-readable GitHub Release *page* for the current build:
+ * https://github.com/Zapcart/FRPB-Application/releases/tag/v2.0.0
+ *
+ * This is the canonical "official release" link surfaced in CTAs and email
+ * footers. Direct installer downloads resolve through {@link GITHUB_RELEASES_BASE}
+ * above (the `/releases/download/...` asset URL), NOT this page URL — appending
+ * a filename to a `/releases/tag/...` URL would 404.
+ */
+export const GITHUB_RELEASES_TAG = `https://github.com/${GITHUB_REPO}/releases/tag/v${RELEASE_VERSION}`;
+
+/**
  * Direct, ready-to-click URL for the Windows installer:
- * https://github.com/Zapcart/FRPB-Application/releases/download/v1.0.0/FRPB-Recovery-Setup-1.0.1.exe
+ * https://github.com/Zapcart/FRPB-Application/releases/download/v2.0.0/FRPB-Recovery-Setup-1.0.1.exe
  */
 export const GITHUB_DOWNLOAD_URL = `${GITHUB_RELEASES_BASE}/${EXE_NAME}`;
 

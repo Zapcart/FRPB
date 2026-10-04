@@ -29,6 +29,7 @@ import FaqSection from "@/components/faq-section";
 import JsonLd from "@/components/seo/json-ld";
 import {
   EXE_NAME,
+  GITHUB_RELEASES_TAG,
   RELEASE_VERSION,
   SMARTSCREEN_NOTICE,
   resolveInstallerUrl,
@@ -147,6 +148,16 @@ export default function BrandLandingPage({ content }: { content: BrandPageConten
             <p className="mt-4 text-xs text-slate-400">
               {EXE_NAME} · Windows 10/11 · Included with an FRPB Active License
             </p>
+
+            {/* Canonical "official release" link → GitHub Release page. */}
+            <a
+              href={GITHUB_RELEASES_TAG}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 underline-offset-4 transition hover:underline"
+            >
+              View the official release (v{RELEASE_VERSION}) on GitHub
+            </a>
 
             {/* Browser / Windows SmartScreen first-launch guidance. */}
             <div className="mt-5 flex w-full max-w-md items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-3 text-left">
