@@ -3,7 +3,7 @@
 // Amounts come straight from the plan definition so the displayed price always
 // matches the amount Razorpay actually charges — never a derived FX conversion.
 // Razorpay Standard Web Checkout is the single, exclusive payment gateway and
-// every tier settles in USD ($20 / 60 days, $150 one-time). Checkout is gated
+// every tier settles in USD ($20 / 6 months, $200 one-time). Checkout is gated
 // behind authentication: guests are redirected to sign-up and the pending-plan
 // intent resumes the purchase for the selected plan automatically.
 
@@ -36,6 +36,7 @@ import {
 } from "@/config/legal";
 import { DUAL_PLANS, formatDualUsd } from "@/config/plans";
 import { startRazorpayCheckout } from "@/lib/razorpay/checkout-flow";
+import { readStoredReferralCode } from "@/lib/referral/ref-capture";
 import ErrorBoundary from "@/components/error-boundary";
 import RazorpaySdkScript from "@/components/checkout/razorpay-sdk-script";
 
@@ -101,14 +102,14 @@ const PRICING_FAQS = [
 // Billing interval suffix, keyed by plan slug. All tiers are priced and charged
 // in USD; a lifetime plan renders a one-time label, never a recurring interval.
 const BILLING_SUFFIX: Record<PlanSlug, string> = {
-  MONTH_1: "/ 2 months",
+  MONTH_1: "/ 6 months",
   LIFETIME: "one-time",
 };
 
 /**
  * The pricing grid renders from DUAL_PLANS (the authoritative tier rates) rather
  * than the shared legacy PLANS, so the displayed price is always exactly $20 or
- * $150 — matching the USD amount Razorpay charges at checkout.
+ * $200 — matching the USD amount Razorpay charges at checkout.
  */
 const PLAN_CARDS = DUAL_PLANS.map((plan) => ({
   plan,
@@ -192,9 +193,14 @@ export default function PricingPage() {
     // leave the button stuck on its spinner or bubble into the React tree. Every
     // click resolves to a visible state via the finally block below.
     try {
+      // Carry the captured referral code (cookie/localStorage, 30-day window)
+      // into checkout so the server can apply the sanctioned referral discount
+      // and attribute the order to the referrer. null when the visitor arrived
+      // without a referral — an ordinary, full-price purchase.
       const result = await startRazorpayCheckout({
         planSlug,
         email,
+        referralCode: readStoredReferralCode(),
         onDismiss: () =>
           setCheckoutNotice("Checkout closed — no payment was taken."),
       });

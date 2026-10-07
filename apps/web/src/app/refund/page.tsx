@@ -95,10 +95,10 @@ export default function RefundPolicyPage() {
 
           <section>
             <h2 className="text-lg font-bold text-ink">
-              2. 60-Day Plans
+              2. 6-Month Plans
             </h2>
             <p>
-              For 60-day (one-time) plans:
+              For 6-month (one-time) plans:
             </p>
             <ul className="mt-3 list-disc pl-6 space-y-1 text-slate-600">
               <li>
@@ -117,8 +117,8 @@ export default function RefundPolicyPage() {
                 a few business days.
               </li>
               <li>
-                After the seven-day window, 60-day plans are not eligible for a
-                refund. Because 60-day plans are one-time purchases and do not renew,
+                After the seven-day window, 6-month plans are not eligible for a
+                refund. Because 6-month plans are one-time purchases and do not renew,
                 no further charges are made when the term ends.
               </li>
             </ul>

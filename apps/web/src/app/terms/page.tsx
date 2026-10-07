@@ -167,16 +167,16 @@ export default function TermsOfServicePage() {
               5. Plans, Pricing and Payments
             </h2>
             <p>
-              Plans are offered as a 60-day plan or a lifetime plan as described
+              Plans are offered as a 6-month plan or a lifetime plan as described
               on our pricing page and in your order confirmation:
             </p>
             <ul className="mt-3 list-disc pl-6 space-y-1 text-slate-600">
               <li>
-                <strong>60-Day Plan</strong> — a one-time purchase that grants
-                access for sixty (60) days from the date of purchase and permits
-                activation on <strong>one (1) device</strong>. It does not renew
-                automatically; when the term ends you may purchase a new plan to
-                continue using the Software.
+                <strong>6-Month Plan</strong> — a one-time purchase that grants
+                access for one hundred and eighty (180) days from the date of
+                purchase and permits activation on <strong>one (1) device</strong>. It
+                does not renew automatically; when the term ends you may purchase a
+                new plan to continue using the Software.
               </li>
               <li>
                 <strong>Lifetime Plan</strong> — a one-time purchase that grants

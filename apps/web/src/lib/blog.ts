@@ -308,6 +308,62 @@ export function platformOf(post: BlogPost): BlogPlatform {
 }
 
 /**
+ * Internal-link shape shared with the SEO topic clusters.
+ *
+ * Structurally identical to `SeoLink` in `@/data/seo-clusters`, but declared
+ * locally so the article route can hand links straight to `<TopicCluster>`
+ * without importing the heavier cluster/keyword data graph.
+ */
+export interface BlogLink {
+  path: string;
+  anchor: string;
+  blurb: string;
+}
+
+/**
+ * Related-guides selector — the internal-link cluster shown in the article
+ * footer.
+ *
+ * Ranks sibling posts by topical relevance so the cluster reinforces the
+ * brand/category/method entity Google uses to decide whether a crawled URL
+ * belongs in the index:
+ *
+ *   1. Same brand (two Samsung guides)          — strongest topical signal
+ *   2. Same category tab (Samsung / Xiaomi / …) — same hub
+ *   3. Same transport method (BROM / EDL / …)   — same procedure class
+ *   4. Same platform (iOS vs Android)           — same audience
+ *
+ * The post itself is always excluded and results are de-duplicated by slug, so
+ * a caller can pass a possibly-empty result to `<TopicCluster>` (which renders
+ * nothing when empty) without guarding.
+ */
+export function relatedPosts(post: BlogPost, limit = 4): BlogLink[] {
+  const category = categoryOf(post);
+  const platform = platformOf(post);
+  const brand = (post.brand ?? "").toLowerCase();
+
+  const score = (other: BlogPost): number => {
+    let s = 0;
+    if (brand && (other.brand ?? "").toLowerCase() === brand) s += 8;
+    if (categoryOf(other) === category) s += 4;
+    if (post.method && other.method === post.method) s += 2;
+    if (platformOf(other) === platform) s += 1;
+    return s;
+  };
+
+  return BLOG_POSTS.filter((other) => other.slug !== post.slug)
+    .map((other) => ({ other, rank: score(other) }))
+    // Stable ranking: by relevance, then title for a deterministic order.
+    .sort((a, b) => b.rank - a.rank || a.other.title.localeCompare(b.other.title))
+    .slice(0, Math.max(0, limit))
+    .map(({ other }) => ({
+      path: `/blog/${other.slug}`,
+      anchor: other.title,
+      blurb: other.excerpt,
+    }));
+}
+
+/**
  * Filter tabs shown on /blog. `all` is the implicit "no filter" tab.
  *
  * A tab may span MORE THAN ONE category: the "Xiaomi / Android" tab covers both

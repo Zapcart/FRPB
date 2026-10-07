@@ -665,10 +665,10 @@ export async function recomputeUnlock(userId: string): Promise<UnlockResult> {
 }
 
 /**
- * Server-authoritative gate for the Lifetime partial-credit downsell ($75):
+ * Server-authoritative gate for the Lifetime partial-credit downsell ($100):
  * the user must NOT already be unlocked and must sit at exactly 1/2 Lifetime
  * qualified referrals (the "partial credit" offer the UI presents). Keeps the
- * sanctioned $75 price from being self-selected by an ineligible buyer.
+ * sanctioned $100 price from being self-selected by an ineligible buyer.
  */
 export async function isDownsellEligible(userId: string): Promise<boolean> {
   if (!userId) return false;
@@ -701,7 +701,7 @@ export async function isDownsellEligible(userId: string): Promise<boolean> {
 }
 
 /**
- * DOWNSELL path: a paid $75 Lifetime order unlocks the buyer immediately
+ * DOWNSELL path: a paid $100 Lifetime order unlocks the buyer immediately
  * (partial-credit offer shown when Route A sits at exactly 1/2). The amount is
  * re-checked server-side so a client can never trigger this with a stray price.
  */

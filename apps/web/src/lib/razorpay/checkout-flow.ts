@@ -34,7 +34,7 @@ export interface StartCheckoutParams {
   referralCode?: string | null;
   /**
    * Partial-credit downsell intent. When true, the server charges the
-   * sanctioned 50% Lifetime price ($75) — but ONLY after it independently
+   * sanctioned 50% Lifetime price ($100) — but ONLY after it independently
    * re-validates `isDownsellEligible(userId)` (exactly 1/2 Lifetime referrals
    * and not yet unlocked). The client hint is never trusted on its own.
    */

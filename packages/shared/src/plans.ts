@@ -59,13 +59,13 @@ export function formatMoney(
 export const PLANS: readonly PlanDefinition[] = [
   {
     slug: "MONTH_1",
-    name: "2-Month Plan",
+    name: "6-Month Plan",
     priceCents: 2000,   // $20
     currency: "USD",
     priceInr: 190000,   // ₹1,900
     usd: 20,
     inr: 1900,
-    durationDays: 60,
+    durationDays: 180,
     deviceLimit: 1,
     features: [
       "Full device recovery toolkit",
@@ -77,11 +77,11 @@ export const PLANS: readonly PlanDefinition[] = [
   {
     slug: "LIFETIME",
     name: "Lifetime Plan",
-    priceCents: 15000,  // $150
+    priceCents: 20000,  // $200
     currency: "USD",
-    priceInr: 1399900,  // ₹13,999
-    usd: 150,
-    inr: 13999,
+    priceInr: 1699900,  // ₹16,999
+    usd: 200,
+    inr: 16999,
     durationDays: null,
     deviceLimit: 5,
     features: [

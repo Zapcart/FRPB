@@ -15,9 +15,9 @@ import {
 
 describe("applyBps", () => {
   it("floors the basis-point portion of a cent amount", () => {
-    expect(applyBps(15_000, 2_000)).toBe(3_000); // 20% of $150 = $30
+    expect(applyBps(20_000, 2_000)).toBe(4_000); // 20% of $200 = $40
     expect(applyBps(2_000, 3_000)).toBe(600); // 30% of $20 = $6
-    expect(applyBps(15_000, 5_000)).toBe(7_500); // 50% of $150 = $75
+    expect(applyBps(20_000, 5_000)).toBe(10_000); // 50% of $200 = $100
   });
 
   it("floors fractional cents (never over-credits)", () => {
@@ -40,9 +40,9 @@ describe("applyBps", () => {
 });
 
 describe("referral discounting", () => {
-  it("gives referred friends 20% off the Lifetime plan ($150 -> $120)", () => {
-    expect(referralDiscountCents("LIFETIME")).toBe(3_000);
-    expect(discountedPriceCents("LIFETIME")).toBe(12_000);
+  it("gives referred friends 20% off the Lifetime plan ($200 -> $160)", () => {
+    expect(referralDiscountCents("LIFETIME")).toBe(4_000);
+    expect(discountedPriceCents("LIFETIME")).toBe(16_000);
   });
 
   it("gives 0% off the Monthly plan (fully protected MRR)", () => {
@@ -50,28 +50,28 @@ describe("referral discounting", () => {
     expect(discountedPriceCents("MONTH_1")).toBe(2_000);
   });
 
-  it("computes the 50% partial-credit downsell price ($75)", () => {
-    expect(downsellPriceCents()).toBe(7_500);
+  it("computes the 50% partial-credit downsell price ($100)", () => {
+    expect(downsellPriceCents()).toBe(10_000);
   });
 });
 
 describe("isSanctionedReferralAmount", () => {
   it("accepts the Lifetime list, discounted, and downsell prices", () => {
-    expect(isSanctionedReferralAmount("LIFETIME", 15_000)).toBe(true);
-    expect(isSanctionedReferralAmount("LIFETIME", 12_000)).toBe(true);
-    expect(isSanctionedReferralAmount("LIFETIME", 7_500)).toBe(true);
+    expect(isSanctionedReferralAmount("LIFETIME", 20_000)).toBe(true);
+    expect(isSanctionedReferralAmount("LIFETIME", 16_000)).toBe(true);
+    expect(isSanctionedReferralAmount("LIFETIME", 10_000)).toBe(true);
   });
 
   it("accepts the Monthly list price and rejects the lifetime downsell", () => {
     expect(isSanctionedReferralAmount("MONTH_1", 2_000)).toBe(true);
-    expect(isSanctionedReferralAmount("MONTH_1", 7_500)).toBe(false);
+    expect(isSanctionedReferralAmount("MONTH_1", 10_000)).toBe(false);
   });
 
   it("rejects arbitrary self-invented amounts", () => {
     expect(isSanctionedReferralAmount("LIFETIME", 1)).toBe(false);
-    expect(isSanctionedReferralAmount("LIFETIME", 14_999)).toBe(false);
+    expect(isSanctionedReferralAmount("LIFETIME", 19_999)).toBe(false);
     expect(isSanctionedReferralAmount("MONTH_1", 1_500)).toBe(false);
-    expect(isSanctionedReferralAmount("LIFETIME", -12_000)).toBe(false);
+    expect(isSanctionedReferralAmount("LIFETIME", -16_000)).toBe(false);
   });
 });
 

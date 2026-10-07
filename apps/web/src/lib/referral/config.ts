@@ -5,27 +5,27 @@
 // tested without any runtime (DB, Redis, network).
 
 export const REFERRAL_RULES = {
-  /** Lifetime plan list price in USD cents ($150). */
-  lifetimePriceCents: 15000,
-  /** Referred-friend discount on the Lifetime plan: 20% off ($150 → $120). */
+  /** Lifetime plan list price in USD cents ($200). */
+  lifetimePriceCents: 20000,
+  /** Referred-friend discount on the Lifetime plan: 20% off ($200 → $160). */
   lifetimeDiscountBps: 2000,
   /** Monthly plan list price in USD cents ($20). */
   monthlyPriceCents: 2000,
   /** Monthly plan discount is intentionally 0% to fully protect MRR. */
   monthlyDiscountBps: 0,
 
-  /** Route A unlock: 2 Lifetime referrals ($240 upfront). */
+  /** Route A unlock: 2 Lifetime referrals (up to $400 in referred value). */
   routeA: { lifetimeRequired: 2 },
-  /** Route B unlock: 4 Monthly + 1 Lifetime referral ($200 upfront). */
+  /** Route B unlock: 4 Monthly + 1 Lifetime referral. */
   routeB: { monthlyRequired: 4, lifetimeRequired: 1 },
 
-  /** Partial-credit downsell: 50% off Lifetime = $75. */
+  /** Partial-credit downsell: 50% off Lifetime = $100. */
   downsellDiscountBps: 5000,
 
   /** VIP cash affiliate commission rates (basis points). */
   commission: {
     monthlyRateBps: 3000, // 30% of a referred $20/mo sale → $6
-    lifetimeRateBps: 5000, // 50% of a referred lifetime sale → up to $75
+    lifetimeRateBps: 5000, // 50% of a referred lifetime sale → $100
   },
 
   /** Referral credits/commissions stay PENDING for this refund-lock window. */
@@ -71,7 +71,7 @@ export function discountedPriceCents(planId: ReferralPlanId): number {
   return listPriceCents(planId) - referralDiscountCents(planId);
 }
 
-/** The downsell (partial-credit) price for Lifetime access (cents, $75). */
+/** The downsell (partial-credit) price for Lifetime access (cents, $100). */
 export function downsellPriceCents(): number {
   return (
     REFERRAL_RULES.lifetimePriceCents -

@@ -91,6 +91,14 @@ export const metadata: Metadata = {
   // references of any kind.
 };
 
+// ISR default for the crawlable marketing surface (home, blog, tools, brand and
+// free-tool routes). These pages are pure static content, so a 1-hour window
+// keeps the Chromium-visible HTML identical to the sitemap/canonical URLs and
+// lets copy edits propagate without a full redeploy. Routes that genuinely need
+// per-request rendering (auth, checkout, dashboard, admin, API) already declare
+// `export const dynamic = "force-dynamic"` and opt out of this default.
+export const revalidate = 3600;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={inter.variable}>

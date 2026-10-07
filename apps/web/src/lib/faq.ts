@@ -42,7 +42,7 @@ export const HOME_FAQ: readonly FaqItem[] = [
   {
     question: "Does the FRPB FRP lock removal app require a license?",
     answer:
-      "Yes. Download the FRPB desktop app, then activate an FRPB Active License to unlock the full FRP lock removal and flash reset toolkit across one to five devices. 60-day and lifetime licenses are available, and every license verifies online over TLS with hashed device binding.",
+      "Yes. Download the FRPB desktop app, then activate an FRPB Active License to unlock the full FRP lock removal and flash reset toolkit across one to five devices. 6-month and lifetime licenses are available, and every license verifies online over TLS with hashed device binding.",
   },
   {
     question: "Which Windows versions does the FRPB desktop app support?",

@@ -1,6 +1,6 @@
 // FRPB — gamified unlock progress (pure, dependency-free).
 //
-// Track two distinct unlock criteria for FREE $150 Lifetime access:
+// Track two distinct unlock criteria for FREE $200 Lifetime access:
 //   ROUTE A: 2 Lifetime referrals.
 //   ROUTE B: 4 Monthly + 1 Lifetime referral.
 // Progress % = max(Route A %, Route B %).

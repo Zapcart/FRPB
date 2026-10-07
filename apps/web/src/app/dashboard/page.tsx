@@ -97,7 +97,7 @@ export default function DashboardPage() {
   const [revealing, setRevealing] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   // In-dashboard plan chooser: lets a user without an active license pick the
-  // $20 (60-day) or $150 (lifetime) plan without leaving the dashboard.
+  // $20 (6-month) or $200 (lifetime) plan without leaving the dashboard.
   const [chooserOpen, setChooserOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -292,8 +292,8 @@ export default function DashboardPage() {
           <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
             Activate FRPB to unlock full device recovery. Choose the{" "}
             <span className="font-semibold text-slate-900">{formatDualUsd(20)}</span>{" "}
-            60-day plan or the{" "}
-            <span className="font-semibold text-slate-900">{formatDualUsd(150)}</span>{" "}
+            6-month plan or the{" "}
+            <span className="font-semibold text-slate-900">{formatDualUsd(200)}</span>{" "}
             lifetime plan.
           </p>
           <button
@@ -506,7 +506,7 @@ export default function DashboardPage() {
 
 /**
  * Modal plan chooser. Renders the two canonical tiers from `@/config/plans` so
- * an authenticated user can pick the $20 (60-day) or $150 (lifetime) plan
+ * an authenticated user can pick the $20 (6-month) or $200 (lifetime) plan
  * directly from the dashboard; each choice routes to the existing checkout
  * page, which re-derives the charge server-side.
  */

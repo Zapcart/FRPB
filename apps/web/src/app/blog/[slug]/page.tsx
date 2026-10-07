@@ -18,11 +18,13 @@ import { BLOG_POSTS, getPost, categoryOf, platformOf } from "@/lib/blog";
 import {
   computeReadingMinutes,
   howToStepsFor,
+  relatedPosts,
   slugifyHeading,
   tableOfContentsFor,
 } from "@/lib/blog";
 import ArticleToc from "@/components/blog/article-toc";
 import ArticleCta from "@/components/blog/article-cta";
+import TopicCluster from "@/components/seo/topic-cluster";
 
 interface BlogPostPageProps {
   params: { slug: string };
@@ -111,6 +113,11 @@ export default function BlogPostPage({ params }: BlogPostPageProps) {
   // Auto-generated heading index. Anchors are derived from the SAME slugify
   // helper used for the <h2 id> below, so every link resolves.
   const toc = tableOfContentsFor(post);
+
+  // Related-guides cluster (internal linking). Ranked by shared brand/category/
+  // method/platform so the article links to its closest topical siblings —
+  // reinforcing the entity graph Google uses to decide what to index.
+  const relatedLinks = relatedPosts(post, 4);
   // Map each section heading to its TOC anchor (handles duplicate headings).
   const headingAnchor = new Map<string, string>();
   post.sections.forEach((section) => {
@@ -275,6 +282,16 @@ export default function BlogPostPage({ params }: BlogPostPageProps) {
 
         {/* Closing conversion CTA. */}
         <ArticleCta variant="footer" />
+
+        {/* Related-guides internal-link cluster (SEO Hack 4/5/12). Renders
+            nothing when the selector returns no siblings, so no guard needed. */}
+        <TopicCluster
+          id="related-guides"
+          heading="Related FRP & lock removal guides"
+          intro="Continue with the closest matching recovery procedure for your device."
+          links={relatedLinks}
+          cta="Read guide"
+        />
 
         <div className="mt-10">
           <Link

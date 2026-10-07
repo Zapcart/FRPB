@@ -9,9 +9,9 @@
 // taken from the client payload.
 // Flow:
 //   1. Resolve the DUAL_PLAN from `planId` and LOCK the amount server-side to
-//      the USD tier rate in cents ($20 → 2000, $150 → 15000). A referral code
-//      sanctions 20% off Lifetime ($120) and a downsell intent sanctions the
-//      50% partial-credit Lifetime price ($75) — both resolved server-side.
+//      the USD tier rate in cents ($20 → 2000, $200 → 20000). A referral code
+//      sanctions 20% off Lifetime ($160) and a downsell intent sanctions the
+//      50% partial-credit Lifetime price ($100) — both resolved server-side.
 //   2. Create a Razorpay order via the Orders API in USD.
 //   3. Persist a PENDING PaymentOrder carrying the Razorpay order id.
 //   4. Return { order_id, amount, currency } for the browser checkout modal.
@@ -118,7 +118,7 @@ async function handleCreateOrder(req: NextRequest): Promise<Response> {
   const currency: DualCurrency = "USD";
 
   // AMOUNT LOCK — always charge the server-resolved tier rate in USD cents
-  // ($20 → 2000, $150 → 15000), never a client-supplied value.
+  // ($20 → 2000, $200 → 20000), never a client-supplied value.
   const amountSubUnits = razorpayAmount(plan, currency);
   if (amountSubUnits < MIN_AMOUNT_UNITS) {
     return NextResponse.json(
@@ -168,7 +168,7 @@ async function handleCreateOrder(req: NextRequest): Promise<Response> {
   }
 
   // REFERRAL DISCOUNT — an invited friend gets 20% OFF the Lifetime plan
-  // ($150 → $120). Monthly is intentionally 0% to protect MRR. The discounted
+  // ($200 → $160). Monthly is intentionally 0% to protect MRR. The discounted
   // price is computed SERVER-SIDE and re-validated through the sanctioned-amount
   // lock; an unknown/inactive code silently falls back to the tier rate so a bad
   // code can never block (or under-charge) a legitimate purchase.
@@ -195,7 +195,7 @@ async function handleCreateOrder(req: NextRequest): Promise<Response> {
     }
   }
 
-  // DOWNSELL — the sanctioned 50% partial-credit Lifetime price ($75), offered
+  // DOWNSELL — the sanctioned 50% partial-credit Lifetime price ($100), offered
   // ONLY to an eligible user (signed in, not yet unlocked, sitting at exactly
   // 1/2 Lifetime qualified referrals). The amount is resolved SERVER-SIDE and
   // re-checked against the sanctioned set, AND eligibility is re-proven from

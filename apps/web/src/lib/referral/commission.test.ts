@@ -32,19 +32,19 @@ describe("computeCommission", () => {
     });
   });
 
-  it("pays 50% ($75) on a referred $150 lifetime sale", () => {
-    const c = computeCommission("LIFETIME", 15_000);
+  it("pays 50% ($100) on a referred $200 lifetime sale", () => {
+    const c = computeCommission("LIFETIME", 20_000);
     expect(c).toEqual({
       kind: "LIFETIME_UPFRONT",
-      baseCents: 15_000,
+      baseCents: 20_000,
       rateBps: 5_000,
-      amountCents: 7_500,
+      amountCents: 10_000,
     });
   });
 
-  it("pays 50% ($60) on a referral-discounted $120 lifetime sale", () => {
-    const c = computeCommission("LIFETIME", 12_000);
-    expect(c.amountCents).toBe(6_000);
+  it("pays 50% ($80) on a referral-discounted $160 lifetime sale", () => {
+    const c = computeCommission("LIFETIME", 16_000);
+    expect(c.amountCents).toBe(8_000);
   });
 
   it("serialises recurring monthly income correctly ($6 -> $60 over 10 months)", () => {
@@ -68,11 +68,11 @@ describe("sumReleasedCents", () => {
   it("sums only RELEASED rows", () => {
     const total = sumReleasedCents([
       { status: "RELEASED", amountCents: 600 },
-      { status: "PENDING", amountCents: 7_500 },
-      { status: "RELEASED", amountCents: 7_500 },
+      { status: "PENDING", amountCents: 10_000 },
+      { status: "RELEASED", amountCents: 10_000 },
       { status: "CANCELLED", amountCents: 600 },
     ]);
-    expect(total).toBe(8_100);
+    expect(total).toBe(10_600);
   });
 
   it("is defensive against malformed rows", () => {

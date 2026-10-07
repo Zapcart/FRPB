@@ -6,7 +6,7 @@
 //      QUALIFIED referrals and grant the free Lifetime license the instant a
 //      route completes. Idempotent — an already-unlocked user short-circuits.
 //
-//   2. Downsell (`{ orderId, downsell: true }`): a paid $75 Lifetime order
+//   2. Downsell (`{ orderId, downsell: true }`): a paid $100 Lifetime order
 //      unlocks the buyer immediately. The amount + status are re-verified
 //      server-side inside the service so a client can never forge the price.
 //

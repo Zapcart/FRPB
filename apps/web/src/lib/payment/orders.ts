@@ -13,8 +13,8 @@
 //   4. SIGNATURE GATE — the gateway HMAC signature is verified server-side
 //                       before any license is granted (see lib/razorpay/server).
 //   5. REFERRAL SETTLE— a PAID order is attributed to the referral code it
-//                       carried and (for a $75 Lifetime order) unlocks the
-//                       buyer. Best-effort + idempotent: it can NEVER block or
+//                       carried and (for a full-price $200 Lifetime order)
+//                       unlocks the buyer. Best-effort + idempotent: it can NEVER block or
 //                       roll back the license grant.
 
 import type { PrismaClient } from "@prisma/client";
@@ -71,7 +71,7 @@ export async function expireStaleOrders(client: PrismaClient = prisma): Promise<
  * Resolve the Prisma `Plan` row for a slug, creating it from the DUAL_PLANS
  * configuration when the seed has not run. This keeps a license FK always
  * pointing at a valid Plan row whose stored prices match the tiers actually
- * charged (₹1,900 / ₹13,999).
+ * charged (₹1,900 / ₹16,999).
  */
 export async function ensurePlanRow(planSlug: PlanSlug, client: PrismaClient = prisma) {
   const existing = await client.plan.findUnique({ where: { slug: planSlug } });
@@ -295,7 +295,7 @@ export async function createRazorpayOrder(input: {
   /**
    * Optional server-validated charge amount in whole major units. When present
    * the caller (checkout) has already resolved a sanctioned amount — e.g. a
-   * referral-discounted $120 Lifetime price. It is re-sanctioned here as a
+   * referral-discounted $160 Lifetime price. It is re-sanctioned here as a
    * defense-in-depth guard before persistence.
    */
   amount?: number;
@@ -359,7 +359,7 @@ export async function createRazorpayOrder(input: {
  *   • `recordReferralFromOrder` — attributes the order to its referral code,
  *     creating the refund-locked PENDING Referral (and a PENDING Commission for
  *     an already-unlocked VIP referrer);
- *   • `handleDownsellUnlock` — unlocks the buyer immediately for a paid $75
+ *   • `handleDownsellUnlock` — unlocks the buyer immediately for a paid $100
  *     Lifetime downsell, which carries no referral code.
  *
  * Both operations are individually idempotent (unique `referredUserId` +
@@ -392,7 +392,7 @@ async function settleReferralForOrder(orderId: string): Promise<void> {
       });
     }
 
-    // Independent of code attribution: a full-price $75 Lifetime order has no
+    // Independent of code attribution: a full-price $200 Lifetime order has no
     // referral code but still unlocks the buyer (no-op for every other plan).
     const downsell = await handleDownsellUnlock(orderId);
     if (downsell.unlocked) {

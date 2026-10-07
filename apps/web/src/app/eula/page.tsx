@@ -107,10 +107,11 @@ export default function EULAPage() {
             </p>
             <ul className="mt-3 list-disc pl-6 space-y-1 text-slate-600">
               <li>
-                <strong>60-Day Plan</strong> — permits activation on{" "}
-                <strong>one (1) device at a time</strong>, for sixty (60) days from
-                the date of purchase. A different device may be substituted only after
-                the previously bound device is deactivated through your dashboard.
+                <strong>6-Month Plan</strong> — permits activation on{" "}
+                <strong>one (1) device at a time</strong>, for one hundred and eighty
+                (180) days from the date of purchase. A different device may be
+                substituted only after the previously bound device is deactivated
+                through your dashboard.
               </li>
               <li>
                 <strong>Lifetime Plan</strong> — permits activation on up to{" "}

@@ -90,7 +90,7 @@ type Feedback = { kind: "success" | "error"; text: string } | null;
 
 /* --------------------------------------------------------------- helpers */
 
-/** Format integer cents as a fixed USD string (e.g. 7500 → "$75.00"). */
+/** Format integer cents as a fixed USD string (e.g. 10000 → "$100.00"). */
 function formatUsd(cents: number): string {
   const value = Number.isFinite(cents) ? cents : 0;
   return `$${(value / 100).toFixed(2)}`;
@@ -351,7 +351,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
       await loadSummary();
       setFeedback({
         kind: "success",
-        text: "Lifetime unlocked at the $75 partial-credit price. Welcome to the VIP hub!",
+        text: "Lifetime unlocked at the $100 partial-credit price. Welcome to the VIP hub!",
       });
     } else if (result.status === "failed") {
       setFeedback({ kind: "error", text: result.message });
@@ -454,7 +454,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
           <h2 className="mt-1 pr-10 text-lg font-bold leading-snug">
             {unlocked
               ? "Your VIP Cash Affiliate Hub"
-              : "Refer Friends & Unlock 100% FREE $150 Lifetime Plan"}
+              : "Refer Friends & Unlock 100% FREE $200 Lifetime Plan"}
           </h2>
           <p className="mt-1 text-sm text-blue-100/90">
             {unlocked
@@ -605,12 +605,12 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
                         <Gift className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600" />
                         <div className="flex-1">
                           <p className="text-sm font-semibold text-indigo-900">
-                            You&rsquo;re 1 referral away — claim Lifetime now for $75
+                            You&rsquo;re 1 referral away — claim Lifetime now for $100
                           </p>
                           <p className="mt-1 text-xs text-indigo-700">
-                            Apply your 50% partial-credit downsell. Your $150 Lifetime
+                            Apply your 50% partial-credit downsell. Your $200 Lifetime
                             Plan unlocks immediately at the reduced price of{" "}
-                            <strong>$75</strong>.
+                            <strong>$100</strong>.
                           </p>
                           <button
                             type="button"
@@ -623,7 +623,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
                             ) : (
                               <Zap className="h-4 w-4" />
                             )}
-                            Claim Lifetime for $75
+                            Claim Lifetime for $100
                           </button>
                         </div>
                       </div>
@@ -679,7 +679,7 @@ export default function ReferralModal({ open, onClose, email }: ReferralModalPro
                       <Wallet className="h-3.5 w-3.5" /> Commission rates
                     </p>
                     <p className="mt-1">Future Monthly sales → 30% recurring cash ($6/mo)</p>
-                    <p>Future Lifetime sales → 50% upfront cash ($75 per sale)</p>
+                    <p>Future Lifetime sales → 50% upfront cash ($100 per sale)</p>
                     <p className="mt-1 flex items-center gap-1.5 text-slate-400">
                       <Clock className="h-3 w-3" /> Credits stay PENDING for 14 days
                       (refund/cancellation lock) before release.

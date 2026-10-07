@@ -2,7 +2,7 @@
 //
 // Post-unlock: future referred sales earn the referrer cash.
 //   Monthly Plan  ($20/mo) → 30% cash ($6/mo recurring).
-//   Lifetime Plan ($150)    → 50% cash (up to $75 upfront).
+//   Lifetime Plan ($200)    → 50% cash (up to $100 upfront).
 
 import { applyBps, REFERRAL_RULES, type ReferralPlanId } from "./config";
 

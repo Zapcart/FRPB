@@ -157,7 +157,7 @@ const BENTO: readonly BentoFeature[] = [
 ];
 
 const PRICING_NOTES: Record<string, string> = {
-  MONTH_1: "per 2 months",
+  MONTH_1: "per 6 months",
   LIFETIME: "one-time",
 };
 

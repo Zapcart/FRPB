@@ -12,13 +12,13 @@
 // meant to prevent. A runtime assertion below fails loudly if they drift.
 //
 //   Plan        INR        USD
-//   2 Months    ₹1,900     $20
-//   Lifetime    ₹13,999    $150
+//   6 Months    ₹1,900     $20
+//   Lifetime    ₹16,999    $200
 //
 // GATEWAY:
 //   Razorpay Standard Web Checkout is the single, exclusive payment gateway,
-//   and it settles EACH currency natively: INR tiers charge ₹1,900 / ₹13,999
-//   and USD tiers charge $20 / $150. The currency is chosen by the buyer and
+//   and it settles EACH currency natively: INR tiers charge ₹1,900 / ₹16,999
+//   and USD tiers charge $20 / $200. The currency is chosen by the buyer and
 //   locked server-side to the matching tier rate below — never converted with
 //   a live FX rate, and never read from the client.
 
@@ -67,10 +67,10 @@ export const DUAL_PLANS: readonly DualPlan[] = [
   {
     slug: "MONTH_1",
     orderPlanId: "MONTHLY",
-    name: "2 Month Plan",
+    name: "6 Month Plan",
     inr: 1900,
     usd: 20,
-    durationDays: 60,
+    durationDays: 180,
     deviceLimit: 1,
     features: [
       "Full device recovery toolkit",
@@ -83,8 +83,8 @@ export const DUAL_PLANS: readonly DualPlan[] = [
     slug: "LIFETIME",
     orderPlanId: "LIFETIME",
     name: "Lifetime Plan",
-    inr: 13999,
-    usd: 150,
+    inr: 16999,
+    usd: 200,
     durationDays: null,
     deviceLimit: 5,
     features: [
@@ -169,12 +169,12 @@ export function providerForDualCurrency(_currency: DualCurrency): DualProvider {
 
 // ─── Strict amount locks ─────────────────────────────────────────────────────
 
-/** Amounts Razorpay will ever charge in INR (₹1900 / ₹13999). */
+/** Amounts Razorpay will ever charge in INR (₹1900 / ₹16999). */
 export const ALLOWED_INR_AMOUNTS: ReadonlySet<number> = new Set(
   DUAL_PLANS.map((p) => p.inr)
 );
 
-/** USD price points Razorpay will ever charge ($20 / $150). */
+/** USD price points Razorpay will ever charge ($20 / $200). */
 export const ALLOWED_USD_AMOUNTS: ReadonlySet<number> = new Set(
   DUAL_PLANS.map((p) => p.usd)
 );
@@ -197,12 +197,12 @@ export function isAllowedAmount(amount: number, currency: DualCurrency): boolean
 // ─── Referral-discounted amount locks (Task J) ───────────────────────────────
 //
 // The referral engine lets invited friends buy the Lifetime plan at 20% OFF
-// ($150 → $120) and grants a 50% partial-credit downsell ($75). These are the
+// ($200 → $160) and grants a 50% partial-credit downsell ($100). These are the
 // ONLY additional USD price points the storefront may ever charge, and they are
 // enforced server-side here — a client can never invent its own discounted amount.
 
-/** Sanctioned referral-discounted USD price points ($120 lifetime / $75 downsell). */
-export const REFERRAL_USD_AMOUNTS: ReadonlySet<number> = new Set([120, 75]);
+/** Sanctioned referral-discounted USD price points ($160 lifetime / $100 downsell). */
+export const REFERRAL_USD_AMOUNTS: ReadonlySet<number> = new Set([160, 100]);
 
 /** True when `amount` is a sanctioned referral-discounted USD price point. */
 export function isReferralUsdAmount(amount: number): boolean {
@@ -211,8 +211,8 @@ export function isReferralUsdAmount(amount: number): boolean {
 
 /**
  * True when `amount` is any USD price the storefront may charge — either a
- * standard tier rate ($20 / $150) or a sanctioned referral-discounted point
- * ($120 / $75).
+ * standard tier rate ($20 / $200) or a sanctioned referral-discounted point
+ * ($160 / $100).
  */
 export function isSanctionedUsdAmount(amount: number): boolean {
   return isAllowedUsdAmount(amount) || isReferralUsdAmount(amount);
