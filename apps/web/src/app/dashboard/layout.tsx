@@ -119,9 +119,10 @@ export default async function DashboardLayout({
           >
             <ArrowRight className="h-4 w-4" /> Buy a new plan
           </Link>
-          {/* In-page jump to the referral engine card (progress + VIP hub). */}
+          {/* Dedicated referral route: unique share link + gamified unlock
+              progress + VIP cash affiliate hub. */}
           <Link
-            href="/dashboard#referral"
+            href="/dashboard/referrals"
             className="flex min-h-[44px] touch-manipulation select-none items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-500 transition hover:bg-white/70 hover:text-slate-900 active:bg-white/70"
           >
             <Share2 className="h-4 w-4" /> Refer & Earn
