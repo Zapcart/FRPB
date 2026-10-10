@@ -94,7 +94,7 @@ export function pageMetadata({
     openGraph: {
       type: "website",
       siteName: SITE_NAME,
-      locale: "en_IN",
+      locale: "en_US",
       title,
       description,
       url: canonical,

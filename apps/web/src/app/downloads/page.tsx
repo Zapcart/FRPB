@@ -219,7 +219,7 @@ export default function DownloadsPage() {
       {/* ================= FOOTER ================= */}
       <footer className="border-t border-slate-200 bg-white">
         <div className="mx-auto max-w-5xl px-6 py-6">
-          {/* DPDP / legal disclaimer — small print, kept visually subtle. */}
+          {/* Legal disclaimer — small print, kept visually subtle. */}
           <p className="text-xs leading-relaxed text-slate-400">
             {LEGAL_DISCLAIMER}
           </p>

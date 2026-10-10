@@ -120,8 +120,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "Zapcart",
-        "repo": "FRPB",
+        "owner": "quotexahsan90-cyber",
+        "repo": "FRPB-APP",
         "releaseType": "release"
       }
     ]

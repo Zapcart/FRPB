@@ -1,8 +1,8 @@
 // FRPB — /checkout entry.
 //
 // Razorpay Standard Web Checkout is the single, exclusive payment gateway for
-// every tier: there is no self-hosted UPI rail and no alternate gateway to
-// branch on. Every plan settles in USD, so there is no display-currency branch.
+// every tier: there is no alternate gateway to branch on. Every plan settles in
+// USD, so there is no display-currency branch.
 // The page resolves the plan from the query string and pre-fills the signed-in
 // email when present.
 //

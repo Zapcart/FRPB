@@ -110,7 +110,7 @@ const samsung: BrandPageContent = {
   steps: [
     {
       title: "Install FRPB on Windows",
-      desc: "Download the signed FRPB-Recovery-Setup-1.0.1.exe installer from the official GitHub Release (v2.0.0) and launch it on Windows 10 or 11.",
+      desc: "Download the signed FRPB-Recovery-Setup-1.0.1.exe installer from the official GitHub Release (v2) and launch it on Windows 10 or 11.",
     },
     {
       title: "Connect the Galaxy over USB",
@@ -196,7 +196,7 @@ const xiaomi: BrandPageContent = {
   steps: [
     {
       title: "Download FRPB for Windows",
-      desc: "Grab the signed FRPB-Recovery-Setup-1.0.1.exe from the official GitHub Release (v2.0.0) and install it on Windows 10 or 11.",
+      desc: "Grab the signed FRPB-Recovery-Setup-1.0.1.exe from the official GitHub Release (v2) and install it on Windows 10 or 11.",
     },
     {
       title: "Boot the Xiaomi device to Download / BROM",
@@ -282,7 +282,7 @@ const vivoOppoRealme: BrandPageContent = {
   steps: [
     {
       title: "Install FRPB on your PC",
-      desc: "Download the signed FRPB-Recovery-Setup-1.0.1.exe from the official GitHub Release (v2.0.0) and run it on Windows 10 or 11.",
+      desc: "Download the signed FRPB-Recovery-Setup-1.0.1.exe from the official GitHub Release (v2) and run it on Windows 10 or 11.",
     },
     {
       title: "Enter MTK BROM or Qualcomm EDL mode",
@@ -368,7 +368,7 @@ const qualcommEdl: BrandPageContent = {
   steps: [
     {
       title: "Install FRPB on Windows",
-      desc: "Download the signed FRPB-Recovery-Setup-1.0.1.exe from the official GitHub Release (v2.0.0) and install it on Windows 10 or 11.",
+      desc: "Download the signed FRPB-Recovery-Setup-1.0.1.exe from the official GitHub Release (v2) and install it on Windows 10 or 11.",
     },
     {
       title: "Put the device into EDL mode",

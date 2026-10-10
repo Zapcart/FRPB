@@ -273,7 +273,7 @@ export default function BrandLandingPage({ content }: { content: BrandPageConten
       {/* ================= FOOTER ================= */}
       <footer className="border-t border-glass-edge bg-glass-soft backdrop-blur">
         <div className="mx-auto max-w-5xl px-6 py-6">
-          {/* DPDP / legal disclaimer — small print, kept visually subtle. */}
+          {/* Legal disclaimer — small print, kept visually subtle. */}
           <p className="text-xs leading-relaxed text-slate-400">
             {LEGAL_DISCLAIMER}
           </p>

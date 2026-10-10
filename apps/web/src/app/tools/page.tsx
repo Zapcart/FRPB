@@ -28,7 +28,7 @@ import {
 import { SEO_BRANDS, SEO_SPOKE_COUNT } from "@/data/seo-matrix";
 
 export const metadata = pageMetadata({
-  title: "All FRP Tools — Samsung, Xiaomi, Vivo & More | FRPB",
+  title: "All FRP Tools — Samsung, Xiaomi, Vivo & More",
   description:
     "Browse every FRPB device tool: Samsung FRP tool, Xiaomi lock removal, Vivo, Oppo, Realme and more, plus Virtual Location, Data Eraser, Phone Transfer and WhatsApp Transfer.",
   path: "/tools",

@@ -1,7 +1,8 @@
 // FRPB — Terms of Service
 // Server component. Static legal page governing use of the FRPB website and
 // desktop application: account, payment, license grant, restrictions, warranty
-// disclaimers, liability cap, termination, and Indian governing law.
+// disclaimers, liability cap, termination, and governing law / dispute
+// resolution. Jurisdiction-neutral for a worldwide audience.
 // Not legal advice — have a qualified lawyer review before relying on it.
 
 import Image from "next/image";
@@ -16,7 +17,7 @@ import {
 export const metadata = pageMetadata({
   title: "Terms of Service",
   description:
-    "Terms of Service for FRPB — account terms, payment and license terms, usage restrictions, warranty disclaimers, liability limits and Indian governing law.",
+    "Terms of Service for FRPB — account terms, payment and license terms, usage restrictions, warranty disclaimers, liability limits and governing law.",
   path: "/terms",
 });
 
@@ -62,7 +63,7 @@ export default function TermsOfServicePage() {
         <p className="mt-3 text-sm text-slate-500">
           Last updated:{" "}
           <time dateTime={new Date().toISOString().slice(0, 10)}>
-            {new Date().toLocaleDateString("en-IN", {
+            {new Date().toLocaleDateString("en-US", {
               day: "numeric",
               month: "long",
               year: "numeric",
@@ -186,12 +187,11 @@ export default function TermsOfServicePage() {
               </li>
             </ul>
             <p>
-              All amounts are stated in the currency you select at checkout and
-              are payable in Indian Rupees (INR) or United States Dollars (USD)
-              as selected. Payments are processed by our payment gateway; you
-              authorise us and our processor to charge the payment method you
-              provide. Prices are inclusive of applicable taxes unless stated
-              otherwise. Fees are non-refundable except as provided in our{" "}
+              All amounts are stated in United States Dollars (USD), the primary
+              currency for the Service. Payments are processed by our payment
+              gateway; you authorise us and our processor to charge the payment
+              method you provide. Prices are inclusive of applicable taxes unless
+              stated otherwise. Fees are non-refundable except as provided in our{" "}
               <a href="/refund" className="text-brand-600 hover:underline">
                 Refund Policy
               </a>
@@ -348,8 +348,8 @@ export default function TermsOfServicePage() {
               third-party services.
             </p>
             <p>
-              Card and UPI payments are handled by our payment gateway using
-              PCI-DSS compliant infrastructure; we do not store full payment
+              Card and other online payments are handled by our payment gateway
+              using PCI-DSS compliant infrastructure; we do not store full payment
               instrument details. Payment amounts may be subject to foreign
               exchange rates and transaction fees imposed by the gateway or your
               bank, which may affect the final amount charged.
@@ -411,8 +411,7 @@ export default function TermsOfServicePage() {
               </strong>{" "}
               during the twelve (12) months immediately preceding the event giving
               rise to the claim. If you have paid no fees, FRPB’s total liability
-              shall not exceed one hundred United States Dollars (USD 100) or its
-              equivalent in Indian Rupees.
+              shall not exceed one hundred United States Dollars (USD 100).
             </p>
             <p>
               Nothing in these Terms limits liability for fraud, wilful
@@ -473,10 +472,12 @@ export default function TermsOfServicePage() {
             </h2>
             <p>
               These Terms and any dispute or claim arising out of or in connection
-              with them are governed by and construed in accordance with the laws
-              of {COMPANY_JURISDICTION}, without regard to its conflict-of-laws
-              principles, and the United Nations Convention on Contracts for the
-              International Sale of Goods shall not apply.
+              with them are governed by and construed in accordance with
+              internationally recognised commercial law principles, without regard
+              to conflict-of-laws rules, and the United Nations Convention on
+              Contracts for the International Sale of Goods shall not apply.
+              Nothing in this section deprives you of the protection of any
+              mandatory consumer-protection rules of your country of residence.
             </p>
             <p>
               <strong>Dispute resolution.</strong> If a dispute arises, you and
@@ -490,19 +491,19 @@ export default function TermsOfServicePage() {
               </a>{" "}
               and negotiating in good faith for a period of thirty (30) days. If
               the dispute is not resolved within that period, it shall be referred
-              to and finally resolved by arbitration in {COMPANY_JURISDICTION} in
-              accordance with the Arbitration and Conciliation Act, 1996, by a
-              sole arbitrator appointed by mutual agreement, and the language of
-              the arbitration shall be English. The seat and venue of arbitration
-              shall be in {COMPANY_JURISDICTION}.
+              to and finally resolved by binding arbitration administered under
+              internationally recognised arbitral rules, before a sole arbitrator
+              appointed by mutual agreement, and the language of the arbitration
+              shall be English. Where mandatory consumer law applies, you may also
+              bring proceedings before the competent courts of your country of
+              residence.
             </p>
             <p>
-              Subject to the arbitration clause above, the courts located in{" "}
-              {COMPANY_JURISDICTION} shall have exclusive jurisdiction over any
-              matter not subject to arbitration, unless mandatory consumer law
-              provides otherwise. Nothing in this section prevents either party
-              from seeking urgent interim or injunctive relief from a competent
-              court.
+              Subject to the arbitration clause above, any matter not subject to
+              arbitration shall be handled by a court of competent jurisdiction,
+              unless mandatory consumer law provides otherwise. Nothing in this
+              section prevents either party from seeking urgent interim or
+              injunctive relief from a competent court.
             </p>
           </section>
 

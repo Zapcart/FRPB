@@ -34,9 +34,11 @@ import { promoMonthlyMonthsFor } from "@/config/promo";
 import Hero from "@/components/landing/hero";
 import DeviceShowcase from "@/components/DeviceShowcase";
 import ErrorBoundary from "@/components/error-boundary";
-import Footer from "@/components/Footer";
 import JsonLd from "@/components/seo/json-ld";
 import FaqSection from "@/components/faq-section";
+// The home page owns the in-page `#eula` anchor target, so it renders its own
+// footer instance (the site-wide <SiteFooter /> skips the `/` route).
+import Footer from "@/components/Footer";
 import {
   PRIMARY_TITLE,
   PRODUCT_DESCRIPTION,
@@ -657,7 +659,10 @@ export default function HomePage() {
       <FaqSection items={HOME_FAQ} />
 
       {/* ================= FOOTER ================= */}
-      <Footer />
+      {/* The site-wide <SiteFooter /> (mounted in the root layout) renders the
+          footer here too, but it skips the home route so the home page can own
+          the in-page `#eula` anchor target. */}
+      <Footer id="eula" />
     </div>
   );
 }

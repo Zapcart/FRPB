@@ -4,6 +4,7 @@
 
 import { getPlan, resolveEffectiveDurationDays, LAUNCH_PROMO } from "@frpb/shared";
 import { RELEASE_VERSION } from "@/config/download";
+import { SUPPORT_EMAIL } from "@/config/legal";
 import {
   SITE_URL,
   SITE_NAME,
@@ -24,6 +25,56 @@ const CURRENCY = "USD";
  * safe far-future date if the window is ever unset/malformed.
  */
 const PRICE_VALID_UNTIL = LAUNCH_PROMO.endsAt.slice(0, 10) || "2027-12-31";
+
+/**
+ * Markets the storefront sells to — the global audience this Task targets
+ * (US, UK, Australia, Canada, UAE, Saudi Arabia, Russia). Kept in one place so
+ * offer/policy nodes advertise a consistent eligible region set.
+ */
+const APPLICABLE_COUNTRIES = ["US", "GB", "AU", "CA", "AE", "SA", "RU"] as const;
+
+/**
+ * Merchant return policy for the digital licence offers — mirrors the published
+ * 7-day money-back guarantee on `/refund` so the structured data matches visible
+ * policy pages (a Google merchant-listing + structured-data requirement).
+ */
+function merchantReturnPolicy(): Record<string, unknown> {
+  return {
+    "@type": "MerchantReturnPolicy",
+    applicableCountry: [...APPLICABLE_COUNTRIES],
+    returnPolicyCategory:
+      "https://schema.org/MerchantReturnFiniteReturnWindow",
+    merchantReturnDays: 7,
+    returnFees: "https://schema.org/FreeReturn",
+    // Digital licences are delivered instantly; there is no physical item to
+    // condition-check, so the policy is keyed to activation state (see /refund).
+    itemCondition: "https://schema.org/NewCondition",
+    url: absoluteUrl("/refund"),
+  };
+}
+
+/**
+ * Shipping/delivery details for the Offer. FRPB is a downloadable desktop
+ * utility — there is no physical shipment — so this advertises instant digital
+ * delivery at zero cost, which satisfies merchant-listing `Offer` guidance for
+ * digital goods without implying a physical fulfilment step.
+ */
+function offerShippingDetails(): Record<string, unknown> {
+  return {
+    "@type": "OfferShippingDetails",
+    shippingRate: { "@type": "MonetaryAmount", value: "0", currency: CURRENCY },
+    shippingDestination: [...APPLICABLE_COUNTRIES].map((code) => ({
+      "@type": "DefinedRegion",
+      addressCountry: code,
+    })),
+    doesNotShip: false,
+    deliveryTime: {
+      "@type": "ShippingDeliveryTime",
+      handlingTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 0, unitCode: "DAY" },
+      transitTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 0, unitCode: "DAY" },
+    },
+  };
+}
 
 /** ISO-8601 duration for a plan, or undefined for lifetime (one-time) plans. */
 function billingDuration(days: number | null): string | undefined {
@@ -120,12 +171,12 @@ export function organizationSchema(): Record<string, unknown> {
       "@type": "ImageObject",
       url: absoluteUrl(OG_IMAGE_PATH),
     },
-    email: "support@frpb.in",
+    email: SUPPORT_EMAIL,
     // Machine-readable support/contact surface for brand-knowledge panels.
     contactPoint: {
       "@type": "ContactPoint",
       contactType: "customer support",
-      email: "support@frpb.in",
+      email: SUPPORT_EMAIL,
       availableLanguage: ["en"],
     },
   };
@@ -181,6 +232,14 @@ export function productSchema(): Record<string, unknown> {
       priceValidUntil: PRICE_VALID_UNTIL,
       availability: AVAILABILITY,
       url: SITE_URL,
+      // Merchant-policy nodes: eligible region set, the 7-day money-back
+      // guarantee, and instant digital delivery.
+      eligibleRegion: [...APPLICABLE_COUNTRIES].map((code) => ({
+        "@type": "DefinedRegion",
+        addressCountry: code,
+      })),
+      hasMerchantReturnPolicy: merchantReturnPolicy(),
+      shippingDetails: offerShippingDetails(),
       ...(baseDuration
         ? {
             priceSpecification: {

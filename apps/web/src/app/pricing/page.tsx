@@ -474,7 +474,7 @@ export default function PricingPage() {
       </main>
 
       <footer className="border-t border-glass-edge bg-glass-soft px-6 py-8 text-center text-sm text-slate-500 backdrop-blur">
-        {/* DPDP / legal disclaimer — site-wide small print. */}
+        {/* Legal disclaimer — site-wide small print. */}
         <p className="mx-auto max-w-4xl text-xs leading-relaxed text-slate-400">
           {LEGAL_DISCLAIMER}
         </p>

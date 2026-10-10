@@ -47,7 +47,7 @@ const LANGUAGES = [
   { value: "ar", label: "العربية" },
 ] as const;
 
-export default function Footer() {
+export default function Footer({ id }: { id?: string } = {}) {
   const downloadUrl = resolveInstallerUrl();
   const year = new Date().getFullYear();
 
@@ -69,7 +69,7 @@ export default function Footer() {
     {
       heading: "FRPB Platform",
       links: [
-        { label: "About Us", href: "/#guides" },
+        { label: "About Us", href: "/about" },
         { label: "Features", href: "/#features" },
         { label: "Pricing", href: "/pricing" },
         { label: "Blog", href: "/blog" },
@@ -78,7 +78,7 @@ export default function Footer() {
     {
       heading: "Help Center",
       links: [
-        { label: "Contact Us", href: mailtoHref(SUPPORT_EMAIL) },
+        { label: "Contact Us", href: "/contact" },
         { label: "License Recovery", href: "/recover" },
         { label: "Dashboard", href: "/dashboard" },
       ],
@@ -86,7 +86,7 @@ export default function Footer() {
   ];
 
   return (
-    <footer id="eula" className="relative border-t border-glass-edge bg-glass-soft text-slate-500 backdrop-blur">
+    <footer id={id ?? "eula"} className="relative border-t border-glass-edge bg-glass-soft text-slate-500 backdrop-blur">
       <div className="mx-auto max-w-7xl px-6 py-16">
         <div className="grid gap-12 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
           {/* Brand column */}
@@ -148,7 +148,7 @@ export default function Footer() {
           ))}
         </div>
 
-        {/* Legal / DPDP disclaimer — site-wide small print. */}
+        {/* Legal disclaimer — site-wide small print. */}
         <p className="mt-12 max-w-4xl text-xs leading-relaxed text-slate-500">
           {LEGAL_DISCLAIMER}
         </p>
@@ -174,8 +174,17 @@ export default function Footer() {
             <Link href="/privacy" className="transition hover:text-slate-900">
               Privacy Policy
             </Link>
+            <Link href="/eula" className="transition hover:text-slate-900">
+              EULA
+            </Link>
             <Link href="/refund" className="transition hover:text-slate-900">
               Refund Policy
+            </Link>
+            <Link href="/about" className="transition hover:text-slate-900">
+              About Us
+            </Link>
+            <Link href="/contact" className="transition hover:text-slate-900">
+              Contact
             </Link>
           </nav>
 

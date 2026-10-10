@@ -62,7 +62,7 @@ export default function RefundPolicyPage() {
         <p className="mt-3 text-sm text-slate-500">
           Last updated:{" "}
           <time dateTime={new Date().toISOString().slice(0, 10)}>
-            {new Date().toLocaleDateString("en-IN", {
+            {new Date().toLocaleDateString("en-US", {
               day: "numeric",
               month: "long",
               year: "numeric",

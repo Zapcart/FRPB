@@ -9,6 +9,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { SessionProvider } from "@/components/session-provider";
 import FloatingWidgets from "@/components/floating-widgets";
+import SiteFooter from "@/components/SiteFooter";
 import PageViewTracker from "@/components/analytics/page-view-tracker";
 import ReferralCapture from "@/components/referral/ReferralCapture";
 import { PostHogProvider } from "./providers";
@@ -51,7 +52,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
-    locale: "en_IN",
+    locale: "en_US",
     url: "/",
     siteName: SITE_NAME,
     title: PRIMARY_TITLE,
@@ -117,6 +118,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               above the community widget (bottom-28 vs bottom-5) so the two
               never overlap. */}
           <FloatingWidgets />
+          {/* Site-wide marketing footer. Route-gated on the client: the home
+              route paints its own <Footer />, and the authenticated/app routes
+              (auth, dashboard, admin, checkout) are excluded. Every other
+              crawlable page (tools, brands, blog, legal, about, contact) thus
+              inherits a consistent footer with a clear path to the legal
+              pages — an AdSense/quality requirement. The footer element itself
+              is a Server Component, so its static HTML stays in the SSR tree. */}
+          <SiteFooter />
         </PostHogProvider>
       </body>
     </html>

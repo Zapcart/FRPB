@@ -1,10 +1,16 @@
 /**
  * FRPB — Central legal & compliance configuration.
  *
- * Single source of truth for the site-wide legal disclaimer, the contact
- * addresses required by the Digital Personal Data Protection (DPDP) Act, 2023,
- * and the company identity / processor disclosures reused by the legal pages
- * and the global footer.
+ * Single source of truth for the site-wide legal disclaimer, the global contact
+ * addresses (GDPR / CCPA / UK-GDPR data-access and erasure requests) and the
+ * company identity / processor disclosures reused by the legal pages and the
+ * global footer.
+ *
+ * FRPB is a remote-first, globally distributed product: we operate no
+ * country-specific physical office, so the operator identity below is
+ * intentionally jurisdiction-neutral. This keeps the storefront, metadata and
+ * structured data free of any local/regional operational trace and consistent
+ * for a worldwide audience (US, UK, EU, Australia, Canada, Middle East).
  *
  * Keeping this here (mirroring `config/download.ts`) means the disclaimer,
  * support/legal addresses, operator identity and named sub-processors are
@@ -15,21 +21,22 @@
 /** Support mailbox — general help, account, billing and product queries. */
 export const SUPPORT_EMAIL = "support@frpb.in";
 
-/** Legal/privacy mailbox — DPDP / GDPR / CCPA data-access and erasure requests. */
+/** Legal/privacy mailbox — GDPR / CCPA / UK-GDPR data-access and erasure requests. */
 export const LEGAL_EMAIL = "legal@frpb.in";
 
-/** Postal jurisdiction shown alongside the contact addresses. */
-export const LEGAL_LOCATION = "FRPB, India";
+/** Service-area label shown alongside the contact addresses. */
+export const LEGAL_LOCATION = "Worldwide";
 
 /**
  * Operator identity shown in every footer and legal page. Kept as discrete
- * fields so the trade name, entity descriptor and jurisdiction are rendered
+ * fields so the trade name, entity descriptor and service area are rendered
  * consistently rather than being re-typed (and drifting) on each page.
+ * Intentionally country-neutral — FRPB is a remote-first, distributed service.
  */
 export const COMPANY_NAME = "FRPB";
-export const COMPANY_ENTITY = "FRPB (sole proprietorship)";
-export const COMPANY_ADDRESS = "India";
-export const COMPANY_JURISDICTION = "India";
+export const COMPANY_ENTITY = "FRPB";
+export const COMPANY_ADDRESS = "Remote — worldwide";
+export const COMPANY_JURISDICTION = "Worldwide";
 
 /** Canonical site origin, used for processing / cross-border disclosures. */
 export const LEGAL_WEBSITE = "https://frpb.in";

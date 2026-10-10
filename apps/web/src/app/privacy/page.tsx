@@ -1,7 +1,7 @@
 // FRPB — Privacy Policy
 // Server component. Static legal page describing what data we collect, how we
-// use it, how long we keep it, and the GDPR / CCPA / DPDP rights available to
-// end users. Written for a lay customer in plain English.
+// use it, how long we keep it, and the GDPR / CCPA rights available to end
+// users. Written for a lay customer in plain English.
 
 import Image from "next/image";
 import { pageMetadata } from "@/lib/seo";
@@ -18,7 +18,7 @@ import {
 export const metadata = pageMetadata({
   title: "Privacy Policy",
   description:
-    "How FRPB collects, uses, shares and protects your personal data — GDPR, CCPA and DPDP Act 2023 disclosures for the FRPB website and desktop application.",
+    "How FRPB collects, uses, shares and protects your personal data — GDPR and CCPA disclosures for the FRPB website and desktop application.",
   path: "/privacy",
 });
 
@@ -64,7 +64,7 @@ export default function PrivacyPolicyPage() {
         <p className="mt-3 text-sm text-slate-500">
           Last updated:{" "}
           <time dateTime={new Date().toISOString().slice(0, 10)}>
-            {new Date().toLocaleDateString("en-IN", {
+            {new Date().toLocaleDateString("en-US", {
               day: "numeric",
               month: "long",
               year: "numeric",
@@ -76,19 +76,20 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-lg font-bold text-ink">1. Who we are</h2>
             <p>
-              FRPB (“we”, “us” or “our”) operates the FRPB desktop application and
-              the frpb.in website from {COMPANY_JURISDICTION}. We provide a device
-              recovery and utility tool for Android and iOS devices. Our tools are
-              intended for authorised device owners and technical professionals only.
+              FRPB (“we”, “us” or “our”) is a remote-first, globally distributed
+              service that operates the FRPB desktop application and the frpb.in
+              website ({COMPANY_JURISDICTION}). We provide a device recovery and
+              utility tool for Android and iOS devices. Our tools are intended for
+              authorised device owners and technical professionals only.
             </p>
             <p className="mt-3">
               For the purposes of the EU/UK General Data Protection Regulation
               (GDPR) we are the <strong>data controller</strong>; under the
               California Consumer Privacy Act (CCPA/CPRA) we are a{" "}
-              <strong>business</strong>; and under India’s Digital Personal Data
-              Protection Act, 2023 (DPDP Act) we are the{" "}
-              <strong>Data Fiduciary</strong> for the data described in this policy.
-              Our website is {LEGAL_WEBSITE}.
+              <strong>business</strong>; and for users elsewhere — including the
+              Middle East, Australia and Canada — we act as the responsible
+              controller for the data described in this policy. Our website is{" "}
+              {LEGAL_WEBSITE}.
             </p>
           </section>
 
@@ -127,8 +128,8 @@ export default function PrivacyPolicyPage() {
                 currency and the amount paid, plus a hashed payment signature used
                 to verify the transaction. We do <em>not</em> store full card
                 numbers, CVV or bank credentials. Payments are processed by{" "}
-                {DATA_PROCESSORS.payments}, which alone receives your card or UPI
-                details.
+                {DATA_PROCESSORS.payments}, which alone receives your card or
+                other payment details.
               </li>
               <li>
                 <strong>License data</strong> — the license key issued to you, the
@@ -210,7 +211,7 @@ export default function PrivacyPolicyPage() {
             <ul className="mt-3 list-disc pl-6 space-y-1 text-slate-600">
               <li>
                 <strong>Payments — {DATA_PROCESSORS.payments}</strong>: processes card
-                and UPI payments, receives your payment instrument details, and
+                and other online payments, receives your payment instrument details, and
                 handles refunds. We receive only the transaction result, order ID and
                 payment signature.
               </li>
@@ -279,8 +280,8 @@ export default function PrivacyPolicyPage() {
               7. International and cross-border data transfers
             </h2>
             <p>
-              We operate from {COMPANY_JURISDICTION}, but some of our processors
-              (including {DATA_PROCESSORS.payments}, {DATA_PROCESSORS.email},{" "}
+              We are a remote-first, globally distributed service, and some of our
+              processors (including {DATA_PROCESSORS.payments}, {DATA_PROCESSORS.email},{" "}
               {DATA_PROCESSORS.analytics} and {DATA_PROCESSORS.auth}) may store or
               process data on servers located outside your country, including in the
               United States and the European Union.
@@ -289,10 +290,10 @@ export default function PrivacyPolicyPage() {
               Where we transfer personal data out of the EEA, the UK or Switzerland,
               we rely on appropriate safeguards such as the European Commission’s
               Standard Contractual Clauses (and the UK Addendum where applicable),
-              together with supplementary technical and organisational measures.
-              Where we transfer data out of India, we do so consistent with the DPDP
-              Act and any restrictions notified by the Indian government. You may
-              contact us for more information about the safeguards we use.
+              together with supplementary technical and organisational measures. We
+              apply equivalent, jurisdiction-neutral safeguards to transfers from
+              other regions. You may contact us for more information about the
+              safeguards we use.
             </p>
           </section>
 
@@ -330,16 +331,12 @@ export default function PrivacyPolicyPage() {
               </li>
               <li>
                 <strong>Complaint</strong> — lodge a complaint with your local data
-                protection authority (in the EU/UK) or the Data Protection Board of
-                India (under the DPDP Act).
+                protection authority.
               </li>
             </ul>
             <p className="mt-3">
-              Under the DPDP Act you are a <strong>Data Principal</strong>. You may
-              request access to, correction of, or erasure of your personal data, and
-              you may nominate another individual to exercise these rights on your
-              behalf in the event of death or incapacity. We act as the{" "}
-              <strong>Data Fiduciary</strong> and process your data only for the
+              You may also nominate another individual to exercise these rights on
+              your behalf where local law permits. We process your data only for the
               lawful purposes stated above.
             </p>
             <p className="mt-3">

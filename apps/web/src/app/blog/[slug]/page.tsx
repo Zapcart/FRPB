@@ -75,7 +75,7 @@ export function generateMetadata({ params }: BlogPostPageProps): Metadata {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-IN", {
+  return new Date(iso).toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
