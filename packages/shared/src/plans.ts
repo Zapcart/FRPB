@@ -3,6 +3,8 @@
 // checkout sessions, webhook processor and the desktop app.
 // Mirror of the Prisma `Plan` rows — keep in sync with prisma/seed.ts.
 
+import { resolveMonthlyDurationDays } from "./promo";
+
 export const PLAN_TYPE_VALUES = ["MONTH_1", "LIFETIME"] as const;
 export type PlanSlug = (typeof PLAN_TYPE_VALUES)[number];
 
@@ -98,6 +100,24 @@ export function getPlan(slug: PlanSlug): PlanDefinition {
   const plan = PLANS.find((p) => p.slug === slug);
   if (!plan) throw new Error(`Unknown plan slug: ${slug}`);
   return plan;
+}
+
+/**
+ * The duration, in days, a plan actually grants *right now*.
+ *
+ * For MONTH_1 the plan row stores the advertised headline (180 during the
+ * launch offer), but the true entitlement is promo-aware and MUST be resolved
+ * server-side at payment time via {@link resolveMonthlyDurationDays} so a buyer
+ * receives exactly the term advertised when they paid. LIFETIME (`null`) is
+ * unaffected. Kept here so both the web server and the desktop app resolve the
+ * same value from one place.
+ */
+export function resolveEffectiveDurationDays(
+  slug: PlanSlug,
+  now: Date = new Date()
+): number | null {
+  if (slug === "MONTH_1") return resolveMonthlyDurationDays(now);
+  return getPlan(slug).durationDays;
 }
 
 /** Convert a Prisma PlanType string into a typed PlanSlug. */

@@ -7,6 +7,7 @@
 
 import Link from "next/link";
 import {
+  Apple,
   ArrowRight,
   Cpu,
   FileDown,
@@ -21,6 +22,7 @@ import { breadcrumbSchema } from "@/lib/schema";
 import JsonLd from "@/components/seo/json-ld";
 import {
   CLUSTER_MODEL_COUNT,
+  iosLinks,
   utilityLinks,
 } from "@/data/seo-clusters";
 import { SEO_BRANDS, SEO_SPOKE_COUNT } from "@/data/seo-matrix";
@@ -47,6 +49,7 @@ function brandAnchor(brandLabel: string): string {
 
 export default function ToolsIndexPage() {
   const utilities = utilityLinks();
+  const ios = iosLinks();
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-white text-slate-900">
@@ -176,6 +179,40 @@ export default function ToolsIndexPage() {
                 <p className="mt-3 text-xs leading-relaxed text-slate-500">{tool.blurb}</p>
                 <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-brand-600">
                   Explore tool
+                  <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        {/* ================= IOS GUIDES (iPhone & iPad) ================= */}
+        <section id="ios" aria-label="iPhone and iPad iOS unlock guides" className="mt-16">
+          <h2 className="text-2xl font-extrabold tracking-tight text-ink">
+            iPhone & iPad (iOS) guides
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm text-slate-500">
+            FRPB is an Android FRP toolkit — for Apple devices we publish honest,
+            owner-focused guides to iCloud Activation Lock, passcode and Face ID
+            removal through Apple's official channels.
+          </p>
+
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {ios.map((guide) => (
+              <Link
+                key={guide.path}
+                href={guide.path}
+                className="glass-surface group flex flex-col justify-between p-5 transition hover:-translate-y-0.5 hover:shadow-blue-glow"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 text-slate-700">
+                    <Apple className="h-4 w-4" />
+                  </span>
+                  <h3 className="text-sm font-bold text-ink">{guide.anchor}</h3>
+                </div>
+                <p className="mt-3 text-xs leading-relaxed text-slate-500">{guide.blurb}</p>
+                <span className="mt-4 inline-flex items-center gap-1 text-xs font-semibold text-brand-600">
+                  Read iOS guide
                   <ArrowRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" />
                 </span>
               </Link>

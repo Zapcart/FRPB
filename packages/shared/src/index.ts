@@ -2,6 +2,7 @@
 // Consumed by apps/web and apps/desktop.
 
 export * from "./plans";
+export * from "./promo";
 export * from "./license";
 export * from "./api";
 export * from "./frp";

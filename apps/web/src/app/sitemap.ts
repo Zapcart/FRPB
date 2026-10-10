@@ -12,6 +12,7 @@ import {
   TOOLS_BASE_PATH,
 } from "@/data/seo-matrix";
 import { FREE_TOOL_ROUTES, UNLOCK_TOOL_ROUTES } from "@frpb/shared";
+import { IOS_HUB_PATH, IOS_SPOKE_PATHS } from "@/data/ios-content";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
@@ -124,6 +125,24 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.6,
   }));
 
+  // iOS (iPhone & iPad) learn cluster: the `/ios` hub plus its owner-focused
+  // spokes. These are informational, Apple-official removal guides — not a
+  // device matrix — so they list monthly at 0.6 alongside the model spokes.
+  const iosPages: MetadataRoute.Sitemap = [
+    {
+      url: `${SITE_URL}${IOS_HUB_PATH}`,
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.7,
+    },
+    ...IOS_SPOKE_PATHS.map((path) => ({
+      url: `${SITE_URL}${path}`,
+      lastModified: now,
+      changeFrequency: "monthly" as const,
+      priority: 0.6,
+    })),
+  ];
+
   const posts: MetadataRoute.Sitemap = BLOG_POSTS.map((post) => ({
     url: `${SITE_URL}/blog/${post.slug}`,
     lastModified: new Date(post.dateModified),
@@ -144,6 +163,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...unlockToolPages,
     ...brandHubPages,
     ...modelSpokePages,
+    ...iosPages,
     ...posts,
   ];
 }

@@ -19,6 +19,7 @@ import {
   type SeoIntent,
   type SeoModelRecord,
 } from "./seo-matrix";
+import { IOS_HUB, IOS_HUB_PATH, IOS_SPOKES } from "./ios-content";
 
 /** A single internal link with an exact-match anchor + descriptive blurb. */
 export interface SeoLink {
@@ -212,6 +213,32 @@ export function utilityCrossLinks(id: FreeToolId, limit = 3): SeoLink[] {
 /** Every utility as a link (used by the `/tools` index + spokes). */
 export function utilityLinks(): SeoLink[] {
   return UTILITY_CLUSTER.map(({ path, anchor, blurb }) => ({ path, anchor, blurb }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// iOS (iPhone & iPad) internal-link selector
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The `/ios` learn hub plus every iOS spoke as internal links. iOS coverage is a
+ * separate, honest cluster — Apple devices are deliberately excluded from the
+ * Android `KNOWN_MODELS` matrix — so this selector is the single place that
+ * surfaces the `/ios` graph to the `/tools` directory and the `/icloud-bypass`
+ * page (high-intent "icloud" queries stay on-site).
+ */
+export function iosLinks(): SeoLink[] {
+  return [
+    {
+      path: IOS_HUB_PATH,
+      anchor: IOS_HUB.eyebrow,
+      blurb: IOS_HUB.description,
+    },
+    ...IOS_SPOKES.map((spoke) => ({
+      path: spoke.path,
+      anchor: spoke.eyebrow,
+      blurb: spoke.description,
+    })),
+  ];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

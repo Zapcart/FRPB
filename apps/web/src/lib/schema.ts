@@ -2,7 +2,7 @@
 // Kept separate from `seo.ts` so metadata and structured data can be unit
 // reasoned about independently. All builders emit plain objects.
 
-import { getPlan } from "@frpb/shared";
+import { getPlan, resolveEffectiveDurationDays, LAUNCH_PROMO } from "@frpb/shared";
 import { RELEASE_VERSION } from "@/config/download";
 import {
   SITE_URL,
@@ -16,8 +16,14 @@ import {
 
 const AVAILABILITY = "https://schema.org/InStock";
 const CURRENCY = "USD";
-/** Price-validity horizon advertised for the USD offers. */
-const PRICE_VALID_UNTIL = "2027-12-31";
+/**
+ * Price-validity horizon advertised for the USD offers.
+ *
+ * Sourced from the launch-promo window so the Offer's `priceValidUntil` can
+ * never advertise a validity the storefront no longer honours. Falls back to a
+ * safe far-future date if the window is ever unset/malformed.
+ */
+const PRICE_VALID_UNTIL = LAUNCH_PROMO.endsAt.slice(0, 10) || "2027-12-31";
 
 /** ISO-8601 duration for a plan, or undefined for lifetime (one-time) plans. */
 function billingDuration(days: number | null): string | undefined {
@@ -154,7 +160,10 @@ export function productSchema(): Record<string, unknown> {
   // Entry-price plan drives the headline Offer (currently $20.00/month).
   const basePlan = getPlan("MONTH_1");
   const basePrice = (basePlan.priceCents / 100).toFixed(2);
-  const baseDuration = billingDuration(basePlan.durationDays);
+  // Resolve the term at call time so the advertised billing duration matches the
+  // promo window: during the launch offer the $20 tier grants 180 days (P6M),
+  // after it 120 days (P4M).
+  const baseDuration = billingDuration(resolveEffectiveDurationDays("MONTH_1"));
 
   return {
     "@context": "https://schema.org",

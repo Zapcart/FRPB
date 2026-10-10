@@ -27,8 +27,10 @@ import {
   MapPin,
   type LucideIcon,
 } from "lucide-react";
-import { PLANS, FREE_TOOLS, FREE_TOOL_IDS, type FreeToolId } from "@frpb/shared";
+import { PLANS, FREE_TOOLS, FREE_TOOL_IDS, isPromoActive, type FreeToolId } from "@frpb/shared";
 import { resolveInstallerUrl } from "@/config/download";
+import PromoBanner from "@/components/promo/PromoBanner";
+import { promoMonthlyMonthsFor } from "@/config/promo";
 import Hero from "@/components/landing/hero";
 import DeviceShowcase from "@/components/DeviceShowcase";
 import ErrorBoundary from "@/components/error-boundary";
@@ -192,6 +194,9 @@ export default function HomePage() {
   // Resolve the installer URL once per render (NEXT_PUBLIC_DOWNLOAD_URL →
   // DOWNLOAD_BASE_URL → GitHub Releases v2.0.0 default). See config/download.ts.
   const downloadUrl = resolveInstallerUrl();
+  // Promo-aware $20 term: 6 months during the launch window, 4 months after.
+  // Computed per render so the static HTML matches the live entitlement.
+  const monthlyMonths = promoMonthlyMonthsFor(isPromoActive());
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-white text-slate-600 antialiased">
@@ -511,6 +516,12 @@ export default function HomePage() {
             </p>
           </div>
 
+          {/* Launch-offer banner — client component that self-hides once the
+              countdown expires, so the static shell never shows stale urgency. */}
+          <div className="mx-auto mt-10 max-w-4xl">
+            <PromoBanner />
+          </div>
+
           <div className="mx-auto mt-14 grid max-w-4xl gap-6 grid-cols-1 md:grid-cols-2">
             {PLANS.map((plan) => {
               const popular = plan.slug === "LIFETIME";
@@ -548,12 +559,16 @@ export default function HomePage() {
                       ${plan.usd}
                     </span>
                     <span className="text-sm font-medium text-slate-400">
-                      {PRICING_NOTES[plan.slug]}
+                      {plan.slug === "MONTH_1"
+                        ? `per ${monthlyMonths} months`
+                        : PRICING_NOTES[plan.slug]}
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-slate-400">
                     {plan.deviceLimit} device{plan.deviceLimit === 1 ? "" : "s"} ·{" "}
-                    {plan.durationDays ? `${plan.durationDays} days` : "Lifetime access"}
+                    {plan.slug === "MONTH_1"
+                      ? `${monthlyMonths * 30} days`
+                      : "Lifetime access"}
                   </p>
 
                   <ul className="mt-6 flex-1 space-y-3 text-sm">

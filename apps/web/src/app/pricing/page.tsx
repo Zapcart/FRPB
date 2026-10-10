@@ -39,6 +39,9 @@ import { startRazorpayCheckout } from "@/lib/razorpay/checkout-flow";
 import { readStoredReferralCode } from "@/lib/referral/ref-capture";
 import ErrorBoundary from "@/components/error-boundary";
 import RazorpaySdkScript from "@/components/checkout/razorpay-sdk-script";
+import PromoBanner from "@/components/promo/PromoBanner";
+import { usePromoState } from "@/components/promo/usePromoState";
+import { monthlyBillingSuffixFor, promoMonthlyDaysFor } from "@/config/promo";
 
 /**
  * Trust / conversion badges rendered under the pricing grid. Addresses the four
@@ -99,12 +102,10 @@ const PRICING_FAQS = [
   },
 ] as const;
 
-// Billing interval suffix, keyed by plan slug. All tiers are priced and charged
-// in USD; a lifetime plan renders a one-time label, never a recurring interval.
-const BILLING_SUFFIX: Record<PlanSlug, string> = {
-  MONTH_1: "/ 6 months",
-  LIFETIME: "one-time",
-};
+// The MONTH_1 billing suffix is promo-aware (see @/config/promo) and computed in
+// render from usePromoState().active rather than hardcoded here, so the "/ 6
+// months (launch offer)" copy flips to "/ 4 months" the instant the window closes.
+// LIFETIME always renders a one-time label, never a recurring interval.
 
 /**
  * The pricing grid renders from DUAL_PLANS (the authoritative tier rates) rather
@@ -122,6 +123,9 @@ const PLAN_CARDS = DUAL_PLANS.map((plan) => ({
 
 export default function PricingPage() {
   const router = useRouter();
+  // Live promo status — drives the banner and the MONTH_1 duration copy. Seeded
+  // statically for SSR/first paint, then refined on the client after mount.
+  const promo = usePromoState();
   // Plan currently being paid for (null = idle) — drives the button spinner.
   const [processingPlan, setProcessingPlan] = useState<PlanSlug | null>(null);
   // Inline feedback for the Razorpay flow (replaces the old method modal).
@@ -284,10 +288,24 @@ export default function PricingPage() {
           </p>
         </div>
 
+        {/* Launch-offer banner + countdown. Renders nothing once expired, so it
+            can be mounted unconditionally above the plan grid. */}
+        <div className="mx-auto mt-10 max-w-4xl">
+          <PromoBanner />
+        </div>
+
         <ErrorBoundary label="pricing plans">
           <div className="mx-auto mt-12 grid max-w-4xl gap-6 grid-cols-1 md:grid-cols-2">
             {PLAN_CARDS.map((card) => {
             const popular = card.slug === "LIFETIME";
+            // Promo-aware billing suffix (MONTH_1 only) and duration line; both
+            // derive from the same `promo.active` boolean so they can never disagree.
+            const billingSuffix =
+              card.slug === "MONTH_1" ? monthlyBillingSuffixFor(promo.active) : "one-time";
+            const durationLabel =
+              card.slug === "MONTH_1"
+                ? `${promoMonthlyDaysFor(promo.active)} days`
+                : "Lifetime access";
             return (
               <div
                 key={card.slug}
@@ -308,12 +326,12 @@ export default function PricingPage() {
                     {formatDualUsd(card.plan.usd)}
                   </span>
                   <span className="text-sm font-medium text-slate-400">
-                    {BILLING_SUFFIX[card.slug]}
+                    {billingSuffix}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-slate-400">
                   {card.deviceLimit} device{card.deviceLimit === 1 ? "" : "s"} ·{" "}
-                  {card.durationDays ? `${card.durationDays} days` : "Lifetime access"}
+                  {durationLabel}
                 </p>
                 <ul className="mt-6 flex-1 space-y-3 text-sm">
                   {card.features.map((f) => (

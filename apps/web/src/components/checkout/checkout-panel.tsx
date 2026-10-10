@@ -14,6 +14,9 @@ import { Check, Loader2, Lock, ShieldCheck } from "lucide-react";
 import type { PlanSlug } from "@frpb/shared";
 import { formatDualUsd, getDualPlan } from "@/config/plans";
 import { startRazorpayCheckout } from "@/lib/razorpay/checkout-flow";
+import CountdownTimer from "@/components/promo/CountdownTimer";
+import { usePromoState } from "@/components/promo/usePromoState";
+import { promoMonthlyDaysFor } from "@/config/promo";
 
 interface CheckoutPanelProps {
   planSlug: PlanSlug;
@@ -33,6 +36,10 @@ export default function CheckoutPanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Promo status drives the MONTH_1 term copy + urgency note below. Seeded
+  // statically for SSR/first paint, refined on the client after mount.
+  const promo = usePromoState();
+
   const plan = getDualPlan(planSlug);
 
   if (!plan) {
@@ -50,6 +57,16 @@ export default function CheckoutPanel({
   }
 
   const displayPrice = formatDualUsd(plan.usd);
+
+  // The $20 tier's term is promo-sensitive (6 months during the offer, else 4).
+  // Lifetime never shows a term. Resolved from the same boolean as the banner so
+  // the checkout page, pricing grid and server-side grant always agree.
+  const isMonthly = plan.slug === "MONTH_1";
+  const durationLabel = isMonthly
+    ? `${promoMonthlyDaysFor(promo.active)} days`
+    : plan.durationDays
+      ? `${plan.durationDays} days`
+      : "one-time";
 
   async function handlePay() {
     setError(null);
@@ -108,12 +125,25 @@ export default function CheckoutPanel({
           {displayPrice}
         </span>
         <span className="text-sm font-medium text-slate-400">
-          {plan.durationDays ? `${plan.durationDays} days` : "one-time"}
+          {durationLabel}
         </span>
       </div>
       <p className="mt-1 text-xs text-slate-400">
         Charges settle in USD ({displayPrice}).
       </p>
+
+      {/* Launch-offer urgency — MONTH_1 only, and only while the window is live. */}
+      {isMonthly && promo.mounted && promo.active && (
+        <div className="mt-4 rounded-xl border border-brand-500/20 bg-gradient-to-br from-brand-500/10 via-accent-500/10 to-transparent p-3">
+          <p className="text-xs font-semibold text-brand-700">
+            Launch offer — get 6 months for the 4-month price
+          </p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
+            <span>Offer ends in</span>
+            <CountdownTimer endsAt={promo.endsAt} variant="inline" label="Launch offer ends in" />
+          </div>
+        </div>
+      )}
 
       <ul className="mt-6 space-y-3 text-sm">
         {plan.features.map((feature) => (

@@ -20,6 +20,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { randomBytes } from "node:crypto";
 import type { PlanSlug } from "@frpb/shared";
+import { isPromoActive, resolveEffectiveDurationDays } from "@frpb/shared";
 import { prisma } from "@/lib/prisma";
 import { sha256 } from "@/lib/crypto/sha256";
 import { generateLicenseKey } from "@/lib/license/generate";
@@ -157,8 +158,19 @@ export async function grantLicenseForOrder(
   });
 
   const licenseKey = generateLicenseKey();
+
+  // PROMO-AWARE ENTITLEMENT.
+  //
+  // The $20 tier's price is fixed, so the launch offer only changes the GRANTED
+  // DURATION (180 days during the window → 120 after). Resolve it here, at grant
+  // time, straight from the shared promo window rather than trusting the static
+  // Plan row: whatever term the buyer saw advertised is the term they receive.
+  // LIFETIME resolves to `null` (perpetual) and is unaffected.
+  const now = new Date();
+  const grantedDurationDays = resolveEffectiveDurationDays(planSlug, now);
+  const promoActive = planSlug === "MONTH_1" ? isPromoActive(now) : false;
   const expiresAt =
-    planRow.durationDays != null ? addDays(new Date(), planRow.durationDays) : null;
+    grantedDurationDays != null ? addDays(now, grantedDurationDays) : null;
 
   // MINT + LINK ATOMICALLY.
   //
@@ -188,6 +200,10 @@ export async function grantLicenseForOrder(
           planSlug,
           amount: order.amount,
           currency: order.currency,
+          // Audit trail for the limited-time offer: which term was granted and
+          // whether the promo was live at grant time.
+          grantedDurationDays,
+          promoActive,
         },
       },
     });

@@ -35,6 +35,26 @@ const OWNER_ROUTE_STEPS = [
   "Activate the iPhone again and complete setup with your own Apple ID.",
 ];
 
+/** Owner route for a forgotten passcode / Face ID lock (data-erasing — needs owner approval). */
+const PASSCODE_OWNER_STEPS = [
+  "Confirm the device is stuck on the passcode or Face ID screen and that you own it (or hold written owner permission).",
+  "If the device has ever synced to iCloud with Find My on, use icloud.com/find → Erase This Device to erase it and remove Activation Lock together.",
+  "Otherwise put the iPhone into recovery mode and restore it with Finder (macOS) or Apple Devices / iTunes (Windows).",
+  "Sign in with the owning Apple ID when setup asks for it — that clears Activation Lock as the rightful owner.",
+  "Set the device up as new (or restore a backup) and choose a passcode you will not forget.",
+  "If you cannot supply the Apple ID, stop: the restore leaves the device at Activation Lock, which only the account owner or Apple Support can clear.",
+];
+
+/** Pre-purchase checks that prove a used iPhone is not Activation-Locked. */
+const PRE_PURCHASE_CHECK_STEPS = [
+  "Ask the seller to factory-reset the iPhone in front of you (Settings → General → Transfer or Reset iPhone → Erase All Content and Settings).",
+  "Confirm it drops to the Hello / setup screen rather than an Activation Lock screen.",
+  "Watch the seller sign out of iCloud, or verify at icloud.com/find that the device is gone from their account.",
+  "Check the IMEI on the box or SIM tray against Settings → General → About before any reset.",
+  "Test that a fresh Apple ID of yours can complete setup and reach the Home Screen.",
+  "Walk away from any seller who refuses any of these steps — it is the single most reliable red flag.",
+];
+
 export const IPHONE_GUIDES: readonly BlogPost[] = [
   modelGuide({
     slug: "how-to-bypass-icloud-activation-lock-iphone-x-2026",
@@ -332,6 +352,369 @@ export const IPHONE_GUIDES: readonly BlogPost[] = [
       },
     ],
     datePublished: "2026-03-02",
+    dateModified: "2026-09-17",
+    readingMinutes: 8,
+  }),
+
+  modelGuide({
+    slug: "ipad-icloud-activation-lock-removal-2026",
+    title: "iPad iCloud Activation Lock Removal Guide 2026",
+    description:
+      "iPad iCloud Activation Lock removal in 2026 — the Find My route for a bootable iPad and Apple's proof-of-purchase process for one stuck on the Activation Lock screen. No software bypass exists.",
+    excerpt:
+      "iPads enforce Activation Lock exactly like iPhones, server-side and re-checked at activation. Here is the accurate 2026 owner route for both a bootable iPad and one stuck on the lock screen.",
+    keywords: [
+      "ipad icloud activation lock removal",
+      "ipad activation lock bypass 2026",
+      "remove icloud lock ipad",
+      "ipad locked to owner",
+      "apple activation lock removal",
+    ],
+    brand: "Apple",
+    model: "iPad (all models)",
+    androidVersions: [],
+    osVersions: ["iPadOS 15", "iPadOS 16", "iPadOS 17", "iPadOS 18"],
+    method: "manual",
+    chipset: "Apple A-series / M-series",
+    estimatedTime: "PT20M",
+    prerequisites: COMMON_PREREQUISITES,
+    steps: OWNER_ROUTE_STEPS,
+    category: "iphone",
+    platform: "iOS",
+    sections: [
+      {
+        heading: "Activation Lock on iPad is the same server-side lock",
+        paragraphs: [
+          "Activation Lock is Find My's anti-theft layer. On an iPad it binds the device to the Apple ID signed in when Find My was enabled, and Apple's activation servers re-check that binding every time the iPad is set up or restored.",
+          "Because the check is server-side, nothing stored on the iPad can clear it. Reinstalling iPadOS, using a DFU restore, or running any 'iPad unlock' utility changes the software on the device but cannot change what Apple's servers believe about ownership.",
+        ],
+      },
+      {
+        heading: "If the iPad still boots: the Find My route",
+        paragraphs: [
+          "When the iPad powers on past the lock screen, the account holder can release Activation Lock in seconds. Sign in at icloud.com/find (or on any Apple device with the same Apple ID) and choose Erase This Device, or simply Remove from Account.",
+          "That action clears the lock server-side immediately and needs no tool, no fee and no waiting period — because the account owner is the key to the lock.",
+        ],
+        steps: OWNER_ROUTE_STEPS,
+      },
+      {
+        heading: "If the iPad is stuck on the Activation Lock screen",
+        paragraphs: [
+          "A reset iPad shows an Activation Lock screen if the previous owner never signed out. Recovering it depends entirely on reaching that Apple ID or proving you own the hardware.",
+          "First try to recover the account at iforgot.apple.com. If the account is genuinely gone — a deceased relative, a defunct business, a deleted address — Apple can clear the lock after verifying the device's purchase record.",
+        ],
+      },
+      {
+        heading: "Cellular iPads add one document",
+        paragraphs: [
+          "Wi-Fi iPads have a serial number; cellular iPad models also carry an IMEI. That IMEI is the cleanest identifier to quote in an Activation Lock removal request, and a carrier contract or invoice showing it is strong proof of purchase.",
+          "Submit the request through Apple Support with the serial number or IMEI and the original receipt. Apple checks the sales record and clears the lock for the owner, usually within a few days and at no charge.",
+        ],
+      },
+      {
+        heading: "Why no iPad unlock tool can work",
+        paragraphs: [
+          "Older iPads built on A5–A11 chips share the checkm8 bootrom vulnerability, which is why they appear in jailbreak discussions. checkm8 gives code execution on the device; it does not touch a server-side entitlement.",
+          "Every iPad from A12 onward is not even vulnerable to checkm8. In both cases the conclusion is identical: there is no on-device flag to flip, so no tool can clear Activation Lock on a device you do not own.",
+        ],
+      },
+      {
+        heading: "FRPB is an Android tool — worth being explicit",
+        paragraphs: [
+          "FRPB removes Android Factory Reset Protection and performs flash resets across Samsung, Xiaomi, Vivo, OPPO, Realme, Motorola and MediaTek/Qualcomm hardware. It does not support iPadOS and cannot clear iCloud Activation Lock on any iPad.",
+          "We publish these guides because the truthful answer is useful. For a locked iPad you own, the Apple ID holder or Apple Support is the only route that works.",
+        ],
+      },
+    ],
+    datePublished: "2026-03-09",
+    dateModified: "2026-09-17",
+    readingMinutes: 7,
+  }),
+
+  modelGuide({
+    slug: "iphone-forgotten-passcode-face-id-unlock-2026",
+    title: "Forgotten iPhone Passcode or Face ID Lock: 2026 Owner's Guide",
+    description:
+      "Forgot your iPhone passcode, or is Face ID failing? The 2026 owner route — iCloud Erase, recovery-mode restore, and where Activation Lock fits in — plus why no tool bypasses a Secure Enclave passcode.",
+    excerpt:
+      "A forgotten passcode is not an Activation Lock, and the two are fixed differently. This is the honest 2026 route for an iPhone you own.",
+    keywords: [
+      "forgot iphone passcode unlock 2026",
+      "iphone face id not working unlock",
+      "iphone passcode removal owner",
+      "reset iphone forgotten passcode",
+      "iphone secure enclave passcode",
+    ],
+    brand: "Apple",
+    model: "iPhone (Face ID / Touch ID models)",
+    androidVersions: [],
+    osVersions: ["iOS 15", "iOS 16", "iOS 17", "iOS 18"],
+    method: "manual",
+    chipset: "Apple A12 – A18 (Secure Enclave)",
+    estimatedTime: "PT30M",
+    prerequisites: COMMON_PREREQUISITES,
+    steps: PASSCODE_OWNER_STEPS,
+    category: "iphone",
+    platform: "iOS",
+    sections: [
+      {
+        heading: "Passcode lock and Activation Lock are different problems",
+        paragraphs: [
+          "A passcode lock stops you reaching the Home Screen; Activation Lock stops the device being activated to a new owner. A forgotten passcode alone does not raise an Activation Lock screen — but the fix for a forgotten passcode can, if the device is not properly released.",
+          "Knowing which one you are facing changes the route entirely, so check whether the screen asks for a six-digit passcode to continue setup, or names another person's Apple ID as 'locked to owner'. They are diagnosed and solved differently.",
+        ],
+      },
+      {
+        heading: "The Secure Enclave makes the passcode unreadable",
+        paragraphs: [
+          "Modern iPhones store the passcode hash in the Secure Enclave, a dedicated coprocessor that will not export it and enforces escalating delays and an optional erase-after-10-failures policy. There is no file to read, no server to query and no command that reveals it.",
+          "That is why every legitimate solution ends in an erase, not a decryption. Anyone promising to 'read' or 'keep your data' while removing a passcode is describing a feature that does not exist on a locked, current iPhone.",
+        ],
+      },
+      {
+        heading: "The owner route: erase and restore",
+        paragraphs: [
+          "For an iPhone you own, the passcode is cleared by erasing the device. If it is connected to iCloud with Find My enabled, iCloud.com/find → Erase This Device both wipes it and removes Activation Lock in one step.",
+          "If it has never synced or you prefer a cable, put it in recovery mode and restore with Finder (macOS) or Apple Devices / iTunes (Windows), then sign in with the owning Apple ID when setup asks for it.",
+        ],
+        steps: PASSCODE_OWNER_STEPS,
+      },
+      {
+        heading: "When the restore lands on Activation Lock",
+        paragraphs: [
+          "Restoring a device that is still bound to someone else's Apple ID clears the passcode but leaves Activation Lock in place — the wipe removes the passcode, not the server-side ownership record. This is the moment many people mistake for a 'failed bypass'.",
+          "The correct response is to supply the owning Apple ID, or, if it is genuinely unreachable, to submit an Activation Lock removal request to Apple with proof of purchase. A second erase will not help.",
+        ],
+      },
+      {
+        heading: "Face ID is a convenience layer, not a recovery path",
+        paragraphs: [
+          "Face ID and Touch ID unlock a device that is already authorised; they never authorise a device you cannot get past the passcode on. Setting them up requires the passcode first, and they are disabled after a restart or five failed attempts.",
+          "So 'Face ID stopped working' is usually a passcode-recovery problem, and 'Face ID won't recognise me' after a restart simply means entering the passcode — there is nothing for a tool to bypass.",
+        ],
+      },
+      {
+        heading: "FRPB cannot help with an iPhone passcode",
+        paragraphs: [
+          "FRPB is a Windows Android toolkit for Factory Reset Protection on Samsung, Xiaomi, Vivo, OPPO, Realme, Motorola and MediaTek/Qualcomm devices. It does not read, reset or bypass an iPhone passcode or Face ID.",
+          "If your locked device is Android, the per-model FRP guides on this blog are the accurate next step; if it is an iPhone you own, the owner erase route above is the one that works.",
+        ],
+      },
+    ],
+    datePublished: "2026-03-09",
+    dateModified: "2026-09-17",
+    readingMinutes: 8,
+  }),
+
+  modelGuide({
+    slug: "ios-16-17-18-activation-lock-2026",
+    title: "iOS 16, 17 & 18 Activation Lock: What Changed for 2026",
+    description:
+      "How Activation Lock behaves across iOS 16, 17 and 18 in 2026 — Stolen Device Protection, the improved owner-recovery flow, and the unchanged truth that only the owner or Apple can clear the lock.",
+    excerpt:
+      "iOS 16, 17 and 18 hardened the features around Activation Lock but left its server-side model intact. Here is what actually changed and what did not.",
+    keywords: [
+      "ios 18 activation lock",
+      "ios 17 icloud lock removal",
+      "ios 16 activation lock bypass 2026",
+      "stolen device protection activation lock",
+      "apple activation lock 2026",
+    ],
+    brand: "Apple",
+    model: "iPhone (iOS 16–18)",
+    androidVersions: [],
+    osVersions: ["iOS 16", "iOS 17", "iOS 18"],
+    method: "manual",
+    chipset: "Apple A12 – A18",
+    estimatedTime: "PT20M",
+    prerequisites: COMMON_PREREQUISITES,
+    steps: OWNER_ROUTE_STEPS,
+    category: "iphone",
+    platform: "iOS",
+    sections: [
+      {
+        heading: "The core model never changed",
+        paragraphs: [
+          "Across iOS 16, 17 and 18, Activation Lock remains an entitlement recorded on Apple's activation servers and re-checked at setup. The device holds a reference, not the decision — which is why no version of iOS ships with a bypass.",
+          "Each release tightened the features around the lock rather than the lock's mechanism. Knowing which of those features you are dealing with tells you whether the standard owner route still applies — and in every case, it does.",
+        ],
+      },
+      {
+        heading: "iOS 17.3 added Stolen Device Protection",
+        paragraphs: [
+          "Stolen Device Protection (iOS 17.3 and later) adds a biometric requirement and a one-hour security delay before certain critical actions when you are away from familiar locations. Its purpose is to stop a thief who has shoulder-surfed your passcode from changing your Apple ID or turning off Find My.",
+          "It does not create a new bypass surface — it closes one. For the legitimate owner it simply means some settings changes take longer; for a thief it means the device is even harder to repurpose.",
+        ],
+      },
+      {
+        heading: "Recovery contacts and the faster owner path",
+        paragraphs: [
+          "Recent iOS versions make account recovery more practical: recovery contacts, legacy contacts and improved iforgot flows mean the true owner has more ways to regain the Apple ID, which is the fastest lock-release available.",
+          "Where none of those apply, the Apple Support Activation Lock removal request remains the fallback. Apple verifies the purchase record and clears the lock server-side for the owner.",
+        ],
+        steps: OWNER_ROUTE_STEPS,
+      },
+      {
+        heading: "What 'iOS 18 activation lock bypass' searches actually mean",
+        paragraphs: [
+          "Most of those searches describe a phone stuck on the Activation Lock screen, not a genuine bypass. The honest answer for a device you own is the account or Apple Support route; for a device you do not own, no route exists.",
+          "New iOS releases do not open bypasses — if anything they close them. A tool that claims to clear Activation Lock on iOS 18 is misrepresenting how the lock works.",
+        ],
+      },
+      {
+        heading: "FRPB's scope",
+        paragraphs: [
+          "FRPB provides no iOS functionality whatsoever. It is an Android recovery toolkit driving BROM, EDL, Fastboot and Download mode to clear Android's Factory Reset Protection.",
+          "This guide exists so that the iOS 16/17/18 searches land on accurate information. If your device is Android, the model guides on this blog describe the exact FRP procedure.",
+        ],
+      },
+    ],
+    datePublished: "2026-03-09",
+    dateModified: "2026-09-17",
+    readingMinutes: 7,
+  }),
+
+  modelGuide({
+    slug: "check-icloud-activation-lock-before-buying-used-iphone-2026",
+    title: "Check iCloud Activation Lock Before Buying a Used iPhone 2026",
+    description:
+      "A step-by-step 2026 checklist to confirm a used iPhone is free of iCloud Activation Lock before you pay — plus the red flags that mean you should walk away from the sale.",
+    excerpt:
+      "A few minutes of checking prevents the single most expensive used-iPhone mistake. Here is exactly what to verify, and when to walk away.",
+    keywords: [
+      "check activation lock before buying iphone",
+      "used iphone icloud lock check 2026",
+      "iphone imei activation lock check",
+      "buying used iphone checklist",
+      "iphone locked to owner seller",
+    ],
+    brand: "Apple",
+    model: "iPhone (pre-purchase check)",
+    androidVersions: [],
+    osVersions: ["iOS 15", "iOS 16", "iOS 17", "iOS 18"],
+    method: "manual",
+    estimatedTime: "PT15M",
+    prerequisites: [
+      "The physical iPhone in front of you, powered on",
+      "Its original box or SIM tray to read the IMEI",
+      "A working internet connection to check Apple's coverage and lock status",
+      "Enough time to watch a full factory reset complete",
+    ],
+    steps: PRE_PURCHASE_CHECK_STEPS,
+    category: "iphone",
+    platform: "iOS",
+    sections: [
+      {
+        heading: "Why this check matters more than any spec",
+        paragraphs: [
+          "A used iPhone that is still bound to the seller's Apple ID will stop at an Activation Lock screen the moment it is reset, however good the screen or battery is. At that point it is worth parts money only.",
+          "Activation Lock cannot be removed by any tool, so the entire value of the purchase hinges on confirming the lock is not present before you hand over money.",
+        ],
+      },
+      {
+        heading: "The five-minute verification",
+        paragraphs: [
+          "Do this with the seller present and before any payment. If any step is refused, treat it as a failed inspection rather than a negotiation point.",
+        ],
+        steps: PRE_PURCHASE_CHECK_STEPS,
+      },
+      {
+        heading: "Reading the IMEI the right way",
+        paragraphs: [
+          "Find the IMEI in Settings → General → About, on the original box, or in the SIM tray of older models. Cross-check that the number matches in all available places — mismatches are a sign of a swapped chassis or a refurbished device being sold as new.",
+          "You can confirm the device is not reported lost or stolen and see its Activation Lock state through Apple's coverage checker and any reputable IMEI check service. A device still signed in to someone's Find My will show as activation-locked.",
+        ],
+      },
+      {
+        heading: "Red flags that should end the sale",
+        paragraphs: [
+          "A seller who will not let you reset the phone in person, who 'will remove the account later', who insists you pay first, or who claims Activation Lock is easy to 'unlock with software' is describing a device you cannot safely buy.",
+          "That last claim is both false and a reliable tell: no software clears Activation Lock. A seller who repeats it either does not understand the device they are selling or intends to sell you one that will never activate.",
+        ],
+      },
+      {
+        heading: "FRPB and used-device checks",
+        paragraphs: [
+          "FRPB is for Android Factory Reset Protection, not iOS Activation Lock, so it plays no part in inspecting an iPhone. Its relevance is to Android purchases, where FRP is the equivalent obstacle and can be cleared for a genuine owner.",
+          "Whichever platform you are buying, the principle is identical: verify the device is free of its previous account before paying, because that is the one problem no tool reliably fixes.",
+        ],
+      },
+    ],
+    datePublished: "2026-03-09",
+    dateModified: "2026-09-17",
+    readingMinutes: 7,
+  }),
+
+  modelGuide({
+    slug: "iphone-stuck-on-activation-lock-after-reset-2026",
+    title: "iPhone Stuck on Activation Lock After Factory Reset: 2026 Fix",
+    description:
+      "An iPhone stuck on the Activation Lock screen after a factory reset needs the owning Apple ID or Apple's proof-of-purchase removal — not another wipe. Here is the 2026 fix, step by step.",
+    excerpt:
+      "A factory reset removes your data, not Activation Lock. If your iPhone now sits on the 'locked to owner' screen, this is the accurate 2026 way forward.",
+    keywords: [
+      "iphone activation lock after factory reset",
+      "iphone stuck on activation lock screen",
+      "activation lock removal after reset 2026",
+      "iphone locked to owner fix",
+      "apple id lock iphone reset",
+    ],
+    brand: "Apple",
+    model: "iPhone (post-reset)",
+    androidVersions: [],
+    osVersions: ["iOS 15", "iOS 16", "iOS 17", "iOS 18"],
+    method: "manual",
+    chipset: "Apple A-series",
+    estimatedTime: "PT20M",
+    prerequisites: COMMON_PREREQUISITES,
+    steps: OWNER_ROUTE_STEPS,
+    category: "iphone",
+    platform: "iOS",
+    sections: [
+      {
+        heading: "Why a reset leaves the lock behind",
+        paragraphs: [
+          "A factory reset erases the data stored on the iPhone. Activation Lock is not stored there — it is an entitlement on Apple's activation servers, keyed to the Apple ID that had Find My enabled.",
+          "So the reset cleans the device but leaves the ownership record intact, and the next setup flow stops at the Activation Lock screen. Resetting again changes nothing, because erasing device data was never what held the lock.",
+        ],
+      },
+      {
+        heading: "The only two fixes that work",
+        paragraphs: [
+          "Either the Apple ID holder signs in or removes the device from Find My, or Apple clears the lock after verifying your proof of purchase. There is no third option.",
+        ],
+        steps: OWNER_ROUTE_STEPS,
+      },
+      {
+        heading: "If it was your device and your Apple ID",
+        paragraphs: [
+          "Enter the Apple ID and password when the Activation Lock screen appears. If you have forgotten the password, recover the account at iforgot.apple.com — completing recovery lets you sign in and the lock releases.",
+          "If the account was deleted entirely, gather the original proof of purchase and submit an Activation Lock removal request to Apple Support. Your own ownership is what the process verifies.",
+        ],
+      },
+      {
+        heading: "If you bought it used and the seller is reachable",
+        paragraphs: [
+          "Ask the seller to sign in to icloud.com/find, select the device and choose Remove from Account (or Erase This Device). That releases Activation Lock server-side in under a minute and costs nothing.",
+          "This is by far the fastest resolution, and a cooperative seller should have no objection. Reluctance here is itself informative about the sale.",
+        ],
+      },
+      {
+        heading: "If the lock cannot be cleared",
+        paragraphs: [
+          "When neither the Apple ID nor the proof of purchase exists, the iPhone cannot be activated for use. It retains parts value — display, battery, cameras, chassis — and that is the honest ceiling.",
+          "Be wary of any service offering to remove Activation Lock in this situation; the only realistic outcomes are a device returned unchanged or hardware handed over and not recovered.",
+        ],
+      },
+      {
+        heading: "FRPB does not touch iOS",
+        paragraphs: [
+          "FRPB is an Android Factory Reset Protection toolkit and has no iOS capability. It cannot clear Activation Lock, and it does not claim to.",
+          "On Android, FRP is the similar-looking lock — and there FRPB's per-model guides provide the genuine, owner-authorised procedure. For a locked iPhone you own, Apple Support is the route.",
+        ],
+      },
+    ],
+    datePublished: "2026-03-09",
     dateModified: "2026-09-17",
     readingMinutes: 8,
   }),

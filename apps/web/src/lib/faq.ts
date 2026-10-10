@@ -54,4 +54,37 @@ export const HOME_FAQ: readonly FaqItem[] = [
     answer:
       "FRPB is intended strictly for authorised device owners and repair professionals. You must own the device or have explicit permission from its owner. Using an FRP bypass tool on a device you do not own may break anti-theft protections and violate applicable law.",
   },
+  {
+    question: "How long does the $20 plan last?",
+    answer:
+      "During the limited-time launch offer the $20 plan grants 6 months (180 days) of access. When the countdown on the pricing page reaches zero, the same $20 plan grants 4 months (120 days). The price never changes — only the included term — and your exact duration is fixed server-side at the instant you pay.",
+  },
+];
+
+/**
+ * iOS / iCloud FAQ. Owner-focused, honest answers about Activation Lock and
+ * iCloud removal. Rendered on the `/ios` hub (and its spokes) alongside the
+ * matching FAQPage JSON-LD so the visible copy and the schema stay in lockstep.
+ */
+export const IOS_FAQ: readonly FaqItem[] = [
+  {
+    question: "Can FRPB bypass iCloud Activation Lock?",
+    answer:
+      "No. FRPB is an Android Factory Reset Protection toolkit and has no iOS capability. Our iOS pages explain the legitimate, owner-only removal paths Apple provides.",
+  },
+  {
+    question: "Who is allowed to remove Activation Lock on an iPhone or iPad?",
+    answer:
+      "Only the person who owns the device and controls the Apple ID on it, or an Apple-authorised service provider acting on their behalf with the original proof of purchase.",
+  },
+  {
+    question: "How do I remove Activation Lock if I forgot my Apple ID password?",
+    answer:
+      "Recover the account at iforgot.apple.com. Once you sign in with the recovered Apple ID, Activation Lock clears automatically and you can turn off Find My as normal.",
+  },
+  {
+    question: "Why can't a third-party tool just remove Activation Lock?",
+    answer:
+      "Activation Lock is enforced by Apple's servers against the device's secure hardware. It cannot be cleared offline by any software, so any app claiming to bypass iCloud or Activation Lock instantly is a scam or malware.",
+  },
 ];
