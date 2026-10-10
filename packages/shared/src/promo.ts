@@ -1,8 +1,8 @@
 // FRPB — limited-time launch promo source of truth.
 //
-// The $20 tier is advertised as "6 months for the price of 4" during a bounded
-// launch window. The PRICE never changes ($20 USD / ₹1,900 INR); only the
-// GRANTED DURATION does (180 days during the offer → 120 days after). Because
+// The $20 tier is advertised as "6 months" during a bounded 30-day launch
+// window. The PRICE never changes ($20 USD / ₹1,900 INR); only the
+// GRANTED DURATION does (180 days during the offer → 60 days after). Because
 // the price is fixed there is no Razorpay amount / order / signature change —
 // the switch is entirely a server-side entitlement decision made at grant time.
 //
@@ -23,16 +23,22 @@ export const LAUNCH_PROMO = {
   /** Stable machine code recorded on licenses/webhooks for audit. */
   code: "LAUNCH6",
   /** Human label shown on the pricing/checkout surfaces. */
-  label: "Launch Offer — 6 months for the price of 4",
+  label: "Launch Offer — 6 months (30-day launch window)",
   /** Short urgency line for banners. */
-  shortLabel: "Launch offer ends soon",
-  /** Promo deadline (UTC, inclusive). After this instant the tier drops to 120 days. */
-  endsAt: "2026-12-31T23:59:59.000Z",
-  /** Granted access during the offer. */
+  shortLabel: "Launch offer — 6 months, ends in 30 days",
+  /**
+   * Promo deadline (UTC, inclusive). Fixed 30-day target from the offer start
+   * (2026-10-10). After this instant the tier drops to 60 days (2 months).
+   */
+  endsAt: "2026-11-09T23:59:59.000Z",
+  /** Granted access during the offer (6 months). */
   promoDurationDays: 180,
-  /** Granted access after the offer. */
-  standardDurationDays: 120,
+  /** Granted access after the offer (2 months). */
+  standardDurationDays: 60,
 } as const;
+
+/** Whole days in the launch window — the urgency the banners advertise. */
+export const LAUNCH_PROMO_WINDOW_DAYS = 30 as const;
 
 /** Milliseconds from `now` until the promo window closes. `<= 0` when expired. */
 export function msUntilPromoEnds(now: Date = new Date()): number {
@@ -55,7 +61,7 @@ export function resolveMonthlyDurationDays(now: Date = new Date()): number {
     : LAUNCH_PROMO.standardDurationDays;
 }
 
-/** Whole-month granularity label, e.g. 180 → "6 months", 120 → "4 months". */
+/** Whole-month granularity label, e.g. 180 → "6 months", 60 → "2 months". */
 export function monthlyDurationMonths(days: number): number {
   return Math.round(days / 30);
 }

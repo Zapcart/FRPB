@@ -58,7 +58,7 @@ export default function CheckoutPanel({
 
   const displayPrice = formatDualUsd(plan.usd);
 
-  // The $20 tier's term is promo-sensitive (6 months during the offer, else 4).
+  // The $20 tier's term is promo-sensitive (6 months during the offer, else 2).
   // Lifetime never shows a term. Resolved from the same boolean as the banner so
   // the checkout page, pricing grid and server-side grant always agree.
   const isMonthly = plan.slug === "MONTH_1";
@@ -136,12 +136,15 @@ export default function CheckoutPanel({
       {isMonthly && promo.mounted && promo.active && (
         <div className="mt-4 rounded-xl border border-brand-500/20 bg-gradient-to-br from-brand-500/10 via-accent-500/10 to-transparent p-3">
           <p className="text-xs font-semibold text-brand-700">
-            Launch offer — get 6 months for the 4-month price
+            Launch offer — get 6 months for the next 30 days
           </p>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
             <span>Offer ends in</span>
             <CountdownTimer endsAt={promo.endsAt} variant="inline" label="Launch offer ends in" />
           </div>
+          <p className="mt-1 text-[11px] leading-snug text-slate-500">
+            After the countdown ends this plan reverts to 2 months.
+          </p>
         </div>
       )}
 

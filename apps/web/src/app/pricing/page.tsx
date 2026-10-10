@@ -104,8 +104,8 @@ const PRICING_FAQS = [
 
 // The MONTH_1 billing suffix is promo-aware (see @/config/promo) and computed in
 // render from usePromoState().active rather than hardcoded here, so the "/ 6
-// months (launch offer)" copy flips to "/ 4 months" the instant the window closes.
-// LIFETIME always renders a one-time label, never a recurring interval.
+// months (launch offer)" copy flips to "/ 2 months" the instant the 30-day
+// window closes. LIFETIME always renders a one-time label, never an interval.
 
 /**
  * The pricing grid renders from DUAL_PLANS (the authoritative tier rates) rather

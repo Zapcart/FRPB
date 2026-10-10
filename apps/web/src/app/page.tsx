@@ -161,7 +161,7 @@ const BENTO: readonly BentoFeature[] = [
 ];
 
 const PRICING_NOTES: Record<string, string> = {
-  MONTH_1: "per 6 months",
+  MONTH_1: "per 6 months (launch offer)",
   LIFETIME: "one-time",
 };
 
@@ -196,7 +196,7 @@ export default function HomePage() {
   // Resolve the installer URL once per render (NEXT_PUBLIC_DOWNLOAD_URL →
   // DOWNLOAD_BASE_URL → GitHub Releases v2.0.0 default). See config/download.ts.
   const downloadUrl = resolveInstallerUrl();
-  // Promo-aware $20 term: 6 months during the launch window, 4 months after.
+  // Promo-aware $20 term: 6 months during the 30-day launch window, 2 months after.
   // Computed per render so the static HTML matches the live entitlement.
   const monthlyMonths = promoMonthlyMonthsFor(isPromoActive());
 

@@ -162,7 +162,7 @@ export async function grantLicenseForOrder(
   // PROMO-AWARE ENTITLEMENT.
   //
   // The $20 tier's price is fixed, so the launch offer only changes the GRANTED
-  // DURATION (180 days during the window → 120 after). Resolve it here, at grant
+  // DURATION (180 days during the window → 60 after). Resolve it here, at grant
   // time, straight from the shared promo window rather than trusting the static
   // Plan row: whatever term the buyer saw advertised is the term they receive.
   // LIFETIME resolves to `null` (perpetual) and is unaffected.

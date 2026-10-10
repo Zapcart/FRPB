@@ -57,7 +57,7 @@ export const HOME_FAQ: readonly FaqItem[] = [
   {
     question: "How long does the $20 plan last?",
     answer:
-      "During the limited-time launch offer the $20 plan grants 6 months (180 days) of access. When the countdown on the pricing page reaches zero, the same $20 plan grants 4 months (120 days). The price never changes — only the included term — and your exact duration is fixed server-side at the instant you pay.",
+      "During the 30-day launch offer the $20 plan grants 6 months (180 days) of access. When the countdown on the pricing page reaches zero, the same $20 plan reverts to 2 months (60 days). The price never changes — only the included term — and your exact duration is fixed server-side at the instant you pay.",
   },
 ];
 

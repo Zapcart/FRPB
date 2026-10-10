@@ -106,11 +106,12 @@ export function getPlan(slug: PlanSlug): PlanDefinition {
  * The duration, in days, a plan actually grants *right now*.
  *
  * For MONTH_1 the plan row stores the advertised headline (180 during the
- * launch offer), but the true entitlement is promo-aware and MUST be resolved
- * server-side at payment time via {@link resolveMonthlyDurationDays} so a buyer
- * receives exactly the term advertised when they paid. LIFETIME (`null`) is
- * unaffected. Kept here so both the web server and the desktop app resolve the
- * same value from one place.
+ * 30-day launch offer), but the true entitlement is promo-aware and MUST be
+ * resolved server-side at payment time via {@link resolveMonthlyDurationDays}
+ * so a buyer receives exactly the term advertised when they paid (180 days
+ * during the offer → 60 days after). LIFETIME (`null`) is unaffected. Kept
+ * here so both the web server and the desktop app resolve the same value from
+ * one place.
  */
 export function resolveEffectiveDurationDays(
   slug: PlanSlug,

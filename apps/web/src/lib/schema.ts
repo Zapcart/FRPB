@@ -212,8 +212,8 @@ export function productSchema(): Record<string, unknown> {
   const basePlan = getPlan("MONTH_1");
   const basePrice = (basePlan.priceCents / 100).toFixed(2);
   // Resolve the term at call time so the advertised billing duration matches the
-  // promo window: during the launch offer the $20 tier grants 180 days (P6M),
-  // after it 120 days (P4M).
+  // promo window: during the 30-day launch offer the $20 tier grants 180 days
+  // (P6M), after it reverts to 60 days (P2M).
   const baseDuration = billingDuration(resolveEffectiveDurationDays("MONTH_1"));
 
   return {

@@ -33,12 +33,12 @@ export function promoActive(now: Date = new Date()): boolean {
   return isPromoActive(now);
 }
 
-/** Whole months the $20 tier currently grants (6 during the offer, else 4). */
+/** Whole months the $20 tier currently grants (6 during the offer, else 2). */
 export function promoMonthlyMonths(now: Date = new Date()): number {
   return monthlyDurationMonths(resolveMonthlyDurationDays(now));
 }
 
-/** "6 months" / "4 months" — for suffixes like "/ 6 months". */
+/** "6 months" / "2 months" — for suffixes like "/ 6 months". */
 export function promoMonthlyLabel(now: Date = new Date()): string {
   return monthlyDurationLabel(now);
 }
@@ -69,7 +69,7 @@ export function promoMonthlyMonthsFor(active: boolean): number {
   );
 }
 
-/** Boolean-driven variant — raw days the $20 tier grants (180 promo / 120 standard). */
+/** Boolean-driven variant — raw days the $20 tier grants (180 promo / 60 standard). */
 export function promoMonthlyDaysFor(active: boolean): number {
   return active ? LAUNCH_PROMO.promoDurationDays : LAUNCH_PROMO.standardDurationDays;
 }
@@ -78,12 +78,12 @@ export function promoMonthlyDaysFor(active: boolean): number {
 export function promoHeadline(now: Date = new Date()): string {
   return isPromoActive(now)
     ? "Launch offer — $20 unlocks 6 months"
-    : "$20 plan — standard 4-month term";
+    : "$20 plan — standard 2-month term";
 }
 
 /** One-line urgency/reassurance copy shown under the banner. */
 export function promoSubtext(now: Date = new Date()): string {
   return isPromoActive(now)
-    ? "Get 6 months of full access for the 4-month price. Offer ends when the countdown hits zero."
-    : "The launch offer has ended. The $20 plan now grants 4 months of full access.";
+    ? "Launch offer: $20 unlocks 6 months of full access — but only for the next 30 days. When the countdown hits zero the same plan reverts to 2 months."
+    : "The launch offer has ended. The $20 plan now grants 2 months of full access.";
 }
