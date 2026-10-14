@@ -18,6 +18,15 @@ import {
 const AVAILABILITY = "https://schema.org/InStock";
 const CURRENCY = "USD";
 /**
+ * Start of the advertised price-validity window for the paid USD Offer.
+ *
+ * Google's Product/Merchant structured-data validator requires
+ * `offers.validFrom` on the Offer node; omitting it raises a "Missing field
+ * validFrom (in offers)" warning in Search Console. Back-dated to the product
+ * launch so the offer always reads as currently valid.
+ */
+const PRICE_VALID_FROM = "2026-01-01T00:00:00Z";
+/**
  * Price-validity horizon advertised for the USD offers.
  *
  * Sourced from the launch-promo window so the Offer's `priceValidUntil` can
@@ -229,9 +238,10 @@ export function productSchema(): Record<string, unknown> {
       "@type": "Offer",
       priceCurrency: CURRENCY,
       price: basePrice,
+      validFrom: PRICE_VALID_FROM,
       priceValidUntil: PRICE_VALID_UNTIL,
       availability: AVAILABILITY,
-      url: SITE_URL,
+      url: absoluteUrl("/pricing"),
       // Merchant-policy nodes: eligible region set, the 7-day money-back
       // guarantee, and instant digital delivery.
       eligibleRegion: [...APPLICABLE_COUNTRIES].map((code) => ({

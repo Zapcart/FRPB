@@ -6,6 +6,7 @@
 // directives; per-route copy lives in each page's `metadata` export.
 
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Inter } from "next/font/google";
 import { SessionProvider } from "@/components/session-provider";
 import FloatingWidgets from "@/components/floating-widgets";
@@ -104,6 +105,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen bg-white font-sans text-slate-900 antialiased">
+        {/* Google Ads (gtag.js) — conversion tracking for account
+            AW-18512807320. Both tags use next/script `afterInteractive` so they
+            load after hydration and never block LCP or first interaction. The
+            loader + inline config mirror the canonical gtag snippet. */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=AW-18512807320"
+          strategy="afterInteractive"
+        />
+        <Script id="google-ads-gtag" strategy="afterInteractive">
+          {`window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'AW-18512807320');`}
+        </Script>
         <PostHogProvider>
           <SessionProvider>{children}</SessionProvider>
           {/* Captures a ?ref= referral code from ANY landing route and persists
