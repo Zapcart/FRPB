@@ -640,13 +640,37 @@ export default function HomePage() {
                 Download for Windows
               </Link>
               <Link
-                href="/pricing"
+                href="/blog"
                 className="btn-ghost inline-flex w-full items-center justify-center gap-2 px-7 py-3.5 text-base hover:-translate-y-0.5 sm:w-auto"
               >
-                Browse pricing
+                Browse recovery guides
                 <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
+            {/* Home → programmatic-SEO cluster. The guides hub, the model/brand
+                library and pricing are the highest-value follow-on routes; linking
+                them here gives the cluster a strong single-hop footprint from the
+                strongest page (the homepage). */}
+            <nav
+              aria-label="Popular FRPB resources"
+              className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm font-semibold text-brand-600"
+            >
+              <Link href="/tools" className="transition hover:text-brand-700">
+                Device library
+              </Link>
+              <span aria-hidden className="text-slate-300">
+                ·
+              </span>
+              <Link href="/downloads" className="transition hover:text-brand-700">
+                Downloads
+              </Link>
+              <span aria-hidden className="text-slate-300">
+                ·
+              </span>
+              <Link href="/pricing" className="transition hover:text-brand-700">
+                Pricing
+              </Link>
+            </nav>
             <p className="mt-5 text-xs text-slate-400">
               {SUPPORTED_MODES.length} boot modes · {SUPPORTED_CHIPSETS.length} chipset
               families · download & activate with your license

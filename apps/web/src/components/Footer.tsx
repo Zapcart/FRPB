@@ -69,17 +69,24 @@ export default function Footer({ id }: { id?: string } = {}) {
     {
       heading: "FRPB Platform",
       links: [
-        { label: "About Us", href: "/about" },
-        { label: "Features", href: "/#features" },
+        // Real, indexable hub routes (not same-page anchors) so every marketing
+        // page hands the crawler a single-hop path into the tools cluster, the
+        // iOS learn cluster and the downloads index.
+        { label: "Device Library", href: "/tools" },
+        { label: "iPhone & iPad Guides", href: "/ios" },
+        { label: "Downloads", href: "/downloads" },
         { label: "Pricing", href: "/pricing" },
         { label: "Blog", href: "/blog" },
+        { label: "About Us", href: "/about" },
       ],
     },
     {
       heading: "Help Center",
       links: [
         { label: "Contact Us", href: "/contact" },
-        { label: "License Recovery", href: "/recover" },
+        // License recovery is handled by support; the old /recover target had no
+        // route (site-wide 404), so it points at the real contact surface.
+        { label: "License Recovery", href: "/contact" },
         { label: "Dashboard", href: "/dashboard" },
       ],
     },
