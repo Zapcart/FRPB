@@ -273,5 +273,43 @@ export function relatedBrands(brandSlug: string, limit = 6): SeoLink[] {
     }));
 }
 
+/** Every OEM brand hub as an exact-match internal link (pillar-hub spokes). */
+export function allBrandLinks(): SeoLink[] {
+  return SEO_BRANDS.map((brand) => ({
+    path: brand.path,
+    anchor: `${brand.brandLabel} FRP tool`,
+    blurb: `FRP bypass and lock removal for all ${brand.models.length} ${brand.brandLabel} models.`,
+  }));
+}
+
+/** Highest-demand OEM slugs surfaced first in a pillar hub's model list. */
+const FEATURED_BRAND_SLUGS: readonly string[] = [
+  "samsung",
+  "xiaomi",
+  "vivo",
+  "motorola",
+  "oppo",
+  "realme",
+];
+
+/**
+ * A focused set of high-demand model spokes for one intent — the low-KD
+ * queries ("Redmi 12 5G FRP unlock tool", "Samsung A05 FRP bypass", "Vivo FRP
+ * bypass", "Motorola FRP bypass") surfaced directly from the pillar hubs.
+ */
+export function featuredModelLinks(intent: SeoIntent = "frp-bypass", limit = 12): SeoLink[] {
+  const featured = new Set(FEATURED_BRAND_SLUGS);
+  return SEO_MODELS.filter((model) => featured.has(model.brandSlug))
+    .slice(0, limit)
+    .map((model) => ({
+      path: model.paths[intent],
+      anchor: modelAnchor(model, intent),
+      blurb:
+        intent === "frp-bypass"
+          ? `Remove FRP and the Google lock on the ${model.fullModelLabel} over USB.`
+          : `Remove the screen lock on the ${model.fullModelLabel} over USB.`,
+    }));
+}
+
 /** Total number of model spokes across the whole matrix. */
 export const CLUSTER_MODEL_COUNT = SEO_MODELS.length;

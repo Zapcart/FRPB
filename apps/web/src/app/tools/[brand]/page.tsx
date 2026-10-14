@@ -25,7 +25,12 @@ import {
   type BrandCluster,
 } from "@/data/seo-clusters";
 import type { FaqItem } from "@/lib/faq";
-import { breadcrumbSchema, faqPageSchema, softwareApplicationSchema } from "@/lib/schema";
+import {
+  breadcrumbSchema,
+  faqPageSchema,
+  howToSchema,
+  softwareApplicationSchema,
+} from "@/lib/schema";
 import { pageMetadata } from "@/lib/seo";
 
 interface BrandHubPageProps {
@@ -81,6 +86,17 @@ function brandFaq(cluster: BrandCluster): FaqItem[] {
       question: `Which ${label} models are supported?`,
       answer: `The list below shows every supported ${label} model with a dedicated FRP bypass and lock removal guide, so you can jump straight to your exact handset.`,
     },
+  ];
+}
+
+/** Generic 4-step workflow for this brand — mirrors the visible process copy. */
+function brandHowToSteps(cluster: BrandCluster): string[] {
+  const label = cluster.brandLabel;
+  return [
+    "Download the signed FRPB installer from the official GitHub Release (v2) and launch it on Windows 10 or 11.",
+    `Boot the ${label} device into its required mode (Download, BROM, EDL, Recovery or fastboot) and connect it over USB — FRPB auto-detects the model and chipset.`,
+    `If drivers are missing, click Install Drivers — FRPB installs the correct ${label} / Qualcomm / MediaTek package automatically.`,
+    `Press Start, let FRPB complete the ${label} FRP bypass or lock removal, then reboot the device with the lock removed.`,
   ];
 }
 
@@ -281,6 +297,21 @@ export default function BrandHubPage({ params }: BrandHubPageProps) {
           path: cluster.hubPath,
           name: `${cluster.brandLabel} FRP Tool — FRPB Device Module`,
           description: `FRPB ${cluster.brandLabel} FRP tool: one-click FRP bypass and screen lock removal for ${modelCount} ${cluster.brandLabel} models over USB.`,
+        })}
+      />
+      <JsonLd
+        id="ld-howto"
+        data={howToSchema({
+          name: `How to bypass FRP on ${cluster.brandLabel} devices with FRPB`,
+          description: `Step-by-step FRP bypass and screen lock removal for ${cluster.brandLabel} devices using the FRPB Windows toolkit.`,
+          path: cluster.hubPath,
+          steps: brandHowToSteps(cluster),
+          estimatedTime: "PT10M",
+          prerequisites: [
+            "Windows 10/11 PC",
+            "USB data cable",
+            "A device you own or are authorised to service",
+          ],
         })}
       />
       <JsonLd id="ld-faq" data={faqPageSchema(faq)} />

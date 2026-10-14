@@ -64,13 +64,13 @@ export interface BrandPageContent {
 }
 
 /**
- * Samsung — One UI / Knox, Download + BROM mode, Android 10-14.
+ * Samsung — One UI / Knox, Download + BROM mode, Android 10-16.
  */
 const samsung: BrandPageContent = {
   path: "/samsung-frp-bypass",
-  title: "Samsung FRP Bypass Tool 2026 — 1-Click Unlock Android 10–14",
+  title: "Samsung FRP Bypass Tool 2026 — 1-Click Unlock Android 10–16",
   description:
-    "Bypass Samsung FRP in about 5 minutes on Android 10–14. 1-click Galaxy unlock for One UI + Knox with Download / BROM mode and auto Samsung drivers — free Windows tool.",
+    "Bypass Samsung FRP in about 5 minutes on Android 10–16. 1-click Galaxy unlock for One UI + Knox with Download / BROM mode and auto Samsung drivers — free Windows tool.",
   keywords: [
     "samsung frp bypass",
     "samsung frp bypass tool 2026",
@@ -82,9 +82,9 @@ const samsung: BrandPageContent = {
   ],
   eyebrow: "Samsung Galaxy — One UI FRP",
   headingLead: "Samsung FRP Bypass Tool for",
-  headingHighlight: "One-Click Android 10-14 Unlock",
+  headingHighlight: "One-Click Android 10-16 Unlock",
   subheading:
-    "Remove the Google FRP lock from Samsung Galaxy phones running One UI and Android 10 through 14. FRPB auto-detects Download mode and BROM mode, handles Knox security hand-off and unlocks in a single click.",
+    "Remove the Google FRP lock from Samsung Galaxy phones running One UI and Android 10 through Android 16 (2026). FRPB auto-detects Download mode and BROM mode, handles Knox security hand-off and unlocks in a single click.",
   features: [
     {
       icon: "Smartphone",
@@ -129,7 +129,7 @@ const samsung: BrandPageContent = {
     {
       question: "Which Samsung models and Android versions does FRPB support?",
       answer:
-        "FRPB supports Samsung Galaxy S, Note, Z Fold, Z Flip and A-series devices running Android 10, 11, 12, 13 and 14 (One UI 2-6), across Exynos, Snapdragon and MediaTek chipsets.",
+        "FRPB supports Samsung Galaxy S, Note, Z Fold, Z Flip and A-series devices running Android 10 through Android 16 (One UI 2-8), across Exynos, Snapdragon and MediaTek chipsets.",
     },
     {
       question: "Does FRPB bypass Samsung Knox security?",
@@ -276,7 +276,7 @@ const vivoOppoRealme: BrandPageContent = {
     {
       icon: "Smartphone",
       title: "ColourOS · Funtouch · Realme UI",
-      desc: "Build-aware bypass across ColorOS, Funtouch OS and Realme UI on Android 10-14.",
+      desc: "Build-aware bypass across ColorOS, Funtouch OS and Realme UI on Android 10-16.",
     },
   ],
   steps: [
@@ -301,7 +301,7 @@ const vivoOppoRealme: BrandPageContent = {
     {
       question: "Which Vivo, Oppo and Realme chipsets does FRPB support?",
       answer:
-        "FRPB supports MediaTek and Qualcomm-powered Vivo, Oppo and Realme devices running ColorOS, Funtouch OS and Realme UI on Android 10-14, in both MTK BROM mode and Qualcomm EDL (9008) mode.",
+        "FRPB supports MediaTek and Qualcomm-powered Vivo, Oppo and Realme devices running ColorOS, Funtouch OS and Realme UI on Android 10-16, in both MTK BROM mode and Qualcomm EDL (9008) mode.",
     },
     {
       question: "Do I need to install MediaTek or Qualcomm drivers manually?",
@@ -442,7 +442,7 @@ export const BRAND_MONEY_LINKS: readonly {
   {
     path: samsung.path,
     anchor: "Samsung FRP bypass tool (2026)",
-    blurb: "One-click Android 10–14 unlock for Galaxy devices.",
+    blurb: "One-click Android 10–16 unlock for Galaxy devices.",
   },
   {
     path: xiaomi.path,

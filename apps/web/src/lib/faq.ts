@@ -17,7 +17,7 @@ export const HOME_FAQ: readonly FaqItem[] = [
   {
     question: "Which Android versions does FRPB support?",
     answer:
-      "FRPB supports Android 10, 11, 12, 13, and 14 across Samsung, Xiaomi, Vivo, Oppo, and Realme devices.",
+      "FRPB supports Android 10 through Android 16 (2026) across Samsung, Xiaomi, Vivo, Oppo, Realme, Motorola, OnePlus, Google Pixel and most other Android brands.",
   },
   {
     question: "Does FRPB require a PC?",

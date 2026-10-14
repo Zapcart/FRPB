@@ -13,6 +13,8 @@ import {
 } from "@/data/seo-matrix";
 import { FREE_TOOL_ROUTES, UNLOCK_TOOL_ROUTES } from "@frpb/shared";
 import { IOS_HUB_PATH, IOS_SPOKE_PATHS } from "@/data/ios-content";
+import { PILLAR_HUB_ROUTES } from "@/data/pillar-hubs";
+import { TROUBLESHOOTING_ROUTES } from "@/data/troubleshooting-content";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
@@ -137,6 +139,31 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.6,
   }));
 
+  // Pillar hubs (`/tools/frp-bypass`, `/tools/phone-unlock`, `/tools/icloud-bypass`).
+  // These are the Hub-and-Spoke anchors for the 2026 keyword strategy: the
+  // highest-authority tool pages, so they list weekly at 0.8 just below the
+  // homepage. They sit alongside (and safely shadow) the dynamic `/tools/[brand]`
+  // hubs because static segments always win in the App Router.
+  const pillarHubPages: MetadataRoute.Sitemap = PILLAR_HUB_ROUTES.map((route) => ({
+    url: `${SITE_URL}${route.path}`,
+    lastModified: now,
+    changeFrequency: route.changeFrequency,
+    priority: route.priority,
+  }));
+
+  // Low-KD troubleshooting spokes beneath the Phone Unlock hub
+  // (`/tools/phone-unlock/reset-redmi-phone`, `/factory-reset-android`).
+  // These answer long-tail "how to reset / factory reset" queries, so they list
+  // monthly at 0.6 to avoid cannibalising their pillar.
+  const troubleshootingPages: MetadataRoute.Sitemap = TROUBLESHOOTING_ROUTES.map(
+    (route) => ({
+      url: `${SITE_URL}${route.path}`,
+      lastModified: now,
+      changeFrequency: route.changeFrequency,
+      priority: route.priority,
+    }),
+  );
+
   // iOS (iPhone & iPad) learn cluster: the `/ios` hub plus its owner-focused
   // spokes. These are informational, Apple-official removal guides — not a
   // device matrix — so they list monthly at 0.6 alongside the model spokes.
@@ -173,8 +200,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...brandPages,
     ...freeToolPages,
     ...unlockToolPages,
+    ...pillarHubPages,
     ...brandHubPages,
     ...modelSpokePages,
+    ...troubleshootingPages,
     ...iosPages,
     ...posts,
   ];

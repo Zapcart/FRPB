@@ -18,7 +18,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { pageMetadata } from "@/lib/seo";
-import { breadcrumbSchema } from "@/lib/schema";
+import { breadcrumbSchema, howToSchema, softwareApplicationSchema } from "@/lib/schema";
 import JsonLd from "@/components/seo/json-ld";
 import {
   CLUSTER_MODEL_COUNT,
@@ -46,6 +46,14 @@ export const metadata = pageMetadata({
 function brandAnchor(brandLabel: string): string {
   return `${brandLabel} FRP tool`;
 }
+
+/** Canonical 4-step FRPB workflow, mirrored by the tool landed on after download. */
+const TOOLS_HOWTO_STEPS: string[] = [
+  "Download the signed FRPB installer from the official GitHub Release (v2) and launch it on Windows 10 or 11.",
+  "Pick your brand and exact model below to open its device-specific FRP bypass or lock removal guide.",
+  "Boot the phone into the required mode (Download, BROM, EDL, Recovery or fastboot) and connect it over USB — FRPB auto-detects the model and chipset.",
+  "Press Start, let FRPB complete the FRP bypass or lock removal, then reboot the device with the lock removed.",
+];
 
 export default function ToolsIndexPage() {
   const utilities = utilityLinks();
@@ -255,6 +263,30 @@ export default function ToolsIndexPage() {
         </p>
       </footer>
 
+      <JsonLd
+        id="ld-software-application"
+        data={softwareApplicationSchema({
+          path: "/tools",
+          name: "FRPB All-in-One FRP & Lock Removal Toolkit",
+          description: `FRPB device tools directory: one-click FRP bypass and screen lock removal for ${CLUSTER_MODEL_COUNT} Android models across every supported brand, plus free utility and iOS owner guides.`,
+        })}
+      />
+      <JsonLd
+        id="ld-howto"
+        data={howToSchema({
+          name: "How to bypass FRP and remove an Android lock with FRPB",
+          description:
+            "Step-by-step guide to installing FRPB on Windows and removing the FRP or screen lock from a supported Android device over USB.",
+          path: "/tools",
+          steps: TOOLS_HOWTO_STEPS,
+          estimatedTime: "PT10M",
+          prerequisites: [
+            "Windows 10/11 PC",
+            "USB data cable",
+            "A device you own or are authorised to service",
+          ],
+        })}
+      />
       <JsonLd
         id="ld-breadcrumb"
         data={breadcrumbSchema([

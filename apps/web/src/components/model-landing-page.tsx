@@ -286,6 +286,14 @@ export default function ModelLandingPage({ content, record, intent }: ModelLandi
             Signed installer
           </span>
           <span className="badge border-glass-edge/70 bg-glass-soft shadow-glass-light backdrop-blur">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+            SHA-256 verified release
+          </span>
+          <span className="badge border-glass-edge/70 bg-glass-soft shadow-glass-light backdrop-blur">
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+            Clean release · no adware
+          </span>
+          <span className="badge border-glass-edge/70 bg-glass-soft shadow-glass-light backdrop-blur">
             Windows 10 / 11 · x64
           </span>
         </section>
