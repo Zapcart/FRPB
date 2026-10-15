@@ -93,7 +93,7 @@ function brandFaq(cluster: BrandCluster): FaqItem[] {
 function brandHowToSteps(cluster: BrandCluster): string[] {
   const label = cluster.brandLabel;
   return [
-    "Download the signed FRPB installer from the official GitHub Release (v2) and launch it on Windows 10 or 11.",
+    "Download the signed FRPB installer from the official GitHub Release (v1.0.0) and launch it on Windows 10 or 11.",
     `Boot the ${label} device into its required mode (Download, BROM, EDL, Recovery or fastboot) and connect it over USB — FRPB auto-detects the model and chipset.`,
     `If drivers are missing, click Install Drivers — FRPB installs the correct ${label} / Qualcomm / MediaTek package automatically.`,
     `Press Start, let FRPB complete the ${label} FRP bypass or lock removal, then reboot the device with the lock removed.`,

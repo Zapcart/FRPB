@@ -138,7 +138,7 @@ export default function Footer({ id }: { id?: string } = {}) {
           {/* Content columns */}
           {columns.map((column) => (
             <div key={column.heading}>
-              <h4 className="text-sm font-bold text-slate-900">{column.heading}</h4>
+              <h3 className="text-sm font-bold text-slate-900">{column.heading}</h3>
               <ul className="mt-4 space-y-2.5 text-sm">
                 {column.links.map((item) => (
                   <li key={item.label}>

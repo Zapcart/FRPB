@@ -151,7 +151,9 @@ export default function BlogPostPage({ params }: BlogPostPageProps) {
           { name: "Blog", path: "/blog" },
           {
             name: CATEGORY_LABEL[category] ?? "Guides",
-            path: `/blog?category=${category}`,
+            // Category views canonicalise to /blog, so the breadcrumb points at
+            // the canonical hub rather than a non-canonical ?category= URL.
+            path: "/blog",
           },
           { name: post.title, path: `/blog/${post.slug}` },
         ])}

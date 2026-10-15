@@ -30,7 +30,7 @@ import { SEO_BRANDS, SEO_SPOKE_COUNT } from "@/data/seo-matrix";
 export const metadata = pageMetadata({
   title: "All FRP Tools — Samsung, Xiaomi, Vivo & More",
   description:
-    "Browse every FRPB device tool: Samsung FRP tool, Xiaomi lock removal, Vivo, Oppo, Realme and more, plus Virtual Location, Data Eraser, Phone Transfer and WhatsApp Transfer.",
+    "Browse every FRPB device tool: Samsung, Xiaomi, Vivo, Oppo and Realme FRP tools, plus Virtual Location, Data Eraser, Phone Transfer and WhatsApp Transfer.",
   path: "/tools",
   keywords: [
     "frp tool",
@@ -49,7 +49,7 @@ function brandAnchor(brandLabel: string): string {
 
 /** Canonical 4-step FRPB workflow, mirrored by the tool landed on after download. */
 const TOOLS_HOWTO_STEPS: string[] = [
-  "Download the signed FRPB installer from the official GitHub Release (v2) and launch it on Windows 10 or 11.",
+  "Download the signed FRPB installer from the official GitHub Release (v1.0.0) and launch it on Windows 10 or 11.",
   "Pick your brand and exact model below to open its device-specific FRP bypass or lock removal guide.",
   "Boot the phone into the required mode (Download, BROM, EDL, Recovery or fastboot) and connect it over USB — FRPB auto-detects the model and chipset.",
   "Press Start, let FRPB complete the FRP bypass or lock removal, then reboot the device with the lock removed.",

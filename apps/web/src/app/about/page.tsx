@@ -24,7 +24,7 @@ import {
 export const metadata = pageMetadata({
   title: "About Us",
   description:
-    "About FRPB — a remote-first, globally distributed team building a one-click Android FRP bypass and device recovery utility for authorised device owners and certified repair technicians worldwide.",
+    "About FRPB — a remote-first team building a one-click Android FRP bypass and device recovery tool for owners and certified repair technicians.",
   path: "/about",
 });
 
