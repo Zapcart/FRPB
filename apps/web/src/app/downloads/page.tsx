@@ -13,7 +13,6 @@ import { pageMetadata } from "@/lib/seo";
 import TrackedDownloadLink from "@/components/analytics/tracked-download-link";
 import {
   EXE_NAME,
-  GITHUB_RELEASES_TAG,
   RELEASE_VERSION,
   RELEASE_NOTES,
   SMARTSCREEN_NOTICE,
@@ -124,14 +123,15 @@ export default function DownloadsPage() {
               {EXE_NAME} · ~91 MB · Windows 10/11 · Included with an FRPB Active License
             </p>
 
-            {/* Secondary link → canonical GitHub Release page for this build. */}
+            {/* Secondary link → direct installer asset download. */}
             <a
-              href={GITHUB_RELEASES_TAG}
+              href={href}
+              download
               target="_blank"
               rel="noopener noreferrer"
               className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-brand-600 underline-offset-4 transition hover:underline"
             >
-              View the official release (v{RELEASE_VERSION}) on GitHub
+              Download the official installer ({EXE_NAME})
             </a>
 
             {/* Browser / Windows SmartScreen first-launch guidance */}

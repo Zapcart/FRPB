@@ -42,9 +42,10 @@ export const GITHUB_RELEASES_BASE = `https://github.com/${GITHUB_REPO}/releases/
  * Canonical GitHub Release *page* for the current build:
  * https://github.com/Zapcart/FRPB-Application/releases/tag/v1.0.0
  *
- * Retained as a non-broken human-facing fallback (e.g. a "All releases" link),
- * but the primary download CTAs now point straight at the raw installer asset
- * ({@link GITHUB_DOWNLOAD_URL}) so a click starts the download immediately.
+ * Reference only. Every download CTA across the site now targets the raw
+ * installer asset ({@link GITHUB_DOWNLOAD_URL} via {@link resolveInstallerUrl})
+ * so a single click starts the executable download immediately — no redirect
+ * through the release page. Do NOT wire download buttons to this constant.
  */
 export const GITHUB_RELEASES_TAG = `https://github.com/${GITHUB_REPO}/releases/tag/${RELEASE_TAG}`;
 
