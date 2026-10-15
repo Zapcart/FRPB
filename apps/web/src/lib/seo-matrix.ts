@@ -48,10 +48,13 @@ function entryModeCopy(record: SeoModelRecord): string {
 function titleTiers(record: SeoModelRecord, intent: SeoIntent): string[] {
   const base = `${record.brandLabel} ${record.modelLabel}`;
   if (intent === "frp-bypass") {
+    // Task 19 (keyword SEO): lead with the compound "FRP Unlock Tool & Bypass"
+    // head term and the "(Android 14/15)" qualifier, then degrade gracefully
+    // for long model names so Google never truncates the SERP snippet.
     return [
-      `${base} FRP Bypass Tool 2026 — One-Click Unlock`,
-      `${base} FRP Bypass Tool — One-Click Unlock`,
-      `${base} FRP Bypass Tool`,
+      `${base} FRP Unlock Tool & Bypass (Android 14/15)`,
+      `${base} FRP Unlock Tool & Bypass`,
+      `${base} FRP Unlock Tool`,
       `${base} FRP Bypass`,
     ];
   }
@@ -102,9 +105,11 @@ export function modelMetaDescription(
 ): string {
   const device = record.fullModelLabel;
   if (intent === "frp-bypass") {
-    return `Bypass FRP on the ${device} in about 5 minutes. 1-click Google account unlock for ${chipsetLabel(
+    // Task 19: embed both exact head terms — "<model> frp bypass" and
+    // "<model> frp unlock tool" — so the snippet matches either query phrasing.
+    return `Run a ${device} FRP bypass with the FRPB ${record.modelLabel} frp unlock tool. 1-click Google account FRP lock removal in about 5 minutes on ${chipsetLabel(
       record.chipset,
-    )} devices with auto USB drivers — free Windows tool, no adware.`;
+    )} — free Windows download, no adware.`;
   }
   return `Remove the screen lock from the ${device} in about 5 minutes. 1-click lock removal for ${chipsetLabel(
     record.chipset,
@@ -232,9 +237,12 @@ export function buildModelContent(
     description: modelMetaDescription(record, intent),
     keywords: modelKeywords(record, intent),
     eyebrow: `${record.brandLabel} · ${record.modelLabel} — ${chipsetLabel(record.chipset)}`,
+    // Task 19: the H1 is "<Model> FRP Bypass & FRP Unlock Tool" so both the
+    // "<model> frp bypass" and "<model> frp unlock tool" head terms appear in
+    // the rendered heading, not just the <title>.
     headingLead: `${record.fullModelLabel}`,
     headingHighlight:
-      intent === "frp-bypass" ? "FRP Bypass Tool" : "Lock Removal Tool",
+      intent === "frp-bypass" ? "FRP Bypass & FRP Unlock Tool" : "Lock Removal Tool",
     subheading:
       intent === "frp-bypass"
         ? `Remove the Google FRP lock from the ${record.fullModelLabel} with a one-click ${chipsetLabel(

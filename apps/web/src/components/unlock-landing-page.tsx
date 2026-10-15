@@ -120,12 +120,21 @@ export default function UnlockLandingPage({ content }: { content: UnlockToolMeta
             </div>
 
             <h1 className="max-w-3xl text-3xl font-extrabold leading-tight tracking-tight text-ink sm:text-5xl">
-              {content.headingLead}{" "}
-              {content.headingHighlight ? (
-                <span className="bg-gradient-to-r from-brand-600 via-brand-500 to-accent-500 bg-clip-text text-transparent">
-                  {content.headingHighlight}
-                </span>
-              ) : null}
+              {/* Task 19: an explicit h1Override lets a high-value route lock in
+                  an exact keyword-targeted H1; otherwise fall back to the
+                  data-driven lead + gradient-highlight split. */}
+              {content.h1Override ? (
+                content.h1Override
+              ) : (
+                <>
+                  {content.headingLead}{" "}
+                  {content.headingHighlight ? (
+                    <span className="bg-gradient-to-r from-brand-600 via-brand-500 to-accent-500 bg-clip-text text-transparent">
+                      {content.headingHighlight}
+                    </span>
+                  ) : null}
+                </>
+              )}
             </h1>
 
             <p className="mt-5 max-w-2xl text-sm leading-relaxed text-slate-500 sm:text-base">
@@ -222,6 +231,36 @@ export default function UnlockLandingPage({ content }: { content: UnlockToolMeta
             ))}
           </ol>
         </section>
+
+        {/* ================= LONG-FORM SEO SECTIONS (optional) ================= */}
+        {content.sections && content.sections.length > 0 && (
+          <section id="guide" className="mt-14 space-y-10" aria-label="FRP bypass guide">
+            {content.sections.map((section) => (
+              <div key={section.heading} className="mx-auto max-w-3xl">
+                <h2 className="text-xl font-extrabold tracking-tight text-ink sm:text-2xl">
+                  {section.heading}
+                </h2>
+                <div className="mt-4 space-y-3">
+                  {section.body.map((paragraph) => (
+                    <p key={paragraph} className="text-sm leading-relaxed text-slate-600">
+                      {paragraph}
+                    </p>
+                  ))}
+                </div>
+                {section.bullets && section.bullets.length > 0 && (
+                  <ul className="mt-4 space-y-2">
+                    {section.bullets.map((bullet) => (
+                      <li key={bullet} className="flex items-start gap-2.5 text-sm text-slate-600">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
+                        {bullet}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </section>
+        )}
 
         {/* ================= TRUST STRIP ================= */}
         <section className="mt-12 flex flex-wrap items-center justify-center gap-2.5">

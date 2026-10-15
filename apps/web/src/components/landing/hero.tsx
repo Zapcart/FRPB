@@ -21,6 +21,8 @@ import {
   Check,
   Cpu,
   Download,
+  Lock,
+  Mail,
   Monitor,
   ShieldCheck,
   Smartphone,
@@ -32,6 +34,7 @@ import {
 } from "lucide-react";
 import SmoothScrollLink from "@/components/smooth-scroll-link";
 import TrackedDownloadLink from "@/components/analytics/tracked-download-link";
+import { RELEASE_VERSION } from "@/config/download";
 import type { HomeMetrics } from "@/lib/home-metrics";
 
 interface HeroProps {
@@ -191,7 +194,7 @@ export default function Hero({ downloadUrl, metrics }: HeroProps) {
                 className="btn-neon btn-shine w-full sm:w-auto"
               >
                 <Download className="h-5 w-5" />
-                Try FRPB Free
+                Download Free Setup (v{RELEASE_VERSION})
               </TrackedDownloadLink>
               <SmoothScrollLink
                 targetId="pricing"
@@ -203,18 +206,26 @@ export default function Hero({ downloadUrl, metrics }: HeroProps) {
               </SmoothScrollLink>
             </div>
 
-            {/* Platform compatibility / trust line */}
+            {/* Trust + platform compatibility indicators (Task 19). */}
             <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium text-slate-500">
               <span className="inline-flex items-center gap-1.5">
+                <Lock className="h-4 w-4 text-emerald-500" />
+                Instant License Key Delivery via Email/WhatsApp
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <ShieldCheck className="h-4 w-4 text-brand-500" />
+                100% Safe & Tested Utility (Clean Build)
+              </span>
+              <span className="inline-flex items-center gap-1.5">
                 <Monitor className="h-4 w-4 text-slate-400" />
-                Windows 11 / 10 / 8 / 7
+                Supports Windows 10/11 (32-bit & 64-bit)
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <Apple className="h-4 w-4 text-slate-400" />
                 macOS 10.14+
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <ShieldCheck className="h-4 w-4 text-brand-500" />
+                <Mail className="h-4 w-4 text-slate-400" />
                 Included with an FRPB Active License
               </span>
             </div>

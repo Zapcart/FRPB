@@ -266,6 +266,164 @@ export const BLOG_POSTS: readonly BlogPost[] = [
       },
     ],
   },
+  // ── 2026 high-volume placeholder guides (Task 19) ──────────────────────────
+  // Two very high-volume informational queries the site had no URL for. Both
+  // are authored as full, self-contained guides (not stubs) so the pages carry
+  // real value, structured sections and a working HowTo step list — which is
+  // what keeps them indexable rather than Thin Content. `category`/`platform`
+  // are declared explicitly so they land in the correct /blog filter tabs.
+  {
+    slug: "how-to-factory-reset-android-without-password",
+    title: "How to Factory Reset Android Without a Password (2026 Guide)",
+    description:
+      "Factory reset an Android phone without the screen password using Settings, Recovery mode or hardware keys — then learn how to clear the FRP Google account lock that follows a wipe.",
+    excerpt:
+      "Locked out of your Android phone? You can factory reset it without the password from Recovery or hardware keys — but FRP asks for the Google account afterwards. Here is the full, honest picture.",
+    datePublished: "2026-03-02",
+    dateModified: "2026-03-02",
+    readingMinutes: 7,
+    category: "android",
+    platform: "Android",
+    brand: "Generic",
+    model: "Android",
+    androidVersions: ["13", "14", "15"],
+    method: "manual",
+    estimatedTime: "PT12M",
+    prerequisites: [
+      "The device charged above 30% so it does not drop out mid-wipe",
+      "Your Google account credentials — or proof that you own the device",
+      "A Windows 10 or 11 PC with FRPB installed (only needed to clear FRP afterwards)",
+    ],
+    keywords: [
+      "how to factory reset android without password",
+      "factory reset android without google account",
+      "hard reset android locked phone",
+      "factory reset from recovery mode android",
+      "frp lock after factory reset",
+    ],
+    sections: [
+      {
+        heading: "What a factory reset does — and what it does not remove",
+        paragraphs: [
+          "A factory reset erases everything in the user data partition: apps, photos, messages and the screen lock credential (PIN, pattern or password). That is why a reset is the standard fix for a forgotten password when you can still reach the Settings menu, and the last resort when you cannot.",
+          "What a reset does NOT remove is Factory Reset Protection. From Android 5.1 onward, a reset performed without the owner's sign-out leaves an FRP flag tied to the last Google account. The phone boots to the setup wizard and then refuses to continue until that same account is verified — even though the password that locked the screen is gone.",
+        ],
+      },
+      {
+        heading: "Reset from Settings when you still have access",
+        steps: [
+          "Open Settings → System → Reset options (the exact path varies by OEM skin).",
+          "Choose Erase all data (factory reset) and confirm with your PIN, pattern or password.",
+          "Wait for the device to reboot and show the setup wizard.",
+          "If it asks for the previous Google account, jump to the FRP section below.",
+        ],
+      },
+      {
+        heading: "Reset from Recovery mode when the screen is locked",
+        paragraphs: [
+          "Every Android phone ships a stock Recovery menu that can wipe data without the screen password. The key combination differs by brand: Volume Up + Power on most devices, Volume Down + Power on some Samsung and Motorola models, and Volume Up + Volume Down + Power on many Pixel and Xiaomi units.",
+        ],
+        steps: [
+          "Power the device off completely, then hold the recovery key combination for the model.",
+          "At the bootloader or recovery screen, use the volume keys to move and Power to select.",
+          "Choose Wipe data / factory reset, then confirm (on modern Android you may still be asked for the lock credential).",
+          "Select Reboot system now — the device returns to the setup wizard.",
+        ],
+      },
+      {
+        heading: "The FRP catch: the Google account check after a wipe",
+        paragraphs: [
+          "If the phone was wiped without signing out of the owning Google account first, setup will stop at “Verify your account”. This is not a bug and not a leftover password — it is the anti-theft layer working as designed, and it is the single most common reason a reset does not feel like it “worked”.",
+          "There are only two legitimate ways past it: sign in with the original Google account, or use a documented FRP bypass tool on a device you own or are authorised to repair.",
+        ],
+      },
+      {
+        heading: "Clearing FRP on a device you own with FRPB",
+        steps: [
+          "Download FRPB from frpb.in and install it on your Windows PC.",
+          "Connect the phone over a quality USB data cable and let FRPB's Live Device Monitor detect the mode and chipset.",
+          "Confirm the auto-detected model matches the handset in front of you.",
+          "Click FRP Bypass and accept the authorised-owner disclaimer.",
+          "Watch the live console until the phone reboots into the setup wizard with the account lock cleared.",
+        ],
+      },
+      {
+        heading: "When to stop and get the owner involved",
+        paragraphs: [
+          "FRPB is intended strictly for authorised device owners and licensed repair professionals. You must own the device or hold explicit written permission from its owner. Bypassing FRP on hardware you do not own may defeat an anti-theft control and can be illegal in your jurisdiction.",
+          "If the phone belongs to someone else — a seller, a previous owner or a stranger — the correct route is to have that person sign in or remove the device from their Google account. No tool should be used to strip a lock you have no right to remove.",
+        ],
+      },
+    ],
+  },
+  {
+    slug: "fix-iphone-is-not-activated-message",
+    title: "Fix the “iPhone Is Not Activated” Message (2026 Guide)",
+    description:
+      "Fix “iPhone is not activated” during setup: check the network, Apple servers, date and time and the Apple ID — plus how to tell a server error apart from Activation Lock.",
+    excerpt:
+      "“iPhone is not activated because the activation server cannot be reached” is usually a network or server hiccup — but it can also be Activation Lock. Here is how to tell them apart and fix each.",
+    datePublished: "2026-03-02",
+    dateModified: "2026-03-02",
+    readingMinutes: 6,
+    category: "iphone",
+    platform: "iOS",
+    brand: "Apple",
+    model: "iPhone",
+    osVersions: ["iOS 16", "iOS 17", "iOS 18"],
+    method: "manual",
+    estimatedTime: "PT10M",
+    prerequisites: [
+      "A stable Wi-Fi or cellular connection",
+      "Your Apple ID and password, if the device is yours",
+      "The original proof of purchase for any Activation Lock removal request",
+    ],
+    keywords: [
+      "iphone is not activated",
+      "activation server cannot be reached iphone",
+      "iphone not activated after reset",
+      "fix iphone activation error",
+      "iphone activation lock vs server error",
+    ],
+    sections: [
+      {
+        heading: "Two very different problems behind one message",
+        paragraphs: [
+          "“iPhone is not activated because the activation server cannot be reached” and “This iPhone is linked to an Apple ID” both stop setup, but they are unrelated problems. The first is a connectivity or Apple-service hiccup that resolves in minutes. The second is Activation Lock, a server-side ownership check that only the Apple ID owner or Apple Support can clear.",
+          "Reading the exact wording matters: if the message names an Apple ID or asks you to enter one, you are looking at Activation Lock. If it only mentions the activation server, the device itself is unlocked and the iPhone just cannot talk to Apple.",
+        ],
+      },
+      {
+        heading: "Quick fixes for the activation-server error",
+        steps: [
+          "Switch off Wi-Fi and use a different network, or the other way around — carrier IPs and captive portals are common culprits.",
+          "Reboot the iPhone and the router, then retry the activation step.",
+          "Check that the device date and time are correct, or set them to automatic — a skewed clock breaks the activation handshake.",
+          "Restore the iPhone with Finder (macOS) or Apple Devices / iTunes (Windows) to force a clean activation attempt.",
+          "Wait 15–30 minutes if apple.com/support/systemstatus shows an Apple activation-service incident, then retry.",
+        ],
+      },
+      {
+        heading: "If the device is Activation Locked",
+        paragraphs: [
+          "When setup asks for a specific Apple ID, the iPhone is tied to that account server-side and re-verifies it on every activation. There is no software bypass for a device you do not own, and FRPB does not offer one. The only legitimate routes are to recover the owning Apple ID or to ask Apple to clear the lock against proof of purchase.",
+        ],
+        steps: [
+          "Try to recover the owning Apple ID at iforgot.apple.com — Activation Lock clears the moment the owner signs in.",
+          "Gather the original proof of purchase (receipt, invoice or carrier contract).",
+          "Submit an Activation Lock removal request at apple.com/support or at any Apple Store or Authorised Service Provider.",
+          "Wait for Apple to verify the purchase and clear the lock server-side, then activate with your own Apple ID.",
+        ],
+      },
+      {
+        heading: "When the message is not fixable at home",
+        paragraphs: [
+          "If a device you bought second-hand asks for someone else's Apple ID, treat it as a red flag and stop. Ask the seller to remove the iPhone from their account and sign out of iCloud before you pay — a legitimate seller can always do this in front of you.",
+          "FRPB publishes these iPhone guides to answer very high-volume searches honestly. We do not claim an iCloud or Activation Lock bypass for hardware you do not own, because no legitimate tool can clear an ownership check that Apple performs on its own servers.",
+        ],
+      },
+    ],
+  },
 ];
 
 /** Look up a single post by slug. */

@@ -1,23 +1,29 @@
-// FRPB — floating "Follow Updates" social engagement widget.
+// FRPB — floating "Support / Community" widget.
 // Fixed bottom-right so it floats above every route (mounted in the root
 // layout). Closed state is a compact badge; clicking toggles an upward
-// popover card with links to the FRPB Telegram group and Instagram page.
+// popover card with the official support channels: WhatsApp (when configured
+// via NEXT_PUBLIC_SUPPORT_WHATSAPP), Telegram, Instagram and email.
 //
 // Client component: owns only local open/closed state plus Escape-key and
 // click-outside dismissal. No async work, no global side effects.
+//
+// Destinations come from @/config/support so every support surface stays in
+// sync; channels without a configured destination render as disabled so the
+// widget never exposes a dead link.
 
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Facebook, Instagram, Send, Sparkles, X } from "lucide-react";
+import { Facebook, Instagram, Mail, MessageCircle, Send, Sparkles, X } from "lucide-react";
+import {
+  SUPPORT_EMAIL_ADDRESS,
+  SUPPORT_INSTAGRAM_URL,
+  SUPPORT_MAILTO,
+  SUPPORT_TELEGRAM_URL,
+  SUPPORT_WHATSAPP_URL,
+} from "@/config/support";
 
-/** External community destinations. */
-const TELEGRAM_URL = "https://t.me/frpbnetwork";
-const INSTAGRAM_URL = "https://www.instagram.com/frpbofficial";
-/** Facebook page is not published yet — button renders disabled as a placeholder. */
-const FACEBOOK_URL: string | null = null;
-
-interface SocialLink {
+interface SupportLink {
   label: string;
   href: string | null;
   icon: typeof Send;
@@ -25,23 +31,37 @@ interface SocialLink {
   className: string;
 }
 
-const SOCIAL_LINKS: readonly SocialLink[] = [
+// WhatsApp first (fastest channel) then Telegram/email — Instagram and the
+// still-unpublished Facebook page round out the list as social destinations.
+const SUPPORT_LINKS: readonly SupportLink[] = [
+  {
+    label: "Chat on WhatsApp",
+    href: SUPPORT_WHATSAPP_URL,
+    icon: MessageCircle,
+    className: "bg-emerald-500 hover:bg-emerald-600 focus-visible:outline-emerald-500",
+  },
   {
     label: "Join Telegram Group",
-    href: TELEGRAM_URL,
+    href: SUPPORT_TELEGRAM_URL,
     icon: Send,
     className: "bg-sky-500 hover:bg-sky-600 focus-visible:outline-sky-500",
   },
   {
+    label: `Email ${SUPPORT_EMAIL_ADDRESS}`,
+    href: SUPPORT_MAILTO,
+    icon: Mail,
+    className: "bg-slate-700 hover:bg-slate-800 focus-visible:outline-slate-600",
+  },
+  {
     label: "Follow Instagram Page",
-    href: INSTAGRAM_URL,
+    href: SUPPORT_INSTAGRAM_URL,
     icon: Instagram,
     className:
       "bg-gradient-to-r from-fuchsia-600 to-orange-500 hover:from-fuchsia-700 hover:to-orange-600 focus-visible:outline-fuchsia-500",
   },
   {
     label: "Like Facebook Page",
-    href: FACEBOOK_URL,
+    href: null,
     icon: Facebook,
     className: "bg-blue-600 hover:bg-blue-700 focus-visible:outline-blue-600",
   },
@@ -86,7 +106,7 @@ export default function SocialUpdatesWidget() {
       <div
         ref={panelRef}
         role="dialog"
-        aria-label="FRPB community links"
+        aria-label="FRPB support channels"
         aria-hidden={!open}
         className={`glass-panel-strong w-80 max-w-[calc(100vw-2.5rem)] origin-bottom-right overflow-hidden rounded-2xl transition-all duration-200 ease-out ${
           open
@@ -99,7 +119,7 @@ export default function SocialUpdatesWidget() {
           <button
             type="button"
             onClick={() => setOpen(false)}
-            aria-label="Close community widget"
+            aria-label="Close support widget"
             className="absolute right-2 top-2 grid h-11 w-11 touch-manipulation select-none place-items-center rounded-full text-white/80 transition-colors active:bg-white/25 hover:bg-white/15 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
           >
             <X className="h-4 w-4" aria-hidden="true" />
@@ -107,17 +127,17 @@ export default function SocialUpdatesWidget() {
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-emerald-200" aria-hidden="true" />
             <h2 className="text-base font-semibold leading-tight">
-              Contact Us / FRPB Community
+              Need Help? / FRPB Support
             </h2>
           </div>
           <p className="mt-1 pr-6 text-xs leading-relaxed text-emerald-50/90">
-            Follow Instagram Page and Telegram for Updates!
+            Reach us on WhatsApp, Telegram or email — we reply fast.
           </p>
         </div>
 
         {/* White action section */}
         <div className="space-y-2.5 p-4">
-          {SOCIAL_LINKS.map(({ label, href, icon: Icon, className }) => {
+          {SUPPORT_LINKS.map(({ label, href, icon: Icon, className }) => {
             const isDisabled = !href;
             return (
               <a
@@ -138,7 +158,7 @@ export default function SocialUpdatesWidget() {
                 }`}
               >
                 <Icon className="h-4 w-4" aria-hidden="true" />
-                {label}
+                <span className="truncate">{label}</span>
                 {isDisabled && (
                   <span className="text-[10px] font-medium uppercase tracking-wide">
                     (soon)
@@ -157,16 +177,16 @@ export default function SocialUpdatesWidget() {
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        aria-label={open ? "Close community links" : "Follow FRPB community updates"}
+        aria-label={open ? "Close support channels" : "Open FRPB support channels"}
         className="group flex items-center gap-2 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/30 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-600/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 active:translate-y-0"
       >
         <span className="relative flex h-5 w-5 items-center justify-center">
-          <Send className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" aria-hidden="true" />
+          <MessageCircle className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" aria-hidden="true" />
           {!open && (
             <span className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-amber-300 ring-2 ring-emerald-600" />
           )}
         </span>
-        <span className="whitespace-nowrap">Follow Updates!</span>
+        <span className="whitespace-nowrap">Support</span>
       </button>
     </div>
   );

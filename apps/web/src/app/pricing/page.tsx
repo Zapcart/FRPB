@@ -22,6 +22,9 @@ import {
   Headphones,
   Lock,
   ChevronDown,
+  Monitor,
+  CalendarClock,
+  RefreshCw,
 } from "lucide-react";
 import { type PlanSlug } from "@frpb/shared";
 import { createClient } from "@/lib/supabase/client";
@@ -327,7 +330,7 @@ export default function PricingPage() {
               >
                 {popular && (
                   <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-gradient-to-r from-brand-500 to-accent-500 px-4 py-1 text-xs font-bold text-white shadow-lg shadow-brand-500/30">
-                    MOST POPULAR
+                    MOST POPULAR · RECOMMENDED FOR SHOPS
                   </span>
                 )}
                 <h2 className="text-xl font-bold text-slate-900">{card.name}</h2>
@@ -343,6 +346,24 @@ export default function PricingPage() {
                   {card.deviceLimit} device{card.deviceLimit === 1 ? "" : "s"} ·{" "}
                   {durationLabel}
                 </p>
+
+                {/* Tier benefit clarifiers (Task 19): activations, license
+                    duration and update entitlement spelled out so buyers never
+                    have to guess what each plan includes. */}
+                <ul className="mt-4 grid grid-cols-1 gap-1.5 text-xs font-medium text-slate-500 sm:grid-cols-3">
+                  <li className="inline-flex items-center gap-1.5">
+                    <Monitor className="h-3.5 w-3.5 shrink-0 text-brand-500" />
+                    {card.deviceLimit} PC activation{card.deviceLimit === 1 ? "" : "s"}
+                  </li>
+                  <li className="inline-flex items-center gap-1.5">
+                    <CalendarClock className="h-3.5 w-3.5 shrink-0 text-brand-500" />
+                    {card.slug === "MONTH_1" ? durationLabel : "Lifetime license"}
+                  </li>
+                  <li className="inline-flex items-center gap-1.5">
+                    <RefreshCw className="h-3.5 w-3.5 shrink-0 text-brand-500" />
+                    Free future updates
+                  </li>
+                </ul>
                 <ul className="mt-6 flex-1 space-y-3 text-sm">
                   {card.features.map((f) => (
                     <li key={f} className="flex items-start gap-2.5 text-slate-600">
@@ -380,6 +401,17 @@ export default function PricingPage() {
                     </>
                   )}
                 </button>
+
+                {/* Payment-method trust row (Task 19): reassures buyers that
+                    the checkout accepts UPI and every major card/bank method
+                    via the Razorpay gateway. */}
+                <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">UPI</span>
+                  <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">Visa</span>
+                  <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">Mastercard</span>
+                  <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">Net Banking</span>
+                  <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">Razorpay</span>
+                </div>
               </div>
             );
             })}

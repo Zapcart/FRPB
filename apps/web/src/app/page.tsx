@@ -75,7 +75,23 @@ const NAV_LINKS = [
   { label: "EULA", href: "#eula" },
 ];
 
-const BRANDS = ["Samsung", "Xiaomi", "Vivo", "OPPO", "OnePlus", "Google Pixel"];
+/**
+ * Supported brands surfaced in the landing-page brand strip. Ordered by
+ * real-world install base so the highest-intent vendors lead. Includes the
+ * emergent Android vendors (Realme, Tecno, Infinix, Motorola) alongside the
+ * incumbents (Samsung, Xiaomi, Vivo, OPPO, OnePlus).
+ */
+const BRANDS = [
+  "Samsung",
+  "Xiaomi",
+  "Vivo",
+  "OPPO",
+  "Realme",
+  "Tecno",
+  "Infinix",
+  "OnePlus",
+  "Motorola",
+];
 
 /**
  * Capability strip replacing the previous "As featured in" press banner.
@@ -295,7 +311,7 @@ export default function HomePage() {
           <p className="mb-8 text-center text-xs font-semibold uppercase tracking-widest text-slate-400">
             Trusted across the world's most popular device brands
           </p>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-3 gap-3 sm:grid-cols-3 lg:grid-cols-9">
             {BRANDS.map((brand) => (
               <div
                 key={brand}

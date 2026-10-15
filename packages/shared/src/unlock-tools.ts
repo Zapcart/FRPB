@@ -39,6 +39,20 @@ export interface UnlockToolRelated {
   blurb: string;
 }
 
+/**
+ * A long-form, keyword-targeted prose block. Rendered as an <h2> section with
+ * body paragraphs and an optional bullet list. Optional on `UnlockToolMeta`
+ * because only the highest-value routes carry supporting editorial copy — the
+ * remaining routes render exactly as before.
+ */
+export interface UnlockToolSection {
+  heading: string;
+  /** One or more body paragraphs. */
+  body: readonly string[];
+  /** Optional benefit/feature bullets rendered beneath the paragraphs. */
+  bullets?: readonly string[];
+}
+
 export interface UnlockToolMeta {
   id: UnlockToolId;
   /** Canonical route path beginning with "/" — canonical + sitemap + JSON-LD. */
@@ -54,6 +68,12 @@ export interface UnlockToolMeta {
   /** Hero H1, split so a keyword span can be gradient-highlighted. */
   headingLead: string;
   headingHighlight: string;
+  /**
+   * Optional verbatim page H1. When set, the shared renderer emits this string
+   * instead of `headingLead` + `headingHighlight`, so a route can lock in an
+   * exact keyword-targeted H1 without disturbing the data-driven default.
+   */
+  h1Override?: string;
   /** Supporting paragraph under the H1. */
   subheading: string;
   /** Short "what this page covers" benefit bullets. */
@@ -64,6 +84,11 @@ export interface UnlockToolMeta {
   faq: readonly UnlockToolFaq[];
   /** Keyword-rich links to the other mode guides (internal linking). */
   related: readonly UnlockToolRelated[];
+  /**
+   * Optional long-form SEO sections (extra H2 body copy). Only high-value
+   * routes populate this so the shared renderer stays generic.
+   */
+  sections?: readonly UnlockToolSection[];
 }
 
 /** Canonical id union — one per high-intent unlock / system mode page. */
@@ -186,6 +211,8 @@ const frpBypass: UnlockToolMeta = {
   eyebrow: "FRP Bypass — Google Account Lock",
   headingLead: "FRP Bypass Tool for",
   headingHighlight: "Google Account Lock Removal",
+  // Task 19 (keyword SEO): exact, keyword-first H1 for the highest-intent route.
+  h1Override: "FRP Bypass Tool 2026 (Android 15 & 14 Supported)",
   subheading:
     "Clear the Factory Reset Protection screen on a device you legitimately own. FRPB detects the chipset and drives the documented FRP removal sequence over Download, BROM or EDL mode.",
   features: [
@@ -248,6 +275,41 @@ const frpBypass: UnlockToolMeta = {
       question: "Do I need a paid license for FRP bypass?",
       answer:
         "Full module execution requires an FRPB Active License. The installer is hosted on the official GitHub Releases page and contains no adware or bundled toolbars.",
+    },
+  ],
+  sections: [
+    {
+      heading: "FRP Bypass Android 15 Compatibility",
+      body: [
+        "The FRPB FRP bypass tool is built and tested for the current Android release cycle — Android 15 and Android 14 first, with full backward support for Android 10 through 13. It works across MediaTek BROM, Qualcomm EDL 9008, Samsung Download Mode, Fastboot and Recovery transports, so one install covers every device on the bench.",
+        "Every supported Android version is handled by the same signed Windows utility on both 32-bit and 64-bit Windows 10 and Windows 11. USB drivers for each OEM and chipset install on demand, so there is no driver hunting before a job.",
+      ],
+      bullets: [
+        "Android 15 & Android 14 supported out of the box — plus Android 10, 11, 12 and 13",
+        "Automatic chipset detection — Exynos, Snapdragon and MediaTek paths chosen for you",
+        "Samsung, Xiaomi, Vivo, OPPO, Realme, Tecno, Infinix, OnePlus, Motorola and Pixel in one tool",
+        "MediaTek BROM · Qualcomm EDL 9008 · Samsung Download Mode · Fastboot & Recovery",
+      ],
+    },
+    {
+      heading: "Free Phone Unlock Tool Features",
+      body: [
+        "Google's Factory Reset Protection (FRP) locks a phone to the last signed-in Google account after a factory reset. When ownership changes hands or an account is forgotten, that lock keeps the device stuck on the verification screen. FRPB is a one-click FRP tool unlock utility that talks directly to the device's low-level interfaces and clears the verification prompt — no account credentials are required from you.",
+        "Unlike script-based FRP bypass apps, FRPB detects the exact chipset and firmware first, then drives the documented FRP removal sequence for that hardware. Every stage is streamed to a live console so a technician can watch and verify each step instead of trusting a black box. The tool auto-installs OEM and chipset USB drivers on demand, and because the operation runs locally over USB, no data ever leaves your machine.",
+      ],
+      bullets: [
+        "One-click FRP tool unlock with a live, auditable operation log",
+        "No driver hunting — OEM and chipset USB drivers install automatically",
+        "Works on Windows 10 and Windows 11, 32-bit and 64-bit",
+        "Free to download and inspect; full module execution needs an FRPB Active License",
+      ],
+    },
+    {
+      heading: "When FRP Bypass Is Legitimate",
+      body: [
+        "FRP exists to deter theft, so FRP bypass is only appropriate for hardware you own or are explicitly authorised to service — refurbishers clearing trade-ins, shops with a customer's written consent, and owners recovering a device after a forgotten account. FRPB requires you to confirm that authorisation before every run and stores a local operation log for accountability.",
+        "Used within those limits, a factory reset protection bypass is a routine repair step rather than a workaround. If you are unsure whether your situation qualifies, contact FRPB support before purchasing a license.",
+      ],
     },
   ],
   related: [],

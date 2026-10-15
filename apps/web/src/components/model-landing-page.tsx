@@ -230,7 +230,10 @@ export default function ModelLandingPage({ content, record, intent }: ModelLandi
         {/* ================= FEATURES ================= */}
         <section id="features" className="mt-12">
           <h2 className="text-center text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">
-            Why technicians choose FRPB for the {record.modelLabel}
+            {/* Task 19: intent-aware H2 that carries the exact "<model> frp
+                bypass" / "<model> lock removal" head term into the heading. */}
+            Why technicians choose FRPB {record.modelLabel}{" "}
+            {intent === "frp-bypass" ? "FRP bypass" : "lock removal"}
           </h2>
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
             {content.features.map((feature) => {

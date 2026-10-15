@@ -21,10 +21,16 @@ const SocialUpdatesWidget = dynamic(
 
 // Referral promo card + modal, code-split the same way. It self-gates on
 // sessionStorage dismissal and resolves the buyer session server-side.
-const FloatingPromoWidget = dynamic(
-  () => import("@/components/referral/FloatingPromoWidget"),
-  { ssr: false }
-);
+//
+// Task 19 (Conversions/Trust): the "Refer & Earn" promo card is temporarily
+// removed from the public landing surface so the first paint focuses on tool
+// capabilities, the one-click download, transparent pricing, and trust proof.
+// The component is intentionally preserved (not deleted) so it can be
+// re-mounted later without restoring the import graph.
+// const FloatingPromoWidget = dynamic(
+//   () => import("@/components/referral/FloatingPromoWidget"),
+//   { ssr: false }
+// );
 
 // Scroll-triggered signup nudge (10s dwell + 200px scroll). It self-gates to
 // the landing route, skips authenticated visitors, and honours a persisted
@@ -38,7 +44,9 @@ export default function FloatingWidgets() {
   return (
     <>
       <SocialUpdatesWidget />
-      <FloatingPromoWidget />
+      {/* Task 19: "Refer & Earn" promo card temporarily unmounted from the
+          public landing surface. Re-add <FloatingPromoWidget /> here (and
+          uncomment its dynamic import above) to restore it. */}
       <ScrollSignupModal />
     </>
   );

@@ -112,6 +112,8 @@ export const KNOWN_MODELS: string[] = [
   "Xiaomi Mi A3",
   "Xiaomi POCO M6",
   "Xiaomi POCO X6 Pro",
+  // POCO C71 — budget high-volume "poco c71 frp bypass" target (Task 19).
+  "Xiaomi POCO C71",
   "Xiaomi 14T",
   "Vivo Y17s",
   "Vivo Y18",
