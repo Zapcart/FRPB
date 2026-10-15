@@ -14,6 +14,7 @@ import { Check, Loader2, Lock, ShieldCheck } from "lucide-react";
 import type { PlanSlug } from "@frpb/shared";
 import { formatDualUsd, getDualPlan } from "@/config/plans";
 import { startRazorpayCheckout } from "@/lib/razorpay/checkout-flow";
+import { trackBeginCheckout } from "@/lib/analytics/gtag";
 import CountdownTimer from "@/components/promo/CountdownTimer";
 import { usePromoState } from "@/components/promo/usePromoState";
 import { promoMonthlyDaysFor } from "@/config/promo";
@@ -72,6 +73,11 @@ export default function CheckoutPanel({
     setError(null);
     setNotice(null);
     setProcessing(true);
+
+    // GA4 `begin_checkout` — fired synchronously on the click's own task so the
+    // event is queued before the Razorpay modal / any network round trip. The
+    // helper no-ops safely on the server or before the tag has loaded.
+    trackBeginCheckout({ plan: plan!.slug });
 
     // startRazorpayCheckout() is contractually non-throwing, but guard the call
     // so an unexpected error can never leave the button stuck on its spinner or

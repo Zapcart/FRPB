@@ -32,6 +32,8 @@ import { resolveInstallerUrl } from "@/config/download";
 import PromoBanner from "@/components/promo/PromoBanner";
 import { promoMonthlyMonthsFor } from "@/config/promo";
 import Hero from "@/components/landing/hero";
+import TrackedDownloadLink from "@/components/analytics/tracked-download-link";
+import PricingViewTracker from "@/components/analytics/pricing-view-tracker";
 import DeviceShowcase from "@/components/DeviceShowcase";
 import ErrorBoundary from "@/components/error-boundary";
 import JsonLd from "@/components/seo/json-ld";
@@ -264,13 +266,15 @@ export default function HomePage() {
             >
               Sign in
             </Link>
-            <Link
+            <TrackedDownloadLink
               href={downloadUrl}
+              source="header"
+              label="header_download_windows"
               className="btn-accent btn-shine hidden px-4 py-2.5 text-xs sm:inline-flex md:text-sm"
             >
               <Download className="h-4 w-4" />
               Download for Windows
-            </Link>
+            </TrackedDownloadLink>
             <button
               type="button"
               className="inline-flex h-11 w-11 touch-manipulation select-none items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition active:scale-95 active:bg-slate-100 hover:border-slate-300 hover:text-ink lg:hidden"
@@ -502,6 +506,8 @@ export default function HomePage() {
         id="pricing"
         className="relative border-t border-slate-200/80 bg-gradient-to-b from-slate-50 to-white py-20 sm:py-24"
       >
+        {/* Fires `view_pricing` once the section scrolls into view. */}
+        <PricingViewTracker source="home_section" observeVisibility />
         <div className="pointer-events-none absolute inset-0 bg-hero-glow opacity-60" />
         <div className="relative mx-auto max-w-7xl px-6">
           <div className="mx-auto max-w-2xl text-center">

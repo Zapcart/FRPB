@@ -12,7 +12,6 @@
 // zero layout shift, and the global `prefers-reduced-motion` override in
 // globals.css neutralises the motion for users who opt out.
 
-import Link from "next/link";
 import {
   Activity,
   Apple,
@@ -32,6 +31,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import SmoothScrollLink from "@/components/smooth-scroll-link";
+import TrackedDownloadLink from "@/components/analytics/tracked-download-link";
 import type { HomeMetrics } from "@/lib/home-metrics";
 
 interface HeroProps {
@@ -182,10 +182,17 @@ export default function Hero({ downloadUrl, metrics }: HeroProps) {
               className="mt-9 flex flex-col items-start gap-3 sm:flex-row sm:items-center animate-fade-scale"
               style={{ animationDelay: "320ms" }}
             >
-              <Link href={downloadUrl} className="btn-neon btn-shine w-full sm:w-auto">
+              {/* Client wrapper ships only the click handler — the rest of this
+                  hero stays a Server Component. */}
+              <TrackedDownloadLink
+                href={downloadUrl}
+                source="hero"
+                label="try_frpb_free"
+                className="btn-neon btn-shine w-full sm:w-auto"
+              >
                 <Download className="h-5 w-5" />
                 Try FRPB Free
-              </Link>
+              </TrackedDownloadLink>
               <SmoothScrollLink
                 targetId="pricing"
                 ariaLabel="See pricing"

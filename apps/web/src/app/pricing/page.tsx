@@ -42,6 +42,8 @@ import RazorpaySdkScript from "@/components/checkout/razorpay-sdk-script";
 import PromoBanner from "@/components/promo/PromoBanner";
 import { usePromoState } from "@/components/promo/usePromoState";
 import { monthlyBillingSuffixFor, promoMonthlyDaysFor } from "@/config/promo";
+import PricingViewTracker from "@/components/analytics/pricing-view-tracker";
+import { trackBeginCheckout } from "@/lib/analytics/gtag";
 
 /**
  * Trust / conversion badges rendered under the pricing grid. Addresses the four
@@ -163,6 +165,11 @@ export default function PricingPage() {
     setProcessingPlan(planSlug);
     savePendingPlan(planSlug, "USD");
 
+    // GA4 `begin_checkout` — fired on the click's own task (before any await),
+    // so the event is queued even when the guest is redirected to /auth. The
+    // helper no-ops safely on the server / before the tag loads.
+    trackBeginCheckout({ plan: planSlug });
+
     // ── Single cached session read ──────────────────────────────────────────
     // getSession() is the one optimized call: the browser client hydrates the
     // session snapshot from cookies/local storage, so a signed-in buyer resolves
@@ -233,6 +240,9 @@ export default function PricingPage() {
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-white text-slate-900">
+      {/* GA4 `view_pricing` — the page IS the pricing view, so it fires once on
+          mount (StrictMode double-invocation is guarded inside the tracker). */}
+      <PricingViewTracker source="page" />
       {/* Preload checkout.js on this purchase surface only (idle-time). Never in
           the root layout — third-party payment JS must not load on guide or
           marketing routes. loadRazorpayCheckout() adopts this tag if present. */}

@@ -12,6 +12,7 @@
 // the payment was genuine.
 
 import { getDualPlan } from "@/config/plans";
+import { trackPurchase } from "@/lib/analytics/gtag";
 import {
   getRazorpayPublicKeyId,
   loadRazorpayCheckout,
@@ -243,6 +244,14 @@ export async function startRazorpayCheckout(
           finish({ status: "failed", message: verified.message });
           return;
         }
+        // GA4 `purchase` — fired only AFTER the server has verified the payment
+        // signature and granted the license, so the event reflects a genuine,
+        // fulfilled order rather than a raw gateway callback. The Razorpay order
+        // id is the stable transaction id (unique per order, safe to retry).
+        trackPurchase({
+          transaction_id: order.orderId,
+          plan: plan.slug,
+        });
         finish({
           status: "paid",
           licenseKey: verified.licenseKey,

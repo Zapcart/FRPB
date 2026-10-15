@@ -105,19 +105,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen bg-white font-sans text-slate-900 antialiased">
-        {/* Google Ads (gtag.js) — conversion tracking for account
-            AW-18512807320. Both tags use next/script `afterInteractive` so they
-            load after hydration and never block LCP or first interaction. The
-            loader + inline config mirror the canonical gtag snippet. */}
+        {/* Google tag (gtag.js) — one loader serves BOTH destinations:
+            · AW-18512807320 → Google Ads conversion account
+            · G-VDP6PZ7RPR   → GA4 property (traffic + engagement reporting)
+            Both configs ride the same next/script `afterInteractive` tag, so
+            they load after hydration and never block LCP or first interaction.
+            Later `gtag('event', …)` calls (see lib/analytics/gtag.ts) are routed
+            to both destinations from this single dataLayer. */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=AW-18512807320"
           strategy="afterInteractive"
         />
-        <Script id="google-ads-gtag" strategy="afterInteractive">
+        <Script id="google-gtag" strategy="afterInteractive">
           {`window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
-gtag('config', 'AW-18512807320');`}
+gtag('config', 'AW-18512807320');
+gtag('config', 'G-VDP6PZ7RPR');`}
         </Script>
         <PostHogProvider>
           <SessionProvider>{children}</SessionProvider>

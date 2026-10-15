@@ -10,6 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { pageMetadata } from "@/lib/seo";
+import TrackedDownloadLink from "@/components/analytics/tracked-download-link";
 import {
   EXE_NAME,
   GITHUB_RELEASES_TAG,
@@ -106,16 +107,18 @@ export default function DownloadsPage() {
             </p>
 
             {/* Primary CTA — links straight to the .exe on GitHub Releases */}
-            <a
+            <TrackedDownloadLink
               href={href}
               download
               target="_blank"
               rel="noopener noreferrer"
+              source="downloads"
+              label="downloads_primary_exe"
               className="btn-accent mt-9 w-full max-w-md px-8 py-4 text-base shadow-blue-glow sm:w-auto"
             >
               <Download className="h-5 w-5" />
               Download FRPB for Windows (.exe)
-            </a>
+            </TrackedDownloadLink>
 
             <p className="mt-4 text-xs text-slate-400">
               {EXE_NAME} · ~91 MB · Windows 10/11 · Included with an FRPB Active License
