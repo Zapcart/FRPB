@@ -111,6 +111,7 @@ boot. Work through this list in order.
   (e.g. `768` on `t3.small`) if `pm2 logs` shows heap-pressure restarts.
 - **CloudFront** enabled in front of Nginx (see the section above).
 - **Remove test/placeholder secrets** from `apps/web/.env.production` and keep
-  `chmod 600`. Ensure `ALLOW_DEV_TEST_KEYS` and `MASTER_TEST_LICENSE_KEY` are
-  **unset in production** - the master test-key shortcut is now fail-closed
-  there (see the template's "Test-key lockdown" section).
+  `chmod 600`. Ensure `FRPB_MASTER_TEST_KEY` (legacy alias `MASTER_TEST_LICENSE_KEY`)
+  and `ALLOW_DEV_TEST_KEYS` are **unset in production** - the master test-key
+  shortcut is now fail-closed there and no key is committed to the repo (see the
+  template's "Test-key lockdown" section).

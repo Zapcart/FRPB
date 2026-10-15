@@ -5,7 +5,7 @@
 // session (the profile plus a `verifiedAt` stamp) via safeStorage. That session
 // is what keeps the user logged in across launches without re-verifying every
 // time — the server round-trip is still authoritative whenever the user
-// explicitly activates, and the exact master test key is honoured offline too.
+// explicitly activates, and an env-provisioned master test key is honoured offline too.
 //
 // Raw transport details (endpoint URLs, ECONNREFUSED, stack traces) are NEVER
 // forwarded to the renderer: every user-facing message is sanitised here so the
@@ -59,23 +59,45 @@ export function clearCachedLicenseProfile(): boolean {
 
 // ─── Master test key (offline-capable) ───────────────────────────────────────
 /**
- * The one master test key accepted in EVERY environment, INCLUDING production —
- * both here (main process) and on the web API (`isMasterTestKey` in
- * apps/web/src/lib/license/test-key.ts). Keeping the string in sync guarantees
- * `FRPB-TEST-1234-5678` activates the packaged desktop build even when the
- * verification server is unreachable.
+ * Operator-provisioned master test key, read from the environment at call time.
+ *
+ * There is NO committed default any more: the previously published constant
+ * (`FRPB-TEST-1234-5678`) was removed so a cloned repository can never activate
+ * a packaged build for free. Provision the key via `FRPB_MASTER_TEST_KEY` (or the
+ * legacy `MASTER_TEST_LICENSE_KEY`); the shortcut FAILS CLOSED otherwise — with
+ * no env key configured it never matches, in any environment.
+ *
+ * Kept in sync with the web API's `isMasterTestKey`
+ * (apps/web/src/lib/license/test-key.ts).
  */
-const MASTER_TEST_KEY = "FRPB-TEST-1234-5678";
+const MASTER_TEST_KEY_ENV = "FRPB_MASTER_TEST_KEY";
+const LEGACY_MASTER_TEST_KEY_ENV = "MASTER_TEST_LICENSE_KEY";
 
 /** Trim / upper-case / strip whitespace from a submitted key. */
 function normalizeLicenseKey(key: string): string {
   return `${key ?? ""}`.trim().toUpperCase().replace(/\s+/g, "");
 }
 
-/** True when the submitted key is the exact master test key. */
+/** The env-provisioned master key for this process, or null when unset. */
+function configuredMasterKey(): string | null {
+  const raw = (
+    process.env[MASTER_TEST_KEY_ENV] ??
+    process.env[LEGACY_MASTER_TEST_KEY_ENV] ??
+    ""
+  ).trim();
+  return raw ? normalizeLicenseKey(raw) : null;
+}
+
+/**
+ * True when the submitted key matches the operator-provisioned master key.
+ * Fail-closed: with no env key configured this is always false (in every
+ * environment), so nothing can activate the product for free.
+ */
 export function isMasterTestKey(key: string): boolean {
   const normalized = normalizeLicenseKey(key);
-  return normalized.length > 0 && normalized === MASTER_TEST_KEY;
+  if (!normalized) return false;
+  const master = configuredMasterKey();
+  return master !== null && normalized === master;
 }
 
 /** Synthetic LIFETIME profile minted for the master test key (no DB row). */
@@ -190,9 +212,9 @@ export function registerLicenseHandlers(): void {
     try {
       const normalizedKey = normalizeLicenseKey(licenseKey);
 
-      // Offline-capable master key: accepted in EVERY environment (including
-      // production) WITHOUT a server round-trip, so a packaged build can always
-      // be activated for support/testing even with no internet connection.
+      // Offline-capable master key: honoured WITHOUT a server round-trip when an
+      // operator provisions it via FRPB_MASTER_TEST_KEY. Fail-closed otherwise —
+      // no committed default, so nothing activates the product for free.
       if (isMasterTestKey(normalizedKey)) {
         const profile = masterTestLicenseProfile(normalizedKey);
         writeLicenseSession(profile, "master-test");

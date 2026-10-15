@@ -19,7 +19,7 @@
 | 7 | Prisma | [`prisma.ts`](frpb/apps/web/src/lib/prisma.ts:94) | Pool tuning exists (`connection_limit=5` for pooler, `connect_timeout=15`, `pool_timeout=20`) but `connection_limit=5` × 1 instance is fine; larger concern is local Postgres co-tenancy. |
 | 8 | Runtime | [`ecosystem.config.cjs`](frpb/deploy/ecosystem.config.cjs:1) | PM2 fork mode, `instances: 1`, `max_memory_restart: 512M`, **no `NODE_OPTIONS`** heap cap → V8 assumes a large default heap and over-reserves against 1 GB. |
 | 9 | Rendering | [`next.config.mjs`](frpb/apps/web/next.config.mjs:127) | `webpack.cache = false` in prod (affects **build** time, not runtime). No `optimizePackageImports` for icon/posthog barrels. |
-| 10 | Security/Env | [`test-key.ts`](frpb/apps/web/src/lib/license/test-key.ts:1) | `FRPB-TEST-1234-5678` is accepted in **production** (Tier-1 exact match, all envs). |
+| 10 | Security/Env | [`test-key.ts`](frpb/apps/web/src/lib/license/test-key.ts:1) | ~~`FRPB-TEST-1234-5678` is accepted in **production** (Tier-1 exact match, all envs).~~ **Resolved** - key removed from source; master key is env-provisioned (`FRPB_MASTER_TEST_KEY`) and fail-closed in prod. |
 | 11 | Infra | deploy runbook | PostgreSQL runs **on the same t3.micro** as Node, yet the app already targets **Supabase Postgres** via `DATABASE_URL`/`DIRECT_URL`. Local PG is likely redundant RAM pressure. |
 
 ```mermaid
@@ -112,11 +112,11 @@ flowchart LR
 - [ ] `NODE_OPTIONS=--max-old-space-size=384` in PM2 env.
 - [ ] Remove any test/placeholder secrets from prod.
 
-**Test-key lockdown (security)**
-- [ ] `FRPB-TEST-1234-5678` is currently accepted in production. Either:
-  - **(a)** require `ALLOW_DEV_TEST_KEYS=true` for **all** test keys incl. the exact master key, or
-  - **(b)** move the master key to `MASTER_TEST_LICENSE_KEY` env (unset in prod ⇒ feature off).
-- [ ] Add a startup warning if `ALLOW_DEV_TEST_KEYS=true` under `NODE_ENV=production`.
+**Test-key lockdown (security) — RESOLVED**
+- [x] `FRPB-TEST-1234-5678` removed from source. Implemented **both** (a)+(b):
+  - **(a)** `ALLOW_DEV_TEST_KEYS=true` is required for the `FRPB-TEST-*` prefix in production.
+  - **(b)** master key moved to `FRPB_MASTER_TEST_KEY` env (legacy alias `MASTER_TEST_LICENSE_KEY`; unset in prod ⇒ feature off). No key is committed.
+- [x] `warnIfInsecureTestConfig()` emits a startup warning when `ALLOW_DEV_TEST_KEYS=true` or a master key is set under `NODE_ENV=production`.
 
 ---
 

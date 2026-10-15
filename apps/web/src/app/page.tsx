@@ -194,7 +194,7 @@ export const metadata: Metadata = {
 
 export default function HomePage() {
   // Resolve the installer URL once per render (NEXT_PUBLIC_DOWNLOAD_URL →
-  // DOWNLOAD_BASE_URL → GitHub Releases v2.0.0 default). See config/download.ts.
+  // DOWNLOAD_BASE_URL → GitHub Releases v1.0.0 default). See config/download.ts.
   const downloadUrl = resolveInstallerUrl();
   // Promo-aware $20 term: 6 months during the 30-day launch window, 2 months after.
   // Computed per render so the static HTML matches the live entitlement.

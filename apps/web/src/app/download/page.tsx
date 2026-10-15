@@ -9,8 +9,8 @@ import { resolveInstallerUrl } from "@/config/download";
  *
  *   1. NEXT_PUBLIC_DOWNLOAD_URL — explicit override, used verbatim.
  *   2. DOWNLOAD_BASE_URL — treated as a base; <base>/<installer>.exe is used.
- *   3. GitHub Releases — the built-in default, i.e. the canonical release page
- *      https://github.com/quotexahsan90-cyber/FRPB-APP/releases/tag/v2
+ *   3. GitHub Releases — the built-in default, i.e. the direct v1.0.0 installer
+ *      asset https://github.com/Zapcart/FRPB-Application/releases/download/v1.0.0/FRPB-Recovery-Setup-1.0.1.exe
  *
  * Read per request so a redeployed binary or environment change is picked up
  * immediately, without touching the code.

@@ -91,7 +91,8 @@ export default function ActivationScreen({ cached, onActivated }: ActivationScre
   // replaced by Vite — in production builds it evaluates to `false`, so this
   // branch (and the test key string it references) is eliminated entirely and
   // never reaches an end user's bundle.
-  const showTestKeyHint = import.meta.env.DEV && isWebPreviewMode();
+  const showTestKeyHint =
+    import.meta.env.DEV && isWebPreviewMode() && MASTER_TEST_KEY.length > 0;
 
   async function handleVerify() {
     const trimmed = key.trim().toUpperCase().replace(/\s+/g, "");

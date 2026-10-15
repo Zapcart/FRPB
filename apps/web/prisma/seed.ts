@@ -40,21 +40,22 @@ const plans: Array<{
   features: plan.features,
 }));
 
-// Master test key — the same value the desktop activation screen accepts.
+// Master test key — DEV/TEST ONLY and NO LONGER committed.
 //
-// ⚠️ This key is PUBLISHED in the repository, so it is NOT a secret. Seeding it
-// into a real database would hand a free lifetime licence to anyone who can read
-// the source. The user + licence rows below are therefore written ONLY when
-// dev/test mode is enabled (see devTestKeysAllowed in src/lib/license/test-key):
+// ⚠️ The previously published constant (`FRPB-TEST-1234-5678`) has been REMOVED,
+// so a real database can never be handed a free lifetime licence from source.
+// The user + licence rows below are written ONLY when BOTH hold:
 //
-//   NODE_ENV !== "production"                          → seeded
-//   NODE_ENV === "production" && ALLOW_DEV_TEST_KEYS=true → seeded
-//   otherwise                                          → skipped
+//   1. dev/test mode is enabled (see devTestKeysAllowed in src/lib/license/test-key):
+//        NODE_ENV !== "production"                            → allowed
+//        NODE_ENV === "production" && ALLOW_DEV_TEST_KEYS=true → allowed
+//        otherwise                                            → skipped
+//   2. a key is explicitly provisioned via FRPB_SEED_TEST_KEY.
 //
 // Plans are ALWAYS seeded — they are required in every environment.
-const TEST_KEY = "FRPB-TEST-1234-5678";
+const TEST_KEY = (process.env.FRPB_SEED_TEST_KEY ?? "").trim().toUpperCase();
 const TEST_USER_EMAIL = "test@frpb.local";
-const seedTestLicense = devTestKeysAllowed();
+const seedTestLicense = devTestKeysAllowed() && TEST_KEY.length > 0;
 
 async function main() {
   console.log("🌱 Seeding plans…");
@@ -73,10 +74,10 @@ async function main() {
   // Skipped in production unless ALLOW_DEV_TEST_KEYS=true was set on purpose.
   if (!seedTestLicense) {
     console.log(
-      "⏭  Skipping master test licence — the FRPB-TEST-* key is declined in production."
+      "⏭  Skipping master test licence — no FRPB_SEED_TEST_KEY provisioned for this environment."
     );
     console.log(
-      "   (Set ALLOW_DEV_TEST_KEYS=true only in a throwaway environment if you need it.)"
+      "   (Set FRPB_SEED_TEST_KEY — and ALLOW_DEV_TEST_KEYS=true in prod — only in a throwaway environment.)"
     );
     console.log("Seed complete.");
     return;

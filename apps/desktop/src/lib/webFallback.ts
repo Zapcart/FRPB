@@ -56,7 +56,16 @@ import type {
   VerifyResponse,
 } from "./ipc";
 
-export const MASTER_TEST_KEY = "FRPB-TEST-1234-5678";
+/**
+ * Master test key for the DEV-only browser preview mock. There is no committed
+ * default any more — the old `FRPB-TEST-1234-5678` constant was removed. Supply
+ * one locally via `VITE_FRPB_MASTER_TEST_KEY`; with none set the mock rejects
+ * every key, so a built artifact can never ship a working override.
+ */
+export const MASTER_TEST_KEY = (import.meta.env.VITE_FRPB_MASTER_TEST_KEY ?? "")
+  .trim()
+  .toUpperCase()
+  .replace(/\s+/g, "");
 
 // Marker the renderer checks to detect web-preview (mock) mode at runtime.
 export const WEB_PREVIEW_MARKER = "__FRPB_WEB_PREVIEW__";
@@ -484,7 +493,7 @@ function createWebBridge(): FrpbBridge {
     license: {
       verify: async (key: string): Promise<VerifyResponse> => {
         const normalized = key.trim().toUpperCase().replace(/\s+/g, "");
-        if (normalized === MASTER_TEST_KEY) {
+        if (MASTER_TEST_KEY.length > 0 && normalized === MASTER_TEST_KEY) {
           const profile: LicenseProfile = {
             key: normalized,
             plan: "LIFETIME",
@@ -509,7 +518,9 @@ function createWebBridge(): FrpbBridge {
           httpStatus: 200,
           success: false,
           status: "INVALID_KEY",
-          message: `Web preview mode: use the master test key ${MASTER_TEST_KEY} to explore the dashboard.`,
+          message: MASTER_TEST_KEY
+            ? `Web preview mode: use the master test key ${MASTER_TEST_KEY} to explore the dashboard.`
+            : "Web preview mode: no master test key configured (set VITE_FRPB_MASTER_TEST_KEY to explore the dashboard).",
         };
       },
       getCachedProfile: async (): Promise<LicenseProfile | null> =>
