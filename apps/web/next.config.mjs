@@ -125,11 +125,26 @@ const nextConfig = {
       { from: "/phone-transfer", to: "/phone-to-phone-transfer" },
       { from: "/whatsapp-transfer", to: "/whatsapp-transfer-tool" },
     ];
-    return legacyUtilityAliases.map(({ from, to }) => ({
-      source: from,
-      destination: to,
-      permanent: true,
-    }));
+    return [
+      {
+        // Host canonicalisation (TASK 16): permanently redirect every request
+        // arriving on the www host to the apex domain, preserving path + query.
+        // Guarantees a single indexable hostname and eliminates the GSC
+        // "Duplicate, Google chose different canonical" / "Alternate page with
+        // proper canonical" noise. Next emits this as a 308 (permanent) — the
+        // method-preserving form of 301 that Google treats identically for
+        // ranking-signal transfer.
+        source: "/:path*",
+        has: [{ type: "host", value: "www.frpb.in" }],
+        destination: "https://frpb.in/:path*",
+        permanent: true,
+      },
+      ...legacyUtilityAliases.map(({ from, to }) => ({
+        source: from,
+        destination: to,
+        permanent: true,
+      })),
+    ];
   },
   // Cloudflare Pages enforces a 25MB cap on the persisted build cache; the
   // default production webpack cache (webpack 5 filesystem cache) exceeds it

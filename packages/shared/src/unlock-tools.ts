@@ -424,7 +424,10 @@ const rebootMode: UnlockToolMeta = {
 const icloudBypass: UnlockToolMeta = {
   id: "icloud-bypass",
   path: "/icloud-bypass",
-  title: "iCloud Bypass 2026 — iOS Activation Lock Unlock Guide",
+  // Diverges from the /tools/icloud-bypass pillar hub (TASK 16 intent-overlap):
+  // this tool landing targets the "iCloud Bypass Tool" head term, while the hub
+  // owns the "activation lock removal" + iOS 17/18 owner-guide long-tail.
+  title: "iCloud Bypass Tool 2026 — iPhone Activation Lock Removal",
   description:
     "iOS activation lock bypass and unlock guide for iPhone and iPad. FRPB's iCloud Bypass walks authorised owners through the Activation Lock removal process over USB. Free Windows tool.",
   keywords: [

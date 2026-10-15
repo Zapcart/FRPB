@@ -23,7 +23,7 @@ import {
 export const metadata = pageMetadata({
   title: "Contact Us",
   description:
-    "Contact FRPB — reach our global support and legal teams for help with licensing, billing, account access, privacy requests or product questions. Remote-first, serving customers worldwide.",
+    "Contact FRPB for help with licensing, billing, account access or privacy requests. Remote-first support and legal teams, serving customers worldwide.",
   path: "/contact",
 });
 

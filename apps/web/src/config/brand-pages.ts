@@ -68,7 +68,9 @@ export interface BrandPageContent {
  */
 const samsung: BrandPageContent = {
   path: "/samsung-frp-bypass",
-  title: "Samsung FRP Bypass Tool 2026 — 1-Click Unlock Android 10–16",
+  // Trimmed to stay inside the SERP title limit once the root layout’s "| FRPB"
+  // suffix is appended (TASK 16).
+  title: "Samsung FRP Bypass 2026 — 1-Click Android 10-16 Unlock",
   description:
     "Bypass Samsung FRP in about 5 minutes on Android 10–16. 1-click Galaxy unlock for One UI + Knox with Download / BROM mode and auto Samsung drivers — free Windows tool.",
   keywords: [
@@ -242,7 +244,7 @@ const vivoOppoRealme: BrandPageContent = {
   path: "/vivo-oppo-realme-frp",
   title: "Vivo, Oppo & Realme FRP Bypass 2026 — 1-Click MTK BROM Unlock",
   description:
-    "Unlock FRP on Vivo, Oppo and Realme in 3 steps. 1-click MediaTek BROM & Qualcomm EDL bypass with auto driver install for ColorOS and Funtouch — free Windows download.",
+    "1-click FRP unlock for Vivo, Oppo and Realme: MediaTek BROM and Qualcomm EDL bypass with automated driver install for ColorOS and Funtouch. Free Windows tool.",
   keywords: [
     "vivo frp unlock",
     "oppo frp bypass",

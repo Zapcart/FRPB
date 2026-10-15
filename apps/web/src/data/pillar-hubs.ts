@@ -61,7 +61,10 @@ export type PillarHubId = "frp-bypass" | "phone-unlock" | "icloud-bypass";
 
 const frpBypass: PillarHubContent = {
   path: "/tools/frp-bypass",
-  title: "FRP Bypass Tool 2026 — Google Lock Removal for Android 15 & 16",
+  // Title deliberately diverges from the /frp-bypass tool landing (TASK 16
+  // intent-overlap fix): this hub targets the "android 15/16" + "Google lock
+  // removal" long-tail, while /frp-bypass owns the head "FRP Bypass Tool" term.
+  title: "FRP Bypass Tool 2026 — Android 15 & 16 Google Lock Removal",
   description:
     "FRP bypass tool for 2026: remove the Google Factory Reset Protection lock on Samsung, Xiaomi, Vivo, Motorola and more over USB. Works on Android 10 through Android 16 — free Windows app for devices you own.",
   keywords: [
@@ -149,7 +152,9 @@ const frpBypass: PillarHubContent = {
 
 const phoneUnlock: PillarHubContent = {
   path: "/tools/phone-unlock",
-  title: "Phone Unlock Tools 2026 — Screen Lock, FRP & Factory Reset Guides",
+  // Singular "Tool" (vs the /unlock-screen landing) so the two Android unlock
+  // URLs do not present an identical title/description pair to Google (TASK 16).
+  title: "Phone Unlock Tool 2026 — Screen Lock, FRP & Factory Reset",
   description:
     "Phone unlock tools for 2026: remove the screen lock, bypass Google FRP and factory-reset an Android phone you own. Step-by-step guides for every major OEM on Android 15 and Android 16.",
   keywords: [
@@ -237,7 +242,9 @@ const phoneUnlock: PillarHubContent = {
 
 const icloudBypass: PillarHubContent = {
   path: "/tools/icloud-bypass",
-  title: "iCloud Activation Lock Hub 2026 — Owner Removal for iOS 17 & 18",
+  // Distinct from the /icloud-bypass tool landing (TASK 16 intent-overlap fix):
+  // this hub owns "activation lock removal" + the iOS 17/18 owner-only angle.
+  title: "iCloud Activation Lock Removal 2026 — iOS 17 & 18 Owner Guide",
   description:
     "iCloud Activation Lock removal in 2026 for iPhone and iPad: recover the Apple ID, clear Find My and use Apple Support — honest, owner-only paths for iOS 17 and iOS 18. No fake bypass apps.",
   keywords: [

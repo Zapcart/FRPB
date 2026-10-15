@@ -75,8 +75,9 @@ export function pageMetadata({
   keywords,
   image = OG_IMAGE_PATH,
   imageAlt = OG_IMAGE_ALT,
+  absoluteTitle = false,
 }: {
-  /** Raw page title; the root layout template appends “· FRPB”. */
+  /** Raw page title; the root layout template appends “| FRPB” unless absoluteTitle is set. */
   title: string;
   description: string;
   /** Route path beginning with “/” — becomes the canonical URL. */
@@ -84,10 +85,16 @@ export function pageMetadata({
   keywords?: string[];
   image?: string;
   imageAlt?: string;
+  /**
+   * Emit the title verbatim instead of appending the root layout’s “| FRPB”
+   * template suffix. Use when the title already ends in the brand name (e.g.
+   * the CTR-optimised /frp-bypass title) so the brand token is not doubled.
+   */
+  absoluteTitle?: boolean;
 }): Metadata {
   const canonical = absoluteUrl(path);
   return {
-    title,
+    title: absoluteTitle ? { absolute: title } : title,
     description,
     keywords,
     alternates: { canonical },

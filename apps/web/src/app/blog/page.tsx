@@ -25,7 +25,7 @@ import CategoryFilter from "@/components/blog/category-filter";
 export const metadata: Metadata = pageMetadata({
   title: "FRPB Blog — FRP Bypass, iCloud & Android Guides",
   description:
-    "In-depth FRP bypass guides, iPhone activation-lock explainers, chipset walkthroughs and step-by-step device recovery guides from the FRPB engineering team.",
+    "In-depth FRP bypass guides, iPhone activation-lock explainers and step-by-step device recovery walkthroughs from the FRPB engineering team.",
   path: "/blog",
   keywords: [
     "frp bypass guide",
