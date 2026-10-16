@@ -18,6 +18,7 @@ import {
   Loader2,
   ArrowRight,
   ShieldCheck,
+  Sparkles,
   Zap,
   Headphones,
   Lock,
@@ -42,7 +43,6 @@ import { startRazorpayCheckout } from "@/lib/razorpay/checkout-flow";
 import { readStoredReferralCode } from "@/lib/referral/ref-capture";
 import ErrorBoundary from "@/components/error-boundary";
 import RazorpaySdkScript from "@/components/checkout/razorpay-sdk-script";
-import PromoBanner from "@/components/promo/PromoBanner";
 import { usePromoState } from "@/components/promo/usePromoState";
 import { monthlyBillingSuffixFor, promoMonthlyDaysFor } from "@/config/promo";
 import PricingViewTracker from "@/components/analytics/pricing-view-tracker";
@@ -56,23 +56,23 @@ import { trackBeginCheckout } from "@/lib/analytics/gtag";
 const TRUST_BADGES = [
   {
     icon: Zap,
-    title: "Instant License Activation Key",
-    desc: "Your key is generated and emailed the moment payment clears — no waiting.",
+    title: "Instant License Key Delivery",
+    desc: "Your key is generated and emailed right after payment clears — no waiting.",
   },
   {
     icon: ShieldCheck,
-    title: "100% Risk-Free Money-Back Guarantee",
-    desc: "If the tool does not resolve your device, request a full refund within 7 days.",
+    title: "Clean & Tested Windows Utility",
+    desc: "Built and tested for 64-bit Windows 10 & 11 — a verified clean build with no bundled adware.",
   },
   {
     icon: Headphones,
-    title: "24/7 Priority Technician Support",
-    desc: "Real technicians on standby for paid plans — not a chatbot.",
+    title: "Official Telegram & Email Support",
+    desc: "Technical help through our official Telegram channel or support@frpb.in — from real technicians, not a bot.",
   },
   {
     icon: Lock,
-    title: "Safe & Encrypted Checkout",
-    desc: "PCI-DSS compliant processing with bank-grade 256-bit TLS encryption.",
+    title: "Secure Online Payment",
+    desc: "PCI-DSS compliant processing via Razorpay with bank-grade 256-bit TLS encryption.",
   },
 ] as const;
 
@@ -96,6 +96,14 @@ const PRICING_FAQS = [
   {
     q: "Can I move my license to another PC?",
     a: "Yes. You can unbind a machine from your dashboard and activate the same license on a different computer, within your plan's device limit.",
+  },
+  {
+    q: "What does the $20 / 6-month plan include?",
+    a: "The $20 plan grants full Professional access for 6 months on 1 device/PC, including all utility updates plus the FRP bypass and diagnostics tools for the full duration. If you need to cover more machines, the Lifetime plan supports up to 5 devices.",
+  },
+  {
+    q: "How do I get technical support?",
+    a: "Support is handled through our official Telegram channel and by email at support@frpb.in. Join the Telegram channel for setup guidance, key-combo help and direct technical assistance from our team.",
   },
   {
     q: "What if the tool does not work on my device?",
@@ -301,10 +309,22 @@ export default function PricingPage() {
           </p>
         </div>
 
-        {/* Launch-offer banner + countdown. Renders nothing once expired, so it
-            can be mounted unconditionally above the plan grid. */}
-        <div className="mx-auto mt-10 max-w-4xl">
-          <PromoBanner />
+        {/* Value callout (Phase 2.1). Replaces the old countdown PromoBanner with
+            a factual offer statement — no fake urgency and no promo banner. */}
+        <div className="mx-auto mt-10 max-w-3xl">
+          <div className="relative overflow-hidden rounded-2xl border border-brand-200 bg-gradient-to-r from-brand-50 via-white to-accent-50 px-6 py-6 text-center shadow-glass-light sm:px-10">
+            <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-accent-500/10 blur-3xl" />
+            <div className="relative">
+              <p className="inline-flex flex-wrap items-center justify-center gap-2 text-sm font-extrabold text-ink sm:text-base">
+                <Sparkles className="h-4 w-4 text-brand-500" />
+                Special Offer: Full Professional Access for 6 Months at just $20
+              </p>
+              <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                Get 6 months of continuous utility updates for the price competitors charge
+                monthly.
+              </p>
+            </div>
+          </div>
         </div>
 
         <ErrorBoundary label="pricing plans">

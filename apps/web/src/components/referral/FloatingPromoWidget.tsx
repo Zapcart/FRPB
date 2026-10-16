@@ -75,10 +75,10 @@ export default function FloatingPromoWidget({ email }: FloatingPromoWidgetProps)
               </span>
               <div>
                 <p className="text-sm font-bold leading-snug text-slate-900">
-                  Refer Friends & Unlock 100% FREE $200 Lifetime Plan!
+                  Refer friends, earn rewards
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Invited friends get 20% OFF Lifetime Plan.
+                  Invited friends get 20% off the Lifetime plan when they purchase.
                 </p>
               </div>
             </div>

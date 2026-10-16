@@ -270,7 +270,7 @@ export default function UnlockLandingPage({ content }: { content: UnlockToolMeta
           </span>
           <span className="badge">
             <ShieldCheck className="h-3.5 w-3.5 text-brand-500" />
-            100% offline
+            Runs fully offline
           </span>
           <span className="badge">Windows 10 / 11 · x64</span>
         </section>

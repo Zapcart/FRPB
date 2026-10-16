@@ -1,8 +1,8 @@
-// FRPB — floating "Support / Community" widget.
+// FRPB — floating Telegram support widget.
 // Fixed bottom-right so it floats above every route (mounted in the root
 // layout). Closed state is a compact badge; clicking toggles an upward
-// popover card with the official support channels: WhatsApp (when configured
-// via NEXT_PUBLIC_SUPPORT_WHATSAPP), Telegram, Instagram and email.
+// popover card with the official support channels: Telegram (primary),
+// email and Instagram.
 //
 // Client component: owns only local open/closed state plus Escape-key and
 // click-outside dismissal. No async work, no global side effects.
@@ -14,13 +14,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Facebook, Instagram, Mail, MessageCircle, Send, Sparkles, X } from "lucide-react";
+import { Facebook, Instagram, Mail, Send, Sparkles, X } from "lucide-react";
 import {
   SUPPORT_EMAIL_ADDRESS,
   SUPPORT_INSTAGRAM_URL,
   SUPPORT_MAILTO,
   SUPPORT_TELEGRAM_URL,
-  SUPPORT_WHATSAPP_URL,
 } from "@/config/support";
 
 interface SupportLink {
@@ -31,17 +30,13 @@ interface SupportLink {
   className: string;
 }
 
-// WhatsApp first (fastest channel) then Telegram/email — Instagram and the
-// still-unpublished Facebook page round out the list as social destinations.
+// Telegram first — the official FRPB support channel — then email. Instagram
+// and the still-unpublished Facebook page round out the list as social
+// destinations. WhatsApp is intentionally NOT listed (Phase 1.3): FRPB support
+// is delivered exclusively through the Telegram channel and email.
 const SUPPORT_LINKS: readonly SupportLink[] = [
   {
-    label: "Chat on WhatsApp",
-    href: SUPPORT_WHATSAPP_URL,
-    icon: MessageCircle,
-    className: "bg-emerald-500 hover:bg-emerald-600 focus-visible:outline-emerald-500",
-  },
-  {
-    label: "Join Telegram Group",
+    label: "Chat on Telegram",
     href: SUPPORT_TELEGRAM_URL,
     icon: Send,
     className: "bg-sky-500 hover:bg-sky-600 focus-visible:outline-sky-500",
@@ -115,7 +110,7 @@ export default function SocialUpdatesWidget() {
         }`}
       >
         {/* Gradient header */}
-        <div className="relative bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 px-5 py-4 text-white">
+        <div className="relative bg-gradient-to-br from-sky-500 via-sky-600 to-blue-700 px-5 py-4 text-white">
           <button
             type="button"
             onClick={() => setOpen(false)}
@@ -125,13 +120,13 @@ export default function SocialUpdatesWidget() {
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-emerald-200" aria-hidden="true" />
+            <Sparkles className="h-4 w-4 text-sky-200" aria-hidden="true" />
             <h2 className="text-base font-semibold leading-tight">
-              Need Help? / FRPB Support
+              Need Help? / Telegram Support
             </h2>
           </div>
-          <p className="mt-1 pr-6 text-xs leading-relaxed text-emerald-50/90">
-            Reach us on WhatsApp, Telegram or email — we reply fast.
+          <p className="mt-1 pr-6 text-xs leading-relaxed text-sky-50/90">
+            Join our official Telegram channel or email us — real technical help from our team.
           </p>
         </div>
 
@@ -178,15 +173,15 @@ export default function SocialUpdatesWidget() {
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-label={open ? "Close support channels" : "Open FRPB support channels"}
-        className="group flex items-center gap-2 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-600/30 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-600/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 active:translate-y-0"
+        className="group flex items-center gap-2 rounded-full bg-gradient-to-br from-sky-500 to-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-sky-600/30 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-sky-600/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 active:translate-y-0"
       >
         <span className="relative flex h-5 w-5 items-center justify-center">
-          <MessageCircle className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" aria-hidden="true" />
+          <Send className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" aria-hidden="true" />
           {!open && (
-            <span className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-amber-300 ring-2 ring-emerald-600" />
+            <span className="absolute -right-0.5 -top-0.5 h-2 w-2 animate-pulse rounded-full bg-amber-300 ring-2 ring-sky-600" />
           )}
         </span>
-        <span className="whitespace-nowrap">Support</span>
+        <span className="whitespace-nowrap">Telegram Support</span>
       </button>
     </div>
   );

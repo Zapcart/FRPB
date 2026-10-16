@@ -188,7 +188,7 @@ function modeSections(meta: UnlockToolMeta): BlogSection[] {
       heading: "Is the FRPB tool safe and legal to use?",
       paragraphs: [
         "FRPB is built strictly for authorised device owners and licensed repair professionals. Always confirm you own the handset — or hold explicit written permission from its owner — before running any recovery or unlock module.",
-        "Everything runs 100% offline over a local USB connection. The installers are hosted on the official GitHub Releases page, signed, and adware-free, so you can audit exactly what runs on your machine.",
+        "Everything runs offline over a local USB connection. The installers are code-signed and adware-free, so you can trust exactly what runs on your machine.",
       ],
     },
   ];

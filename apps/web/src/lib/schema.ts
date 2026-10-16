@@ -145,16 +145,10 @@ export function softwareApplicationSchema(
       price: "0",
       priceCurrency: CURRENCY,
     },
-    // Requested aggregateRating. CAUTION: Google requires rating markup to
-    // reflect visible, verifiable on-page reviews; an unsubstantiated rating is
-    // a structured-data policy violation that can trigger a manual action.
-    // Surface matching reviews on-site — or remove this node — before relying
-    // on it.
-    aggregateRating: {
-      "@type": "AggregateRating",
-      ratingValue: "4.9",
-      ratingCount: "1240",
-    },
+    // Phase 1.3 — no aggregateRating emitted. Google requires rating markup to
+    // reflect visible, verifiable on-page reviews; the previous unsubstantiated
+    // 4.9/1240 values were a structured-data policy violation. Re-add ONLY once
+    // real on-site reviews back the numbers.
     featureList: [
       "One-click FRP bypass",
       "Flash reset and firmware restore",
@@ -261,11 +255,9 @@ export function productSchema(): Record<string, unknown> {
           }
         : {}),
     },
-    aggregateRating: {
-      "@type": "AggregateRating",
-      ratingValue: "4.9",
-      reviewCount: "120",
-    },
+    // Phase 1.3 — aggregateRating removed (unsubstantiated 4.9/120 values were
+    // an advertising/structured-data policy risk). Restore only with real,
+    // visible reviews on the page.
   };
 }
 

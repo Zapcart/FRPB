@@ -97,12 +97,19 @@ export const RELEASE_NOTES: readonly string[] = [
 export function resolveInstallerUrl(exeName: string = EXE_NAME): string {
   const direct = process.env.NEXT_PUBLIC_DOWNLOAD_URL?.trim();
   if (direct) {
-    // A concrete asset (…/file.exe) OR a Release *page* (…/releases/tag/…) is a
-    // complete destination — never append a filename, or we'd build a broken
-    // path like `…/releases/tag/v1.0.0/frpb-recovery-setup-1.0.1.exe`.
+    // A concrete asset (…/file.exe) is a complete destination — use verbatim.
     const isPage = /\/releases\/tag\//i.test(direct);
     const isFile = /\.[a-z0-9]{2,5}(\?.*)?$/i.test(direct);
-    if (isPage || isFile) return direct;
+    if (isFile) return direct;
+    // Phase 1.2 — a download CTA must never open a GitHub Release *page*.
+    // Rewrite a configured Release page URL into the direct asset download URL
+    // (…/releases/tag/<tag> → …/releases/download/<tag>/<exe>) so a click starts
+    // the .exe immediately instead of showing release notes.
+    if (isPage) {
+      return `${direct
+        .replace(/\/releases\/tag\//i, "/releases/download/")
+        .replace(/\/+$/, "")}/${exeName}`;
+    }
     return `${direct.replace(/\/+$/, "")}/${exeName}`;
   }
 

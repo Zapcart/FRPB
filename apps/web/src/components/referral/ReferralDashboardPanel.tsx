@@ -394,8 +394,8 @@ export default function ReferralDashboardPanel({ email }: ReferralDashboardPanel
         </div>
         <h2 className="mt-1 text-lg font-bold leading-snug">
           {unlocked
-            ? "Your VIP Cash Affiliate Hub"
-            : "Refer Friends & Unlock 100% FREE $200 Lifetime Plan"}
+            ? "Your VIP Referral Hub"
+            : "Refer friends, earn rewards"}
         </h2>
         <p className="mt-1 text-sm text-blue-100/90">
           {unlocked

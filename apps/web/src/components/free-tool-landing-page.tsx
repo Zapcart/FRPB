@@ -243,7 +243,7 @@ export default function FreeToolLandingPage({ content }: { content: FreeToolMeta
           </span>
           <span className="badge border-glass-edge/70 bg-glass-soft shadow-glass-light backdrop-blur">
             <ShieldCheck className="h-3.5 w-3.5 text-brand-500" />
-            100% offline
+            Runs fully offline
           </span>
           <span className="badge border-glass-edge/70 bg-glass-soft shadow-glass-light backdrop-blur">
             No root required

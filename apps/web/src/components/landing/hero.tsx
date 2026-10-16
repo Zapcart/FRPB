@@ -14,7 +14,6 @@
 
 import {
   Activity,
-  Apple,
   ArrowRight,
   Award,
   BadgeCheck,
@@ -22,8 +21,7 @@ import {
   Cpu,
   Download,
   Lock,
-  Mail,
-  Monitor,
+  MessageCircle,
   ShieldCheck,
   Smartphone,
   Sparkles,
@@ -206,27 +204,26 @@ export default function Hero({ downloadUrl, metrics }: HeroProps) {
               </SmoothScrollLink>
             </div>
 
-            {/* Trust + platform compatibility indicators (Task 19). */}
+            {/* Accurate trust + platform indicators (Phase 2.3). Each claim is
+                verifiable: email key delivery, a clean/tested Windows utility,
+                secure online payment and the official Telegram support channel.
+                No "100%"/"24/7" absolutes and no WhatsApp support claims. */}
             <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium text-slate-500">
               <span className="inline-flex items-center gap-1.5">
                 <Lock className="h-4 w-4 text-emerald-500" />
-                Instant License Key Delivery via Email/WhatsApp
+                Instant license key delivered to your email after payment
               </span>
               <span className="inline-flex items-center gap-1.5">
                 <ShieldCheck className="h-4 w-4 text-brand-500" />
-                100% Safe & Tested Utility (Clean Build)
+                Clean & tested Windows utility (supports Windows 10 & 11)
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <Monitor className="h-4 w-4 text-slate-400" />
-                Supports Windows 10/11 (32-bit & 64-bit)
+                <Lock className="h-4 w-4 text-slate-400" />
+                Secure online payment processing
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <Apple className="h-4 w-4 text-slate-400" />
-                macOS 10.14+
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Mail className="h-4 w-4 text-slate-400" />
-                Included with an FRPB Active License
+                <MessageCircle className="h-4 w-4 text-sky-500" />
+                Official Telegram community & technical support
               </span>
             </div>
           </div>

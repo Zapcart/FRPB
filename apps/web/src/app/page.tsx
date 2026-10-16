@@ -29,9 +29,9 @@ import {
 } from "lucide-react";
 import { PLANS, FREE_TOOLS, FREE_TOOL_IDS, isPromoActive, type FreeToolId } from "@frpb/shared";
 import { resolveInstallerUrl } from "@/config/download";
-import PromoBanner from "@/components/promo/PromoBanner";
 import { promoMonthlyMonthsFor } from "@/config/promo";
 import Hero from "@/components/landing/hero";
+import ModelCompatibilityChecker from "@/components/landing/model-compatibility-checker";
 import TrackedDownloadLink from "@/components/analytics/tracked-download-link";
 import PricingViewTracker from "@/components/analytics/pricing-view-tracker";
 import DeviceShowcase from "@/components/DeviceShowcase";
@@ -305,6 +305,11 @@ export default function HomePage() {
       {/* ================= HERO ================= */}
       <Hero downloadUrl={downloadUrl} metrics={HOME_METRICS} />
 
+      {/* ================= MODEL COMPATIBILITY CHECKER (Phase 2.2) =================
+          Interactive "Search your phone model" tool backed by the real shipped
+          catalog (KNOWN_MODELS). Client component — no fabricated proof. */}
+      <ModelCompatibilityChecker />
+
       {/* ================= BRAND SLIDER ================= */}
       <section id="brands" className="border-y border-slate-200/80 bg-slate-50/60">
         <div className="mx-auto max-w-7xl px-6 py-12">
@@ -540,10 +545,22 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Launch-offer banner — client component that self-hides once the
-              countdown expires, so the static shell never shows stale urgency. */}
-          <div className="mx-auto mt-10 max-w-4xl">
-            <PromoBanner />
+          {/* Value callout (Phase 2.1). Replaces the old countdown PromoBanner:
+              a factual offer statement with no fake urgency or promo banners. */}
+          <div className="mx-auto mt-10 max-w-3xl">
+            <div className="relative overflow-hidden rounded-2xl border border-brand-200 bg-gradient-to-r from-brand-50 via-white to-accent-50 px-6 py-6 text-center shadow-glass-light sm:px-10">
+              <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-accent-500/10 blur-3xl" />
+              <div className="relative">
+                <p className="inline-flex flex-wrap items-center justify-center gap-2 text-sm font-extrabold text-ink sm:text-base">
+                  <Sparkles className="h-4 w-4 text-brand-500" />
+                  Special Offer: Full Professional Access for 6 Months at just $20
+                </p>
+                <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                  Get 6 months of continuous utility updates for the price competitors charge
+                  monthly.
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="mx-auto mt-14 grid max-w-4xl gap-6 grid-cols-1 md:grid-cols-2">
@@ -654,13 +671,18 @@ export default function HomePage() {
               locks that cannot be cleared in software.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Link
+              {/* Direct binary download — routes through the GA4-tracked anchor
+                  so click_download fires with the resolved .exe URL (no GitHub
+                  release *page* links anywhere). */}
+              <TrackedDownloadLink
                 href={downloadUrl}
+                source="home_guides"
+                label="download_windows"
                 className="btn-accent btn-shine inline-flex w-full items-center justify-center gap-2 px-7 py-3.5 text-base hover:-translate-y-0.5 sm:w-auto"
               >
                 <Download className="h-5 w-5" />
                 Download for Windows
-              </Link>
+              </TrackedDownloadLink>
               <Link
                 href="/blog"
                 className="btn-ghost inline-flex w-full items-center justify-center gap-2 px-7 py-3.5 text-base hover:-translate-y-0.5 sm:w-auto"
