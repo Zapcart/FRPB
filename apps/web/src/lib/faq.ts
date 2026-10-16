@@ -59,6 +59,21 @@ export const HOME_FAQ: readonly FaqItem[] = [
     answer:
       "During the 30-day launch offer the $20 plan grants 6 months (180 days) of access. When the countdown on the pricing page reaches zero, the same $20 plan reverts to 2 months (60 days). The price never changes — only the included term — and your exact duration is fixed server-side at the instant you pay.",
   },
+  {
+    question: "How is my FRPB license key delivered after purchase?",
+    answer:
+      "Instantly by email. The moment your payment is confirmed, your license key is emailed to the address you entered at checkout — there is no WhatsApp step and no manual approval. If it has not arrived within a few minutes, check your spam folder, then reach our official Telegram support channel and we will re-send it.",
+  },
+  {
+    question: "What support is available if I get stuck during setup?",
+    answer:
+      "Support is handled through our official Telegram channel and email. The team helps with installation, USB/OEM drivers, device detection and FRP workflow questions. We do not offer WhatsApp support — always verify you are in the official Telegram channel before sharing any details.",
+  },
+  {
+    question: "Which devices is FRPB compatible with?",
+    answer:
+      "FRPB is compatible with most Android phones from Samsung, Xiaomi, Vivo, OPPO, Realme, OnePlus, Motorola, Tecno, Infinix and Google Pixel, across Qualcomm, MediaTek and Exynos chipsets running Android 10 through Android 16. Use the on-page device compatibility checker to confirm support for a specific model before purchase.",
+  },
 ];
 
 /**

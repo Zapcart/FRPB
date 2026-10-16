@@ -10,7 +10,6 @@ import {
   SITE_NAME,
   PRODUCT_NAME,
   PRODUCT_DESCRIPTION,
-  PRODUCT_APPLICATION_NAME,
   OG_IMAGE_PATH,
   absoluteUrl,
 } from "./seo";
@@ -123,9 +122,10 @@ export function softwareApplicationSchema(
   return {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    name: context.name ?? PRODUCT_APPLICATION_NAME,
+    name: context.name ?? "FRPB Utility",
     alternateName: SITE_NAME,
-    applicationCategory: "UtilitiesApplication",
+    // GEO/AIO: a descriptive category lets answer engines classify the tool.
+    applicationCategory: "Mobile Diagnostics & FRP Bypass Software",
     // Windows-only desktop utility: the FRPB Setup installer targets Win 10/11.
     operatingSystem: "Windows 10, Windows 11",
     softwareVersion: RELEASE_VERSION,
@@ -138,13 +138,26 @@ export function softwareApplicationSchema(
     inLanguage: "en",
     isAccessibleForFree: true,
     publisher: organizationSchema(),
-    // Free to download — a single zero-price Offer keeps the snippet eligible
-    // for the "Free" price badge.
-    offers: {
-      "@type": "Offer",
-      price: "0",
-      priceCurrency: CURRENCY,
-    },
+    // GEO/AIO: surface the real paid tier ($20 USD) alongside the free download
+    // so AI answer engines can cite an accurate price. `price: "0"` marks the
+    // app as free to download; the $20 entry plan is the licensed term. Kept in
+    // sync with the shared PLANS definition so it can never drift from Razorpay.
+    offers: [
+      {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: CURRENCY,
+        name: "Free download",
+      },
+      {
+        "@type": "Offer",
+        price: (getPlan("MONTH_1").priceCents / 100).toFixed(2),
+        priceCurrency: CURRENCY,
+        name: "FRPB License (entry plan)",
+        category: "subscription",
+        url: absoluteUrl("/pricing"),
+      },
+    ],
     // Phase 1.3 — no aggregateRating emitted. Google requires rating markup to
     // reflect visible, verifiable on-page reviews; the previous unsubstantiated
     // 4.9/1240 values were a structured-data policy violation. Re-add ONLY once

@@ -4,7 +4,6 @@
 // blue / cyan accents, hairline borders and soft elevation. All surfaces are
 // built from the shared design tokens in globals.css + tailwind.config.ts.
 
-import Image from "next/image";
 import Link from "next/link";
 import type { Metadata } from "next";
 import {
@@ -15,7 +14,6 @@ import {
   Smartphone,
   Check,
   ArrowRight,
-  Menu,
   LifeBuoy,
   Usb,
   Terminal,
@@ -31,6 +29,7 @@ import { PLANS, FREE_TOOLS, FREE_TOOL_IDS, isPromoActive, type FreeToolId } from
 import { resolveInstallerUrl } from "@/config/download";
 import { promoMonthlyMonthsFor } from "@/config/promo";
 import Hero from "@/components/landing/hero";
+import SiteNavbar from "@/components/landing/site-navbar";
 import ModelCompatibilityChecker from "@/components/landing/model-compatibility-checker";
 import TrackedDownloadLink from "@/components/analytics/tracked-download-link";
 import PricingViewTracker from "@/components/analytics/pricing-view-tracker";
@@ -64,16 +63,6 @@ import type { HomeMetrics } from "@/lib/home-metrics";
  * recovered" / "4.9/5 from 2,000+ reviews" social proof, which had no source.
  */
 const HOME_METRICS: HomeMetrics = homeMetrics();
-
-const NAV_LINKS = [
-  { label: "Features", href: "#features" },
-  { label: "Pro Tools", href: "#free-tools" },
-  { label: "Supported Brands", href: "#brands" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "Guides", href: "#guides" },
-  { label: "FAQ", href: "#faq" },
-  { label: "EULA", href: "#eula" },
-];
 
 /**
  * Supported brands surfaced in the landing-page brand strip. Ordered by
@@ -232,83 +221,21 @@ export default function HomePage() {
       <JsonLd id="ld-organization" data={organizationPageSchema()} />
       <JsonLd id="ld-faq" data={faqPageSchema(HOME_FAQ)} />
 
-      {/* ================= NAVBAR ================= */}
-      <header className="glass-nav sticky top-0 z-50">
-        <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:h-[72px]">
-          {/* Crisp logo lockup */}
-          <Link href="/" className="group flex items-center gap-2.5">
-            <Image
-              src="/logo.png"
-              alt="FRPB — FRP bypass and Android device recovery tool"
-              width={72}
-              height={72}
-              priority
-              className="h-9 w-9 shrink-0 rounded-xl object-cover ring-1 ring-slate-200 transition group-hover:ring-slate-300"
-            />
-            <span className="flex flex-col leading-none">
-              <span className="text-lg font-extrabold tracking-tight text-ink">FRPB</span>
-              <span className="mt-0.5 hidden text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400 sm:block">
-                Utility Suite
-              </span>
-            </span>
-          </Link>
-
-          {/* Primary navigation */}
-          <div className="hidden items-center gap-1 lg:flex">
-            {NAV_LINKS.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                className="rounded-lg px-3.5 py-2 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-ink"
-              >
-                {link.label}
-              </a>
-            ))}
-          </div>
-
-          {/* Actions */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Deep link to the money page from the header — descriptive anchor
-                text so the crawl path and link equity reach /pricing. */}
-            <Link
-              href="/pricing"
-              className="hidden text-sm font-semibold text-slate-500 transition hover:text-ink md:inline-flex"
-            >
-              Pricing Plans
-            </Link>
-            <Link
-              href="/auth"
-              className="hidden text-sm font-semibold text-slate-500 transition hover:text-ink md:inline-flex"
-            >
-              Sign in
-            </Link>
-            <TrackedDownloadLink
-              href={downloadUrl}
-              source="header"
-              label="header_download_windows"
-              className="btn-accent btn-shine hidden px-4 py-2.5 text-xs sm:inline-flex md:text-sm"
-            >
-              <Download className="h-4 w-4" />
-              Download for Windows
-            </TrackedDownloadLink>
-            <button
-              type="button"
-              className="inline-flex h-11 w-11 touch-manipulation select-none items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition active:scale-95 active:bg-slate-100 hover:border-slate-300 hover:text-ink lg:hidden"
-              aria-label="Menu"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-          </div>
-        </nav>
-      </header>
+      {/* ================= NAVBAR =================
+          Extracted to a client component so the mobile hamburger can hold
+          toggle state (this HomePage stays a zero-JS Server Component). */}
+      <SiteNavbar downloadUrl={downloadUrl} />
 
       {/* ================= HERO ================= */}
       <Hero downloadUrl={downloadUrl} metrics={HOME_METRICS} />
 
       {/* ================= MODEL COMPATIBILITY CHECKER (Phase 2.2) =================
           Interactive "Search your phone model" tool backed by the real shipped
-          catalog (KNOWN_MODELS). Client component — no fabricated proof. */}
-      <ModelCompatibilityChecker />
+          catalog (KNOWN_MODELS). Client component — no fabricated proof.
+          The wrapper carries the `supported-models` anchor the nav links to. */}
+      <section id="supported-models" className="scroll-mt-24">
+        <ModelCompatibilityChecker />
+      </section>
 
       {/* ================= BRAND SLIDER ================= */}
       <section id="brands" className="border-y border-slate-200/80 bg-slate-50/60">
