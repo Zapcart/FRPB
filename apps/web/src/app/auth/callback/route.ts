@@ -11,6 +11,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { resolveRedirectOrigin } from "@/lib/url/origin";
+import { sendWelcomeOfferEmail } from "@/lib/email/resend";
 
 /** In-app destination used when no valid `next` target was supplied. */
 const DEFAULT_REDIRECT = "/dashboard";
@@ -72,10 +73,26 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       },
     });
 
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
       console.error("[auth/callback] exchangeCodeForSession failed:", error.message);
       return NextResponse.redirect(`${origin}${FAILURE_REDIRECT}`);
+    }
+
+    // Welcome + $20 offer for OAuth / email-link signups. Deferred (not awaited)
+    // so a Resend hiccup can never delay or break the redirect; the helper is
+    // idempotent via EmailLog, so returning users are never re-emailed.
+    const email = data?.user?.email;
+    if (email) {
+      const fullName =
+        (data?.user?.user_metadata as { full_name?: string } | undefined)?.full_name ??
+        null;
+      void sendWelcomeOfferEmail(email, { name: fullName }).catch((err: unknown) => {
+        console.error(
+          "[auth/callback] welcome email failed:",
+          (err as Error)?.message ?? err
+        );
+      });
     }
 
     return response;

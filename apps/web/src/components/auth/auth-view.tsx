@@ -48,6 +48,32 @@ function appendRef(path: string, ref: string): string {
 /** Where to send the user after a successful authentication. */
 const DASHBOARD_PATH = "/dashboard";
 
+/**
+ * Ask the server to send the Welcome + $20 offer email.
+ *
+ * Fire-and-forget: it must never delay or block the post-auth redirect. The
+ * route resolves the recipient from the session cookie (not from this call),
+ * and is idempotent via EmailLog, so calling it on every successful
+ * signup/sign-in sends at most one email per address. This is what covers the
+ * "first-time login" case — a user who signed up with email confirmation only
+ * gets a session on their first sign-in, not at signup time.
+ *
+ * `keepalive` keeps the request alive through the immediate navigation.
+ */
+function requestWelcomeEmail(): void {
+  try {
+    void fetch("/api/v1/auth/welcome", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+    }).catch(() => {
+      // Marketing email is best-effort; a failure must not affect auth UX.
+    });
+  } catch {
+    // Ignore — never let onboarding email break navigation.
+  }
+}
+
 export default function AuthView({
   initialMode,
   returnTo,
@@ -106,6 +132,9 @@ export default function AuthView({
     if (typeof window !== "undefined" && isPostHogEnabled()) {
       posthog.capture("user_logged_in", { method: "email_password", mode });
     }
+
+    // Welcome + $20 offer (idempotent server-side, so repeat sign-ins are safe).
+    requestWelcomeEmail();
 
     // Re-validate the referral code on the client (defense in depth) so a
     // malformed value can never be reflected into the destination URL.

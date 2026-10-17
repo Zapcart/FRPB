@@ -9,7 +9,11 @@
 
 import { Resend } from "resend";
 import { prisma } from "@/lib/prisma";
-import { licenseDeliveredTemplate } from "@/lib/email/templates";
+import {
+  licenseDeliveredTemplate,
+  promoOfferTemplate,
+  welcomeOfferTemplate,
+} from "@/lib/email/templates";
 import { GITHUB_RELEASES_BASE } from "@/config/download";
 
 // Lazy singleton — constructing Resend with an empty key throws, which would
@@ -336,4 +340,192 @@ export async function hasSentLicenseEmail(licenseId: string): Promise<boolean> {
     );
     return false;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Marketing / onboarding sends (promo blast + welcome offer)
+//
+// These are deliberately SEPARATE from the license path: `dispatch()` above is
+// coupled to a License (it passes `licenseId` through and the retry cron only
+// drains `license-delivered` rows). Marketing email has no license relation, so
+// it gets its own generic dispatcher. The EmailLog row is still the source of
+// truth — it is what makes both sends idempotent.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Template identifiers persisted in EmailLog. Also the idempotency key. */
+export const EMAIL_TEMPLATE_PROMO = "promo-6mo-20usd";
+export const EMAIL_TEMPLATE_WELCOME = "welcome-offer";
+
+export type MarketingTemplate =
+  | typeof EMAIL_TEMPLATE_PROMO
+  | typeof EMAIL_TEMPLATE_WELCOME;
+
+export interface MarketingSendResult {
+  /** True only when Resend accepted the message. */
+  sent: boolean;
+  /** True when a send was skipped because one already exists for this address. */
+  alreadySent: boolean;
+  /** Provider message id on success. */
+  messageId?: string;
+  /** Human-readable failure reason (also persisted to EmailLog.error). */
+  error?: string;
+}
+
+/**
+ * Has this template already been (successfully) delivered to this address?
+ *
+ * Dedupe key is `template` + `to` because the schema gives us nothing better:
+ * `EmailLog` has no `userId` and `User` has no metadata/JSON column. This
+ * mirrors the flag-in-metadata approach the brief asked for, just stored in
+ * Postgres instead of the auth provider.
+ */
+export async function hasSentTemplateEmail(
+  template: MarketingTemplate,
+  to: string
+): Promise<boolean> {
+  try {
+    const existing = await prisma.emailLog.findFirst({
+      where: { template, to, status: "SENT" },
+      select: { id: true },
+    });
+    return Boolean(existing);
+  } catch (err) {
+    console.error(
+      `[email] could not check "${template}" delivery for ${to}:`,
+      (err as Error)?.message ?? err
+    );
+    // Fail OPEN on read errors? No — fail CLOSED for the caller's benefit is
+    // wrong here too: a transient DB blip would permanently mark the user as
+    // "already emailed". Return false so the caller retries; the QUEUED row
+    // created by the send attempt is the durable record.
+    return false;
+  }
+}
+
+/**
+ * Generic (license-free) send. Creates a QUEUED EmailLog row, attempts the
+ * Resend call under the same timeout as the license path, then writes the
+ * outcome back. NEVER throws — marketing email must not break a request.
+ */
+async function dispatchMarketing(input: {
+  to: string;
+  template: MarketingTemplate;
+  subject: string;
+  html: string;
+}): Promise<MarketingSendResult> {
+  if (!isEmailConfigured()) {
+    const message =
+      "RESEND_API_KEY is missing or malformed (expected an `re_` key) — email was not sent";
+    console.error(`[email] ${message} (template=${input.template}, to=${input.to})`);
+    return { sent: false, alreadySent: false, error: message };
+  }
+
+  let logId: string;
+  try {
+    const log = await prisma.emailLog.create({
+      data: {
+        to: input.to,
+        template: input.template,
+        status: "QUEUED",
+      },
+    });
+    logId = log.id;
+  } catch (err) {
+    const message = (err as Error)?.message ?? String(err);
+    console.error(
+      `[email] could not create EmailLog for ${input.to} (template=${input.template}): ${message}`
+    );
+    return { sent: false, alreadySent: false, error: message };
+  }
+
+  try {
+    const { data, error } = await withTimeout(
+      getResend().emails.send({
+        from: fromAddress(),
+        to: input.to,
+        subject: input.subject,
+        html: input.html,
+      }),
+      EMAIL_SEND_TIMEOUT_MS,
+      `send to ${input.to}`
+    );
+    if (error) throw new Error(error.message ?? String(error));
+
+    await prisma.emailLog.update({
+      where: { id: logId },
+      data: {
+        status: "SENT",
+        providerMsgId: data?.id,
+        sentAt: new Date(),
+        error: null,
+        attempts: { increment: 1 },
+      },
+    });
+    console.info(
+      `[email] "${input.template}" sent to ${input.to} (msg=${data?.id ?? "n/a"})`
+    );
+    return { sent: true, alreadySent: false, messageId: data?.id };
+  } catch (err) {
+    const message = (err as Error)?.message ?? String(err);
+    console.error(`[email] "${input.template}" FAILED to ${input.to}: ${message}`);
+    resend = null;
+    await recordFailure(logId, message);
+    return { sent: false, alreadySent: false, error: message };
+  }
+}
+
+/**
+ * Send the one-time "$20 for 6 months" promo to a single address.
+ *
+ * Idempotent: pass `respectDedupe: true` (default) to skip addresses that
+ * already received this template successfully.
+ */
+export async function sendPromoEmail(
+  to: string,
+  options: { name?: string | null; respectDedupe?: boolean } = {}
+): Promise<MarketingSendResult> {
+  const address = to?.trim().toLowerCase();
+  if (!address || !address.includes("@")) {
+    return { sent: false, alreadySent: false, error: "invalid recipient address" };
+  }
+
+  if (options.respectDedupe !== false) {
+    const already = await hasSentTemplateEmail(EMAIL_TEMPLATE_PROMO, address);
+    if (already) return { sent: false, alreadySent: true };
+  }
+
+  const { subject, html } = promoOfferTemplate({ name: options.name });
+  return dispatchMarketing({
+    to: address,
+    template: EMAIL_TEMPLATE_PROMO,
+    subject,
+    html,
+  });
+}
+
+/**
+ * Send the automated Welcome + $20 offer for a brand-new account.
+ *
+ * Idempotent by construction — the caller does not need to guard it. Returns
+ * `alreadySent: true` when this address has already received the welcome mail.
+ */
+export async function sendWelcomeOfferEmail(
+  to: string,
+  options: { name?: string | null } = {}
+): Promise<MarketingSendResult> {
+  const address = to?.trim().toLowerCase();
+  if (!address || !address.includes("@")) {
+    return { sent: false, alreadySent: false, error: "invalid recipient address" };
+  }
+
+  const already = await hasSentTemplateEmail(EMAIL_TEMPLATE_WELCOME, address);
+  if (already) return { sent: false, alreadySent: true };
+
+  const { subject, html } = welcomeOfferTemplate({ name: options.name });
+  return dispatchMarketing({
+    to: address,
+    template: EMAIL_TEMPLATE_WELCOME,
+    subject,
+    html,
+  });
 }
