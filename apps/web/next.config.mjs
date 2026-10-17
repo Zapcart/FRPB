@@ -34,7 +34,63 @@ const nextConfig = {
     instrumentationHook: true,
   },
   async headers() {
+    // ── Marketing HTML (ISR) ────────────────────────────────────────────────
+    // Every crawlable marketing page is statically rendered with ISR
+    // (`revalidate = 3600`, see src/app/layout.tsx). Next emits `s-maxage`
+    // for those pages on its own, but declaring it here guarantees the header
+    // survives whichever reverse proxy / CDN sits in front of the origin and
+    // adds a 24h `stale-while-revalidate` window: a proxy keeps serving the
+    // cached document while the origin regenerates in the background, so a
+    // first-time mobile visitor never waits on server render work.
+    //
+    // Deliberately an explicit allow-list instead of a `/:path*` catch-all:
+    // per-user routes (`/dashboard`, `/admin`, `/checkout`, `/login`,
+    // `/register`, `/auth/*`, `/download`) are `force-dynamic` and must never
+    // become shared-cacheable.
+    const marketingPages = [
+      "/",
+      "/about",
+      "/android-data-eraser",
+      "/blog",
+      "/blog/:path*",
+      "/bootloop-recovery",
+      "/contact",
+      "/data-recovery",
+      "/downloads",
+      "/eula",
+      "/flash-reset",
+      "/frp-bypass",
+      "/icloud-bypass",
+      "/ios",
+      "/phone-to-phone-transfer",
+      "/pricing",
+      "/privacy",
+      "/qualcomm-edl-frp-tool",
+      "/reboot-mode",
+      "/refund",
+      "/samsung-frp-bypass",
+      "/samsungaccount",
+      "/terms",
+      "/tools",
+      "/tools/:path*",
+      "/unlock-screen",
+      "/virtual-location-spoofer",
+      "/vivo-oppo-realme-frp",
+      "/whatsapp-transfer-tool",
+      "/xiaomi-miui-frp-bypass",
+    ];
+
     return [
+      ...marketingPages.map((source) => ({
+        source,
+        headers: [
+          {
+            key: "Cache-Control",
+            value:
+              "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400",
+          },
+        ],
+      })),
       {
         // Immutable, content-hashed build output (JS/CSS/fonts emitted by
         // next/font). Safe to cache for a year — the single biggest win for

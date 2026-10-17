@@ -8,7 +8,7 @@
 import type { Metadata } from "next";
 import Script from "next/script";
 import { Inter } from "next/font/google";
-import { SessionProvider } from "@/components/session-provider";
+import SessionGate from "@/components/session-gate";
 import FloatingWidgets from "@/components/floating-widgets";
 import SiteFooter from "@/components/SiteFooter";
 import PageViewTracker from "@/components/analytics/page-view-tracker";
@@ -105,18 +105,44 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen bg-white font-sans text-slate-900 antialiased">
+        {/* Pre-paint performance bootstrap. `beforeInteractive` makes Next inline
+            this into the initial HTML <head>, so the class lands before the
+            first paint and before React hydration:
+            · Weak device (<=4 CPU cores / <=4 GB RAM / Save-Data / 2G) → adds the
+              `lite` class so CSS drops every blur pass + decorative loop.
+            · Otherwise releases the idle-gated animations (adds `anim-ready`) on
+              requestIdleCallback — or the first user input — so the initial paint
+              and first tap never compete with an animation.
+            Fail-open: if detection throws, the CSS gate simply stays shut and the
+            page renders its cheap static composition. */}
+        <Script id="perf-bootstrap" strategy="beforeInteractive">
+          {`(function(){try{
+var c=navigator.hardwareConcurrency||8,d=navigator.deviceMemory||8,cn=navigator.connection||{};
+var weak=d<=4||c<=4||cn.saveData===true||/(^|-)2g$/.test(cn.effectiveType||"");
+var root=document.documentElement;
+if(weak){root.classList.add("lite");return;}
+if(window.matchMedia("(prefers-reduced-motion: reduce)").matches)return;
+var start=function(){root.classList.add("anim-ready");};
+if("requestIdleCallback" in window){window.requestIdleCallback(start,{timeout:2500});}
+else{window.addEventListener("load",function(){setTimeout(start,300);},{once:true});}
+["pointerdown","touchstart","keydown"].forEach(function(e){window.addEventListener(e,start,{once:true,passive:true});});
+}catch(e){}})();`}
+        </Script>
         {/* Google tag (gtag.js) — one loader serves BOTH destinations:
             · AW-18512807320 → Google Ads conversion account
             · G-VDP6PZ7RPR   → GA4 property (traffic + engagement reporting)
-            Both configs ride the same next/script `afterInteractive` tag, so
-            they load after hydration and never block LCP or first interaction.
-            Later `gtag('event', …)` calls (see lib/analytics/gtag.ts) are routed
-            to both destinations from this single dataLayer. */}
+            PERF (mobile): both configs ride a single `lazyOnload` tag so the
+            ~90 KB gtag.js download + execution happens AFTER the window `load`
+            event (browser idle), never during hydration or first touch. Earlier
+            `gtag('event', …)` calls are made safe by the queue in
+            lib/analytics/gtag.ts (dataLayer push before the loader arrives).
+            Conversions are for post-purchase pages, so late-loading gtag costs
+            nothing while freeing the main thread for the first interaction. */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=AW-18512807320"
-          strategy="afterInteractive"
+          strategy="lazyOnload"
         />
-        <Script id="google-gtag" strategy="afterInteractive">
+        <Script id="google-gtag" strategy="lazyOnload">
           {`window.dataLayer = window.dataLayer || [];
 function gtag(){dataLayer.push(arguments);}
 gtag('js', new Date());
@@ -124,7 +150,10 @@ gtag('config', 'AW-18512807320');
 gtag('config', 'G-VDP6PZ7RPR');`}
         </Script>
         <PostHogProvider>
-          <SessionProvider>{children}</SessionProvider>
+          {/* SessionGate mounts the Supabase auth subscription ONLY on
+              auth/app/checkout routes. Static marketing pages skip it entirely,
+              so no Supabase client is created during hydration there. */}
+          <SessionGate>{children}</SessionGate>
           {/* Captures a ?ref= referral code from ANY landing route and persists
               it (cookie + localStorage) for the later checkout. Renders null. */}
           <ReferralCapture />

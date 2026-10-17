@@ -30,7 +30,6 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import SmoothScrollLink from "@/components/smooth-scroll-link";
 import TrackedDownloadLink from "@/components/analytics/tracked-download-link";
 import { RELEASE_VERSION } from "@/config/download";
 import type { HomeMetrics } from "@/lib/home-metrics";
@@ -107,24 +106,20 @@ export default function Hero({ downloadUrl, metrics }: HeroProps) {
       <div className="pointer-events-none absolute -left-24 top-10 -z-20 h-72 w-72 rounded-full bg-brand-500/10 blur-[110px] animate-aurora" />
       <div className="pointer-events-none absolute -right-20 top-40 -z-20 h-80 w-80 rounded-full bg-accent-500/10 blur-[120px] animate-float-slow" />
 
-      {/* ---- Radial ripple: static soft core + expanding rings (lightweight,
-             pure CSS — no canvas/WebGL overhead). ---- */}
+      {/* ---- Radial ripple: static soft core + a single expanding ring. One
+             one-shot ring (transform + opacity only, `forwards` so it resolves
+             to opacity 0 and never repaints) keeps the depth cue at a fraction
+             of the cost of the previous three staggered rings. ---- */}
       <div
         aria-hidden
         className="pointer-events-none absolute left-1/2 top-[28%] -z-10 h-[42rem] w-[42rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-hero-ripple opacity-80"
       />
-      {[0, 1.4, 2.8].map((delay) => (
-        <div
-          key={delay}
-          aria-hidden
-          className="pointer-events-none absolute left-1/2 top-[28%] -z-10 -translate-x-1/2 -translate-y-1/2"
-        >
-          <div
-            className="h-[30rem] w-[30rem] rounded-full border border-brand-400/25 animate-ripple"
-            style={{ animationDelay: `${delay}s` }}
-          />
-        </div>
-      ))}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-[28%] -z-10 -translate-x-1/2 -translate-y-1/2"
+      >
+        <div className="h-[30rem] w-[30rem] rounded-full border border-brand-400/25 animate-ripple" />
+      </div>
 
       <div className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent" />
 
@@ -194,14 +189,17 @@ export default function Hero({ downloadUrl, metrics }: HeroProps) {
                 <Download className="h-5 w-5" />
                 Download Free Setup (v{RELEASE_VERSION})
               </TrackedDownloadLink>
-              <SmoothScrollLink
-                targetId="pricing"
-                ariaLabel="See pricing"
+              {/* Native anchor — smooth scrolling is handled by CSS
+                  (scroll-behavior: smooth + #pricing scroll-margin-top), so the
+                  CTA works instantly without any client-side JavaScript. */}
+              <a
+                href="#pricing"
+                aria-label="See pricing"
                 className="btn-glass w-full sm:w-auto"
               >
                 See Pricing
                 <ArrowRight className="h-4 w-4" />
-              </SmoothScrollLink>
+              </a>
             </div>
 
             {/* Accurate trust + platform indicators (Phase 2.3). Each claim is

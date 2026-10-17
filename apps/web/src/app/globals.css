@@ -388,6 +388,113 @@
   }
 }
 
+/* ---------- SEC2: animation & fill-rate budget (mobile + low-power) ---------- */
+
+/* Idle-start gate for every decorative infinite loop. The root-layout bootstrap
+   adds `.anim-ready` to <html> once the page is idle (or on the first user
+   interaction). Entrance animations (fade-*) are intentionally NOT gated so the
+   copy still reveals instantly; only the continuous background loops wait. If
+   JavaScript never runs the gate stays shut and the static composition is the
+   intended no-JS fallback. */
+html:not(.anim-ready):not(.lite)
+  :is(
+    .animate-grid-pan,
+    .animate-gradient-pan,
+    .animate-aurora,
+    .animate-float,
+    .animate-float-slow,
+    .animate-bounce-slow,
+    .animate-marquee,
+    .animate-pulse-glow,
+    .animate-sheen,
+    .animate-spin-slow
+  ) {
+  animation-play-state: paused;
+}
+
+/* Low-power "lite" mode (set by the bootstrap on weak CPUs / Save-Data / 2G):
+   drop every blur pass and decorative loop while keeping the exact layout and
+   translucent fills, so the page stays visually identical but paints cheaply. */
+html.lite .glass-nav,
+html.lite .glass-panel,
+html.lite .glass-panel-strong,
+html.lite .glass-surface,
+html.lite .glass-float,
+html.lite .glass-input {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+html.lite .glass-nav,
+html.lite .glass-panel-strong {
+  background-color: rgba(255, 255, 255, 0.95);
+}
+html.lite .glass-panel,
+html.lite .glass-float {
+  background-color: rgba(255, 255, 255, 0.93);
+}
+html.lite .glass-surface {
+  background-color: rgba(255, 255, 255, 0.9);
+}
+
+html.lite
+  :is(
+    .animate-grid-pan,
+    .animate-gradient-pan,
+    .animate-aurora,
+    .animate-float,
+    .animate-float-slow,
+    .animate-bounce-slow,
+    .animate-marquee,
+    .animate-pulse-glow,
+    .animate-sheen,
+    .animate-spin-slow
+  ) {
+  animation: none !important;
+}
+
+@media (max-width: 640px) {
+  /* Fill-rate budget: phones are compositor-bound, so replace the full-screen
+     frost with a light near-opaque fill. The frosted look survives (same shape,
+     hairline border and elevation) without paying for a per-frame blur pass. */
+  .glass-nav,
+  .glass-panel,
+  .glass-panel-strong,
+  .glass-surface,
+  .glass-float,
+  .glass-input {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .glass-nav,
+  .glass-panel-strong {
+    background-color: rgba(255, 255, 255, 0.95);
+  }
+  .glass-panel,
+  .glass-float {
+    background-color: rgba(255, 255, 255, 0.92);
+  }
+  .glass-surface {
+    background-color: rgba(255, 255, 255, 0.88);
+  }
+
+  /* Freeze every decorative loop at its first keyframe: the gradient/grid still
+     renders (same static look) but nothing repaints frame-after-frame while the
+     user scrolls or taps — the single biggest mobile paint win. */
+  .animate-grid-pan,
+  .animate-gradient-pan,
+  .animate-aurora,
+  .animate-float,
+  .animate-float-slow,
+  .animate-bounce-slow,
+  .animate-marquee,
+  .animate-pulse-glow,
+  .animate-sheen,
+  .animate-spin-slow {
+    animation: none !important;
+  }
+}
+
 /* Progressive enhancement: where backdrop-filter is unavailable, fall back to
    near-opaque fills so text contrast never depends on a blur that won't render. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {

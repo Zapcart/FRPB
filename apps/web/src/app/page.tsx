@@ -25,7 +25,14 @@ import {
   MapPin,
   type LucideIcon,
 } from "lucide-react";
-import { PLANS, FREE_TOOLS, FREE_TOOL_IDS, isPromoActive, type FreeToolId } from "@frpb/shared";
+import {
+  PLANS,
+  FREE_TOOLS,
+  FREE_TOOL_IDS,
+  isPromoActive,
+  modelCatalog,
+  type FreeToolId,
+} from "@frpb/shared";
 import { resolveInstallerUrl } from "@/config/download";
 import { promoMonthlyMonthsFor } from "@/config/promo";
 import Hero from "@/components/landing/hero";
@@ -63,6 +70,14 @@ import type { HomeMetrics } from "@/lib/home-metrics";
  * recovered" / "4.9/5 from 2,000+ reviews" social proof, which had no source.
  */
 const HOME_METRICS: HomeMetrics = homeMetrics();
+
+/**
+ * Supported-model count, resolved on the SERVER from the real shipped catalog.
+ * Passed to the client compatibility checker as a prop so the ~100+ entry
+ * catalog never has to be imported into (and parsed by) the client bundle — see
+ * components/landing/model-compatibility-checker.tsx (SEC3 JS budget).
+ */
+const SUPPORTED_MODEL_COUNT: number = modelCatalog().length;
 
 /**
  * Supported brands surfaced in the landing-page brand strip. Ordered by
@@ -234,7 +249,7 @@ export default function HomePage() {
           catalog (KNOWN_MODELS). Client component — no fabricated proof.
           The wrapper carries the `supported-models` anchor the nav links to. */}
       <section id="supported-models" className="scroll-mt-24">
-        <ModelCompatibilityChecker />
+        <ModelCompatibilityChecker totalModels={SUPPORTED_MODEL_COUNT} />
       </section>
 
       {/* ================= BRAND SLIDER ================= */}

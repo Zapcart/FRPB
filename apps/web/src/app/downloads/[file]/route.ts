@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { createReadStream, promises as fs } from "node:fs";
 import { Readable } from "node:stream";
 import path from "node:path";
-import { GITHUB_ASSET_ALIASES, GITHUB_RELEASES_BASE } from "@/config/download";
+import {
+  EXE_NAME,
+  GITHUB_ASSET_ALIASES,
+  GITHUB_RELEASES_BASE,
+  SELF_HOSTED_EXE_NAME,
+} from "@/config/download";
 
 /**
  * FRPB — GET /downloads/[file]
@@ -36,6 +41,20 @@ const PUBLIC_DIR = path.join(process.cwd(), "public", "downloads");
 /** Installer assets we are willing to serve; anything else is a 404. */
 const ALLOWED_EXTENSIONS = [".exe", ".dmg"] as const;
 
+/**
+ * Requested installer name → filename committed under `public/downloads`.
+ *
+ * The repo ships a single Windows binary (`FRPB-Setup.exe`) that predates the
+ * versioned canonical name, so every accepted spelling of the Windows
+ * installer is mapped onto it. Without this, a request for the canonical
+ * `FRPB-Recovery-Setup-1.0.1.exe` never matched the on-disk file and silently
+ * fell through to the third-party (GitHub) redirect.
+ */
+const SELF_HOSTED_EXE_ALIASES: Record<string, string> = {
+  [EXE_NAME.toLowerCase()]: SELF_HOSTED_EXE_NAME,
+  "frpb-setup.exe": SELF_HOSTED_EXE_NAME,
+};
+
 function isInstaller(name: string): boolean {
   const lower = name.toLowerCase();
   return ALLOWED_EXTENSIONS.some((ext) => lower.endsWith(ext));
@@ -64,10 +83,14 @@ export async function GET(
   }
 
   // ── 1. Stream the local static installer if it exists (case-insensitive). ─
+  // Aliases are resolved first so the canonical/versioned name serves the
+  // first-party copy rather than redirecting to the external release host.
+  const localTarget =
+    SELF_HOSTED_EXE_ALIASES[requested.toLowerCase()] ?? requested;
   try {
     const dirEntries = await fs.readdir(PUBLIC_DIR);
     for (const entry of dirEntries) {
-      if (entry.toLowerCase() !== requested.toLowerCase()) continue;
+      if (entry.toLowerCase() !== localTarget.toLowerCase()) continue;
       const filePath = path.join(PUBLIC_DIR, entry);
       const stat = await fs.stat(filePath);
       if (!stat.isFile()) continue;

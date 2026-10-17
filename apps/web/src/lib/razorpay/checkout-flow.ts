@@ -40,6 +40,12 @@ export interface StartCheckoutParams {
    * and not yet unlocked). The client hint is never trusted on its own.
    */
   downsell?: boolean;
+  /**
+   * Order pre-created on purchase intent (hover/touch of the Pay button). When
+   * fresh and for the same plan, `startRazorpayCheckout` skips the create-order
+   * round trip and opens the modal immediately; otherwise it creates a fresh one.
+   */
+  prewarmed?: PrefetchedOrder | null;
   /** Called when the customer closes the Razorpay modal without paying. */
   onDismiss?: () => void;
 }
@@ -48,6 +54,73 @@ export type StartCheckoutResult =
   | { status: "paid"; licenseKey: string | null; licenseId: string | null }
   | { status: "dismissed" }
   | { status: "failed"; message: string };
+
+/**
+ * A Razorpay order created ahead of the click so the Pay modal can open without
+ * waiting on a network round trip. Held in module memory per plan slug and only
+ * reused while still fresh (see ORDER_TTL_MS).
+ */
+export interface PrefetchedOrder {
+  orderId: string;
+  amount: number;
+  currency: string;
+  planSlug: string;
+  createdAt: number;
+}
+
+/** Orders stay reusable for a short window; beyond it a fresh order is created. */
+const ORDER_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * plan slug → in-flight/complete prefetch. Bounded to the two storefront plans,
+ * so a page can create at most one warm order per plan however many hovers occur.
+ */
+const prefetchCache = new Map<string, Promise<PrefetchedOrder | null>>();
+
+/** True when a cached order exists and is still within its reusable window. */
+function isFresh(
+  order: PrefetchedOrder | null | undefined
+): order is PrefetchedOrder {
+  return !!order && Date.now() - order.createdAt < ORDER_TTL_MS;
+}
+
+/**
+ * Create (and remember) a Razorpay order ahead of the purchase click. Never
+ * throws and never rejects — resolves to null on any failure so the click path
+ * transparently falls back to a fresh createOrder(). Repeat calls for the same
+ * plan reuse the first promise, so hover storms cannot spam the orders API.
+ */
+export function prefetchCheckoutOrder(params: {
+  planSlug: string;
+  email?: string | null;
+  referralCode?: string | null;
+  downsell?: boolean;
+}): Promise<PrefetchedOrder | null> {
+  const existing = prefetchCache.get(params.planSlug);
+  if (existing) return existing;
+
+  const promise = (async (): Promise<PrefetchedOrder | null> => {
+    const plan = getDualPlan(params.planSlug);
+    if (!plan) return null;
+    const order = await createOrder(
+      plan.slug,
+      params.email ?? null,
+      params.referralCode ?? null,
+      params.downsell === true
+    );
+    if (!order.ok) return null;
+    return {
+      orderId: order.orderId,
+      amount: order.amount,
+      currency: order.currency,
+      planSlug: plan.slug,
+      createdAt: Date.now(),
+    };
+  })().catch(() => null);
+
+  prefetchCache.set(params.planSlug, promise);
+  return promise;
+}
 
 const BRAND_COLOR = "#6366f1";
 
@@ -199,13 +272,35 @@ export async function startRazorpayCheckout(
     };
   }
 
-  const order = await createOrder(
-    plan.slug,
-    params.email ?? null,
-    params.referralCode ?? null,
-    params.downsell === true
-  );
-  if (!order.ok) return { status: "failed", message: order.message };
+  // Fast path: a fresh order pre-created for this exact plan (on hover/touch of
+  // the Pay button) lets the modal open without the create-order round trip. Any
+  // mismatch or staleness — or a failed/rejected prefetch — falls through to a
+  // normal, authoritative createOrder() below.
+  let settledOrder: { orderId: string; amount: number; currency: string } | null =
+    null;
+  const warm = params.prewarmed ?? (await prefetchCache.get(plan.slug));
+  if (isFresh(warm) && warm.planSlug === plan.slug) {
+    settledOrder = {
+      orderId: warm.orderId,
+      amount: warm.amount,
+      currency: warm.currency,
+    };
+  }
+
+  if (!settledOrder) {
+    const order = await createOrder(
+      plan.slug,
+      params.email ?? null,
+      params.referralCode ?? null,
+      params.downsell === true
+    );
+    if (!order.ok) return { status: "failed", message: order.message };
+    settledOrder = {
+      orderId: order.orderId,
+      amount: order.amount,
+      currency: order.currency,
+    };
+  }
 
   let RazorpayCtor;
   try {
@@ -230,9 +325,9 @@ export async function startRazorpayCheckout(
 
     const instance = new RazorpayCtor({
       key,
-      amount: order.amount,
-      currency: order.currency,
-      order_id: order.orderId,
+      amount: settledOrder.amount,
+      currency: settledOrder.currency,
+      order_id: settledOrder.orderId,
       name: "FRPB",
       description: `${plan.name} — license`,
       prefill: params.email ? { email: params.email } : undefined,
@@ -249,7 +344,7 @@ export async function startRazorpayCheckout(
         // fulfilled order rather than a raw gateway callback. The Razorpay order
         // id is the stable transaction id (unique per order, safe to retry).
         trackPurchase({
-          transaction_id: order.orderId,
+          transaction_id: settledOrder!.orderId,
           plan: plan.slug,
         });
         finish({

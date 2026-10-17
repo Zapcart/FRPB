@@ -2,17 +2,27 @@
 
 // FRPB — interactive "Search Your Phone Model" compatibility checker.
 //
-// Client component (needs an input + live filtering). It answers the single
-// biggest pre-purchase objection — "will it work on MY phone?" — by running the
-// visitor's query against the SAME model catalog the desktop app and API use
-// (`@frpb/shared`). Every result is derived from real shipped product data, so
-// there is no invented social proof: a match means the model is genuinely in the
-// supported catalog; no match is reported honestly with a Telegram fallback.
+// PERF (mobile budget): this component deliberately does NOT statically import
+// the `@frpb/shared` model catalog. That catalog is ~100+ entries and was being
+// pulled into the landing page's *initial* client bundle, which pushed the
+// first-load JS past budget and delayed first interaction on low-end phones.
+//
+// Instead:
+//   · The catalog COUNT is rendered server-side and passed in as `totalModels`
+//     (the home page imports `@frpb/shared` on the server, so the count is in
+//     the static HTML and costs the client nothing).
+//   · The search engine itself is code-split and fetched via `import()` the
+//     first time the visitor types — the catalog rides in a separate lazy chunk
+//     that never blocks first paint.
+//
+// The component still renders full markup on the server (heading, input, help
+// copy), so the section is visible and crawlable with JavaScript disabled.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, Cpu, Info, Search, Smartphone, X } from "lucide-react";
-import { modelCatalog, searchModels, type ModelCatalogEntry } from "@frpb/shared";
 import { SUPPORT_TELEGRAM_URL } from "@/config/support";
+// Type-only import — erased at compile time, so it adds nothing to the bundle.
+import type { ModelCatalogEntry } from "@frpb/shared";
 
 /** Example models (all present in the catalog) used as one-tap suggestions. */
 const QUICK_PICKS = ["Samsung Galaxy A05", "Redmi 12 5G", "Vivo Y17s"] as const;
@@ -20,27 +30,78 @@ const QUICK_PICKS = ["Samsung Galaxy A05", "Redmi 12 5G", "Vivo Y17s"] as const;
 /** Max result rows rendered for a single query. */
 const MAX_RESULTS = 8;
 
-export default function ModelCompatibilityChecker() {
+/** Signature of the lazily-loaded search engine (kept structural, not imported). */
+type SearchFn = (args: { query: string }) => ModelCatalogEntry[];
+
+// Module-level cache: the dynamic `import()` is issued once per session and the
+// resulting module (and its 100+ entry catalog) is shared across mounts.
+let sharedModulePromise: Promise<{ searchModels: SearchFn }> | null = null;
+
+function loadSearchEngine(): Promise<{ searchModels: SearchFn }> {
+  if (!sharedModulePromise) {
+    // `@frpb/shared` is a large module; cast the resolved shape we consume so we
+    // don't have to pull its runtime types into this chunk.
+    sharedModulePromise = import("@frpb/shared") as unknown as Promise<{
+      searchModels: SearchFn;
+    }>;
+  }
+  return sharedModulePromise;
+}
+
+export default function ModelCompatibilityChecker({
+  totalModels,
+}: {
+  /**
+   * Supported-model count, computed on the server from the real catalog. Shown
+   * in the "N models in the supported catalog" line without shipping the
+   * catalog to the client.
+   */
+  totalModels: number;
+}) {
   const [query, setQuery] = useState("");
 
-  // Catalog size is static at runtime — compute once for the honest total.
-  const totalModels = useMemo(() => modelCatalog().length, []);
+  // The lazily-loaded search function. `null` until the first keystroke.
+  const [searchFn, setSearchFn] = useState<SearchFn | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const trimmed = query.trim();
+  const hasQuery = trimmed.length > 0;
+
+  // Fetch the search engine on first interaction (not on page load).
+  useEffect(() => {
+    if (!hasQuery || searchFn) return;
+    let cancelled = false;
+
+    loadSearchEngine()
+      .then((mod) => {
+        if (!cancelled) setSearchFn(() => mod.searchModels);
+      })
+      .catch((error) => {
+        // Defensive: a chunk-load failure must never crash the landing page.
+        console.error("[model-checker] failed to load catalog:", error);
+        if (!cancelled) setLoadFailed(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hasQuery, searchFn]);
 
   const results = useMemo<ModelCatalogEntry[]>(() => {
-    if (!trimmed) return [];
+    if (!trimmed || !searchFn) return [];
     try {
-      return searchModels({ query: trimmed }).slice(0, MAX_RESULTS);
+      return searchFn({ query: trimmed }).slice(0, MAX_RESULTS);
     } catch (error) {
       // Defensive: a catalog hiccup must never crash the landing page.
       console.error("[model-checker] search failed:", error);
       return [];
     }
-  }, [trimmed]);
+  }, [trimmed, searchFn]);
 
-  const hasQuery = trimmed.length > 0;
-  const noMatch = hasQuery && results.length === 0;
+  // Distinguish "still loading the catalog" from a genuine no-match.
+  const catalogReady = searchFn !== null;
+  const isLoading = hasQuery && !catalogReady && !loadFailed;
+  const noMatch = hasQuery && catalogReady && results.length === 0;
 
   return (
     <section
@@ -153,6 +214,10 @@ export default function ModelCompatibilityChecker() {
                   </li>
                 ))}
               </ul>
+            ) : null}
+
+            {isLoading ? (
+              <p className="text-center text-xs text-slate-400">Checking catalog…</p>
             ) : null}
 
             {noMatch ? (

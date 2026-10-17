@@ -29,6 +29,15 @@ export const RELEASE_TAG = "v1.0.0";
 /** Canonical Windows installer asset name (matches electron-builder artifactName). */
 export const EXE_NAME = "FRPB-Recovery-Setup-1.0.1.exe";
 
+/**
+ * On-disk filename of the self-hosted Windows installer in
+ * `apps/web/public/downloads` (it predates the versioned `EXE_NAME` and is the
+ * only binary committed to the repo). `/downloads/[file]` maps every known
+ * spelling of the installer onto this file, so the first-party host keeps
+ * working under the canonical download name without a 90MB rename.
+ */
+export const SELF_HOSTED_EXE_NAME = "FRPB-Setup.exe";
+
 /** Canonical macOS installer asset name. */
 export const DMG_NAME = "FRPB-Setup.dmg";
 

@@ -1,4 +1,4 @@
-// FRPB — pricing page
+// FRPB — pricing page (Server Component).
 // Renders the two plans from DUAL_PLANS in a single native currency: USD.
 // Amounts come straight from the plan definition so the displayed price always
 // matches the amount Razorpay actually charges — never a derived FX conversion.
@@ -6,47 +6,36 @@
 // every tier settles in USD ($20 / 6 months, $200 one-time). Checkout is gated
 // behind authentication: guests are redirected to sign-up and the pending-plan
 // intent resumes the purchase for the selected plan automatically.
+//
+// This route ships as a Server Component: the hero, value callout, trust badges,
+// FAQ (native <details>, zero JS) and all three JSON-LD blocks render server-side
+// so the full marketing content is in the initial HTML. The only client island is
+// <PricingPlanGrid>, which owns the purchase buttons, promo-aware copy and the
+// Razorpay feedback. <RazorpaySdkScript> idle-preloads checkout.js on this page
+// only, and <PricingViewTracker> fires the GA4 view event.
 
-"use client";
-
-import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
-  Check,
-  Loader2,
-  ArrowRight,
   ShieldCheck,
   Sparkles,
   Zap,
   Headphones,
   Lock,
   ChevronDown,
-  Monitor,
-  CalendarClock,
-  RefreshCw,
 } from "lucide-react";
-import { type PlanSlug } from "@frpb/shared";
-import { createClient } from "@/lib/supabase/client";
 import JsonLd from "@/components/seo/json-ld";
 import { faqPageSchema, productSchema, breadcrumbSchema } from "@/lib/schema";
-import { savePendingPlan } from "@/lib/checkout/pending-plan";
 import {
   LEGAL_DISCLAIMER,
   LEGAL_EMAIL,
   SUPPORT_EMAIL,
   mailtoHref,
 } from "@/config/legal";
-import { DUAL_PLANS, formatDualUsd } from "@/config/plans";
-import { startRazorpayCheckout } from "@/lib/razorpay/checkout-flow";
-import { readStoredReferralCode } from "@/lib/referral/ref-capture";
 import ErrorBoundary from "@/components/error-boundary";
 import RazorpaySdkScript from "@/components/checkout/razorpay-sdk-script";
-import { usePromoState } from "@/components/promo/usePromoState";
-import { monthlyBillingSuffixFor, promoMonthlyDaysFor } from "@/config/promo";
+import PricingPlanGrid from "@/components/checkout/pricing-plan-grid";
 import PricingViewTracker from "@/components/analytics/pricing-view-tracker";
-import { trackBeginCheckout } from "@/lib/analytics/gtag";
 
 /**
  * Trust / conversion badges rendered under the pricing grid. Addresses the four
@@ -77,8 +66,10 @@ const TRUST_BADGES = [
 ] as const;
 
 /**
- * Buyer-hesitation FAQ. Rendered as an accordion AND mirrored into a `FAQPage`
- * JSON-LD block — Google requires the markup to match the visible content.
+ * Buyer-hesitation FAQ. Rendered as a native <details> accordion AND mirrored
+ * into a `FAQPage` JSON-LD block — Google requires the markup to match the
+ * visible content. Native <details> keeps the FAQ fully functional with zero
+ * JavaScript.
  */
 const PRICING_FAQS = [
   {
@@ -115,139 +106,11 @@ const PRICING_FAQS = [
   },
 ] as const;
 
-// The MONTH_1 billing suffix is promo-aware (see @/config/promo) and computed in
-// render from usePromoState().active rather than hardcoded here, so the "/ 6
-// months (launch offer)" copy flips to "/ 2 months" the instant the 30-day
-// window closes. LIFETIME always renders a one-time label, never an interval.
-
-/**
- * The pricing grid renders from DUAL_PLANS (the authoritative tier rates) rather
- * than the shared legacy PLANS, so the displayed price is always exactly $20 or
- * $200 — matching the USD amount Razorpay charges at checkout.
- */
-const PLAN_CARDS = DUAL_PLANS.map((plan) => ({
-  plan,
-  slug: plan.slug,
-  name: plan.name,
-  features: plan.features,
-  deviceLimit: plan.deviceLimit,
-  durationDays: plan.durationDays,
-}));
-
 export default function PricingPage() {
-  const router = useRouter();
-  // Live promo status — drives the banner and the MONTH_1 duration copy. Seeded
-  // statically for SSR/first paint, then refined on the client after mount.
-  const promo = usePromoState();
-  // Plan currently being paid for (null = idle) — drives the button spinner.
-  const [processingPlan, setProcessingPlan] = useState<PlanSlug | null>(null);
-  // Inline feedback for the Razorpay flow (replaces the old method modal).
-  const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const [checkoutNotice, setCheckoutNotice] = useState<string | null>(null);
-
-  // Accordion state — first question starts open so the section reads as
-  // helpful content rather than a collapsed wall of headers.
-  const [openFaq, setOpenFaq] = useState<number | null>(0);
-
   // FAQPage structured data, mirroring the visible accordion below.
   const faqLd = faqPageSchema(
     PRICING_FAQS.map((f) => ({ question: f.q, answer: f.a }))
   );
-
-  /**
-   * "Choose plan" / "Get lifetime access" → start the purchase funnel.
-   *
-   * Payments are USD-only and gated behind authentication: an unauthenticated
-   * visitor is sent to the sign-up form with the selected plan attached, and the
-   * pending-plan helper resumes checkout automatically once they are signed in.
-   * Authenticated buyers go straight to the Razorpay Standard Web Checkout
-   * modal, where the order is created server-side (amount locked to the USD tier
-   * rate) and the captured signature is verified before any license is granted.
-   */
-  async function handlePurchase(planSlug: PlanSlug) {
-    if (processingPlan) return;
-
-    // ── Synchronous, network-free work FIRST ────────────────────────────────
-    // These run on the click's own task, so React flips the button to its
-    // spinner before ANY await yields to the event loop — the UI responds in
-    // ~0ms and never waits on the auth round trip or order creation below.
-    setCheckoutError(null);
-    setCheckoutNotice(null);
-    setProcessingPlan(planSlug);
-    savePendingPlan(planSlug, "USD");
-
-    // GA4 `begin_checkout` — fired on the click's own task (before any await),
-    // so the event is queued even when the guest is redirected to /auth. The
-    // helper no-ops safely on the server / before the tag loads.
-    trackBeginCheckout({ plan: planSlug });
-
-    // ── Single cached session read ──────────────────────────────────────────
-    // getSession() is the one optimized call: the browser client hydrates the
-    // session snapshot from cookies/local storage, so a signed-in buyer resolves
-    // WITHOUT a network hop. The previous unconditional dual getSession() +
-    // getUser() pattern added a full getUser() network round trip to every
-    // purchase click, blocking checkout start on Supabase latency.
-    let email: string | null = null;
-    try {
-      const supabase = createClient();
-      const { data: sessionData } = await supabase.auth.getSession();
-      email = sessionData.session?.user?.email ?? null;
-    } catch {
-      email = null;
-    }
-
-    // Guests must authenticate before paying — never open the gateway without an
-    // account. Redirect to the sign-up form; AuthView reads the pending plan and
-    // resumes checkout for this exact plan once signup/sign-in succeeds.
-    if (!email) {
-      setProcessingPlan(null);
-      const params = new URLSearchParams({
-        mode: "signup",
-        plan: planSlug,
-        returnTo: "/checkout",
-      });
-      router.push(`/auth?${params.toString()}`);
-      return;
-    }
-
-    // startRazorpayCheckout() is contractually non-throwing, but wrap it so an
-    // unexpected error (loader rejection, provider SDK edge case) can never
-    // leave the button stuck on its spinner or bubble into the React tree. Every
-    // click resolves to a visible state via the finally block below.
-    try {
-      // Carry the captured referral code (cookie/localStorage, 30-day window)
-      // into checkout so the server can apply the sanctioned referral discount
-      // and attribute the order to the referrer. null when the visitor arrived
-      // without a referral — an ordinary, full-price purchase.
-      const result = await startRazorpayCheckout({
-        planSlug,
-        email,
-        referralCode: readStoredReferralCode(),
-        onDismiss: () =>
-          setCheckoutNotice("Checkout closed — no payment was taken."),
-      });
-
-      if (result.status === "paid") {
-        setCheckoutNotice(
-          "Payment successful — taking you to your dashboard…"
-        );
-        router.push("/dashboard");
-        return;
-      }
-
-      if (result.status === "failed") {
-        setCheckoutError(result.message);
-      }
-    } catch (error) {
-      console.error("[pricing] checkout failed unexpectedly:", error);
-      setCheckoutError(
-        "We couldn't start checkout. Please try again in a moment."
-      );
-    } finally {
-      // Always release the spinner, including on the paid path before navigating.
-      setProcessingPlan(null);
-    }
-  }
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-white text-slate-900">
@@ -309,8 +172,7 @@ export default function PricingPage() {
           </p>
         </div>
 
-        {/* Value callout (Phase 2.1). Replaces the old countdown PromoBanner with
-            a factual offer statement — no fake urgency and no promo banner. */}
+        {/* Value callout — a factual offer statement, no fake urgency. */}
         <div className="mx-auto mt-10 max-w-3xl">
           <div className="relative overflow-hidden rounded-2xl border border-brand-200 bg-gradient-to-r from-brand-50 via-white to-accent-50 px-6 py-6 text-center shadow-glass-light sm:px-10">
             <div className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-accent-500/10 blur-3xl" />
@@ -327,130 +189,10 @@ export default function PricingPage() {
           </div>
         </div>
 
+        {/* Interactive island: plan cards + purchase buttons + Razorpay feedback. */}
         <ErrorBoundary label="pricing plans">
-          <div className="mx-auto mt-12 grid max-w-4xl gap-6 grid-cols-1 md:grid-cols-2">
-            {PLAN_CARDS.map((card) => {
-            const popular = card.slug === "LIFETIME";
-            // Promo-aware billing suffix (MONTH_1 only) and duration line; both
-            // derive from the same `promo.active` boolean so they can never disagree.
-            const billingSuffix =
-              card.slug === "MONTH_1" ? monthlyBillingSuffixFor(promo.active) : "one-time";
-            const durationLabel =
-              card.slug === "MONTH_1"
-                ? `${promoMonthlyDaysFor(promo.active)} days`
-                : "Lifetime access";
-            return (
-              <div
-                key={card.slug}
-                className={`glass-panel-strong relative flex flex-col p-8 transition duration-300 hover:-translate-y-1 ${
-                  popular
-                    ? "border-brand-300 ring-1 ring-brand-500/20 hover:shadow-glass-light-hover"
-                    : "hover:border-white/80 hover:shadow-glass-light-hover"
-                }`}
-              >
-                {popular && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-gradient-to-r from-brand-500 to-accent-500 px-4 py-1 text-xs font-bold text-white shadow-lg shadow-brand-500/30">
-                    MOST POPULAR · RECOMMENDED FOR SHOPS
-                  </span>
-                )}
-                <h2 className="text-xl font-bold text-slate-900">{card.name}</h2>
-                <div className="mt-4 flex items-baseline gap-1.5">
-                  <span className="text-4xl font-black tracking-tight text-ink">
-                    {formatDualUsd(card.plan.usd)}
-                  </span>
-                  <span className="text-sm font-medium text-slate-400">
-                    {billingSuffix}
-                  </span>
-                </div>
-                <p className="mt-1 text-xs text-slate-400">
-                  {card.deviceLimit} device{card.deviceLimit === 1 ? "" : "s"} ·{" "}
-                  {durationLabel}
-                </p>
-
-                {/* Tier benefit clarifiers (Task 19): activations, license
-                    duration and update entitlement spelled out so buyers never
-                    have to guess what each plan includes. */}
-                <ul className="mt-4 grid grid-cols-1 gap-1.5 text-xs font-medium text-slate-500 sm:grid-cols-3">
-                  <li className="inline-flex items-center gap-1.5">
-                    <Monitor className="h-3.5 w-3.5 shrink-0 text-brand-500" />
-                    {card.deviceLimit} PC activation{card.deviceLimit === 1 ? "" : "s"}
-                  </li>
-                  <li className="inline-flex items-center gap-1.5">
-                    <CalendarClock className="h-3.5 w-3.5 shrink-0 text-brand-500" />
-                    {card.slug === "MONTH_1" ? durationLabel : "Lifetime license"}
-                  </li>
-                  <li className="inline-flex items-center gap-1.5">
-                    <RefreshCw className="h-3.5 w-3.5 shrink-0 text-brand-500" />
-                    Free future updates
-                  </li>
-                </ul>
-                <ul className="mt-6 flex-1 space-y-3 text-sm">
-                  {card.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2.5 text-slate-600">
-                      <span
-                        className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full ${
-                          popular ? "bg-brand-500/10 text-brand-600" : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        <Check className="h-3 w-3" />
-                      </span>
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  onClick={() => void handlePurchase(card.slug)}
-                  disabled={processingPlan !== null}
-                  aria-busy={processingPlan === card.slug}
-                  className={`mt-8 inline-flex min-h-[48px] w-full touch-manipulation select-none items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-bold transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100 ${
-                    popular
-                      ? "bg-gradient-to-r from-brand-500 to-accent-500 text-white shadow-lg shadow-brand-500/30 hover:brightness-110"
-                      : "border border-slate-300 bg-white text-slate-700 hover:border-brand-300 hover:text-brand-600"
-                  }`}
-                >
-                  {processingPlan === card.slug ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Opening Secure Gateway…
-                    </>
-                  ) : (
-                    <>
-                      {card.slug === "LIFETIME" ? "Get lifetime access" : "Choose plan"}
-                      <ArrowRight className="h-4 w-4" />
-                    </>
-                  )}
-                </button>
-
-                {/* Payment-method trust row (Task 19): reassures buyers that
-                    the checkout accepts UPI and every major card/bank method
-                    via the Razorpay gateway. */}
-                <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                  <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">UPI</span>
-                  <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">Visa</span>
-                  <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">Mastercard</span>
-                  <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">Net Banking</span>
-                  <span className="rounded-md border border-slate-200 bg-slate-50 px-2 py-1">Razorpay</span>
-                </div>
-              </div>
-            );
-            })}
-          </div>
+          <PricingPlanGrid />
         </ErrorBoundary>
-
-        {/* Razorpay checkout feedback — inline, replaces the old method modal */}
-        {(checkoutError || checkoutNotice) && (
-          <div
-            role={checkoutError ? "alert" : "status"}
-            className={`mx-auto mt-8 max-w-xl rounded-xl border px-4 py-3 text-sm ${
-              checkoutError
-                ? "border-red-200 bg-red-50 text-red-700"
-                : "border-emerald-200 bg-emerald-50 text-emerald-700"
-            }`}
-          >
-            {checkoutError ?? checkoutNotice}
-          </div>
-        )}
 
         {/* Trust badges — conversion triggers addressing buyer hesitations */}
         <section
@@ -471,7 +213,8 @@ export default function PricingPage() {
           ))}
         </section>
 
-        {/* FAQ accordion — buyer-hesitation content, mirrored in FAQPage JSON-LD */}
+        {/* FAQ accordion — native <details>, so it works with zero JavaScript.
+            Mirrored in FAQPage JSON-LD below. */}
         <section aria-label="Frequently asked questions" className="mx-auto mt-16 max-w-3xl">
           <h2 className="text-center text-2xl font-extrabold tracking-tight text-ink">
             Frequently asked questions
@@ -480,36 +223,21 @@ export default function PricingPage() {
             Everything buyers ask before purchasing FRPB.
           </p>
           <div className="mt-8 space-y-3">
-            {PRICING_FAQS.map((faq, i) => {
-              const open = openFaq === i;
-              return (
-                <div
-                  key={faq.q}
-                  className={`glass-surface overflow-hidden transition ${
-                    open ? "border-brand-300 ring-1 ring-brand-500/20" : ""
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setOpenFaq(open ? null : i)}
-                    aria-expanded={open}
-                    className="flex min-h-[44px] w-full touch-manipulation select-none items-center justify-between gap-4 px-5 py-4 text-left transition active:bg-slate-50"
-                  >
-                    <span className="text-sm font-semibold text-slate-900">{faq.q}</span>
-                    <ChevronDown
-                      className={`h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 ${
-                        open ? "rotate-180 text-brand-500" : ""
-                      }`}
-                    />
-                  </button>
-                  {open && (
-                    <p className="border-t border-slate-100 px-5 py-4 text-sm leading-relaxed text-slate-600">
-                      {faq.a}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
+            {PRICING_FAQS.map((faq, i) => (
+              <details
+                key={faq.q}
+                open={i === 0}
+                className="group glass-surface overflow-hidden transition open:border-brand-300 open:ring-1 open:ring-brand-500/20"
+              >
+                <summary className="flex min-h-[44px] w-full cursor-pointer touch-manipulation select-none list-none items-center justify-between gap-4 px-5 py-4 text-left transition active:bg-slate-50 [&::-webkit-details-marker]:hidden">
+                  <span className="text-sm font-semibold text-slate-900">{faq.q}</span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-open:rotate-180 group-open:text-brand-500" />
+                </summary>
+                <p className="border-t border-slate-100 px-5 py-4 text-sm leading-relaxed text-slate-600">
+                  {faq.a}
+                </p>
+              </details>
+            ))}
           </div>
         </section>
 

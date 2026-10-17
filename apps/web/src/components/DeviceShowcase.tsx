@@ -29,7 +29,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import SmoothScrollLink from "./smooth-scroll-link";
 
 type PlatformTab = "ios" | "android";
 
@@ -227,14 +226,16 @@ export default function DeviceShowcase({ downloadUrl }: DeviceShowcaseProps) {
 
               {/* Primary CTAs */}
               <div className="mt-6 flex w-full flex-col items-center justify-center gap-2.5 sm:flex-row">
-                <SmoothScrollLink
-                  targetId="pricing"
-                  ariaLabel="Unlock your phone now — see pricing"
+                {/* Native anchor — smooth scrolling is handled by CSS, so the
+                    CTA works instantly without client-side JavaScript. */}
+                <a
+                  href="#pricing"
+                  aria-label="Unlock your phone now — see pricing"
                   className="btn-accent btn-shine w-full justify-center sm:w-auto"
                 >
                   Unlock Your Phone Now
                   <ArrowRight className="h-4 w-4" />
-                </SmoothScrollLink>
+                </a>
                 <a
                   href={downloadUrl}
                   className="btn-ghost w-full justify-center sm:w-auto"
@@ -244,7 +245,11 @@ export default function DeviceShowcase({ downloadUrl }: DeviceShowcaseProps) {
               </div>
             </div>
 
-            {/* Android frame — hidden on mobile unless active. */}
+            {/* Android frame — hidden on mobile unless active. NOTE: the
+                Android mockup is NOT priority: on mobile it starts hidden
+                (activeTab defaults to iOS), so eager-loading it only burns
+                bandwidth and delays first paint. It lazy-loads on the desktop
+                grid and the moment the user taps the Android segment. */}
             <div
               className={`${
                 activeTab === "android" ? "flex" : "hidden"
@@ -255,7 +260,6 @@ export default function DeviceShowcase({ downloadUrl }: DeviceShowcaseProps) {
                 alt="Android phone running the FRPB Google FRP and pattern unlock flow"
                 label="Android"
                 badgeClassName="bg-emerald-500 text-white"
-                priority
               />
             </div>
           </div>
