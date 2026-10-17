@@ -100,16 +100,23 @@ export async function GET(
       const nodeStream = createReadStream(filePath);
       const body = Readable.toWeb(nodeStream) as ReadableStream<Uint8Array>;
 
-      return new NextResponse(body, {
-        status: 200,
-        headers: {
-          "Content-Type": contentTypeFor(entry),
-          "Content-Disposition": `attachment; filename="${entry}"`,
-          "Content-Length": String(stat.size),
-          "Cache-Control": "public, max-age=3600",
-          "X-Content-Type-Options": "nosniff",
-        },
-      });
+      const headers: Record<string, string> = {
+        "Content-Type": contentTypeFor(entry),
+        "Content-Length": String(stat.size),
+        "Cache-Control": "public, max-age=3600",
+        "X-Content-Type-Options": "nosniff",
+      };
+
+      // `.exe` already gets Content-Disposition from the `/downloads/:file*.exe`
+      // rule in next.config.mjs. Emitting it here too would send the header
+      // TWICE (Next appends config headers rather than replacing them), and
+      // duplicate Content-Disposition is malformed — some clients reject the
+      // download. Only set it for formats the config rule does not cover.
+      if (!entry.toLowerCase().endsWith(".exe")) {
+        headers["Content-Disposition"] = `attachment; filename="${entry}"`;
+      }
+
+      return new NextResponse(body, { status: 200, headers });
     }
   } catch {
     // public/downloads missing or unreadable → fall through to redirects.
